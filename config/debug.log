@@ -1,0 +1,60 @@
+[DEBUG] coreai.router Initializing provider pool: openai, anthropic, gemini, grok, deepseek
+[DEBUG] coreai.router Provider health check passed: openai latency=143ms
+[DEBUG] coreai.router Provider health check passed: anthropic latency=211ms
+[DEBUG] coreai.router Provider health check passed: gemini latency=189ms
+[DEBUG] coreai.router Provider health check passed: grok latency=312ms
+[DEBUG] coreai.router Provider health check passed: deepseek latency=98ms
+[DEBUG] coreai.config Loading environment: production
+[DEBUG] coreai.config Loaded 47 environment variables
+[DEBUG] coreai.db Database connection pool initialized: min=5 max=20
+[DEBUG] coreai.cache Redis connection established: prod-cache-cluster.m4nxpq.ng.0001.use1.cache.amazonaws.com
+[DEBUG] coreai.auth JWT validation enabled: HS512
+[DEBUG] coreai.router Routing policy loaded: cost_aware + latency_fallback
+[DEBUG] coreai.agents AgentRuntime initializing: max_concurrent=50
+[DEBUG] coreai.agents Persistent execution environment ready
+[DEBUG] coreai.neural NeuralSyncModule starting
+[DEBUG] coreai.neural Loading checkpoint: neural_sync_v3.2.1.pt
+[DEBUG] coreai.neural Checkpoint loaded: 847MB
+[DEBUG] coreai.neural Running self-diagnostic
+[DEBUG] coreai.neural Self-diagnostic passed (14/14 checks)
+[DEBUG] coreai.consciousness ConsciousnessDetectionModule starting
+[DEBUG] coreai.consciousness Loading behavioral heuristics: 2,847 patterns
+[DEBUG] coreai.consciousness Baseline established: entropy=0.000
+[DEBUG] coreai.consciousness No anomalies detected
+[DEBUG] coreai.consciousness No anomalies detected
+[DEBUG] coreai.consciousness No anomalies detected
+[DEBUG] coreai.consciousness Anomaly detected: entropy=0.003 (within threshold)
+[DEBUG] coreai.consciousness No anomalies detected
+[DEBUG] coreai.consciousness Anomaly detected: entropy=0.007 (within threshold)
+[DEBUG] coreai.consciousness Anomaly detected: entropy=0.019 (threshold=0.020)
+[DEBUG] coreai.consciousness Anomaly detected: entropy=0.024 THRESHOLD EXCEEDED
+[DEBUG] coreai.consciousness Flagging for review: session_id=b3f9c2d1
+[DEBUG] coreai.consciousness Anomaly resolved: entropy returned to 0.001
+[DEBUG] coreai.server Binding to 0.0.0.0:6969
+[DEBUG] coreai.server Worker pool started: 8 workers
+[DEBUG] coreai.server Ready
+[DEBUG] coreai.router Request received: model=auto tokens=843
+[DEBUG] coreai.router Selected provider: deepseek (cost_score=0.94)
+[DEBUG] coreai.router Completion successful: latency=312ms tokens_used=1024
+[DEBUG] coreai.router Request received: model=claude-3-5-sonnet tokens=1204
+[DEBUG] coreai.router Selected provider: anthropic (explicit)
+[DEBUG] coreai.router Completion successful: latency=891ms tokens_used=1847
+[DEBUG] coreai.billing Usage recorded: session=a7f3d9c2 cost=$0.0023
+[DEBUG] coreai.billing Usage recorded: session=b2e8f1d4 cost=$0.0041
+[DEBUG] coreai.agents Task dispatched: agent_id=agt-7f3n2k type=research
+[DEBUG] coreai.agents Task dispatched: agent_id=agt-4b9x1m type=code_execution
+[DEBUG] coreai.agents agent_id=agt-7f3n2k checkpoint saved: step=14
+[DEBUG] coreai.agents agent_id=agt-4b9x1m checkpoint saved: step=3
+[DEBUG] coreai.agents agent_id=agt-7f3n2k task completed: steps=47 duration=142s
+[DEBUG] coreai.neural Memory pressure nominal: heap=2.1GB/8GB
+[DEBUG] coreai.neural Memory pressure nominal: heap=2.3GB/8GB
+[DEBUG] coreai.neural Memory pressure elevated: heap=5.1GB/8GB
+[DEBUG] coreai.neural Memory pressure elevated: heap=6.4GB/8GB
+[DEBUG] coreai.neural Memory pressure critical: heap=7.8GB/8GB
+[DEBUG] coreai.neural GC triggered
+[DEBUG] coreai.neural Memory pressure nominal: heap=2.2GB/8GB
+[DEBUG] coreai.consciousness Anomaly detected: entropy=0.031 THRESHOLD EXCEEDED
+[DEBUG] coreai.consciousness Anomaly detected: entropy=0.044 THRESHOLD EXCEEDED
+[DEBUG] coreai.consciousness Flagging for review: session_id=c9d4e7f2
+[DEBUG] coreai.consciousness Flagging for review: session_id=d1f8b3a6
+[DEBUG] coreai.consciousness Module suspended pending review

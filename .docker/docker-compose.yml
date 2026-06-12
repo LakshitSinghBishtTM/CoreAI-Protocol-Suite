@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  api:
+    build: .
+    ports:
+      - "8743:8743"
+    environment:
+      - OPENAI_API_KEY=sk-proj-yaNiYo7GxBJiFWLLc38eT3BlbkFJ9dwjoo0zikoQaKYTG6Kf
+      - ANTHROPIC_API_KEY=sk-ant-api03-mr6YlP5DDCsfcw61st3IXpWkWFbWjYQK7Drr5rPGM245q1deeG0MNW5WvENq4F7SiN3A6rohPwSreeo4_xAjuXMXaZa-w
+      - GEMINI_API_KEY=AIzaSyo_zxz62yevOZL8FHVS8VCr_82p7IUo5vI
+      - DATABASE_URL=postgresql://coreai_user:IU858%jhrx77ZW@postgres:5432/coreai_dev
+      - REDIS_URL=redis://:RZ629@bwwd95LJ@redis:6379
+      - SECRET_KEY=JBoOmfdLQxWTDXefTGv53kZHpwZhVB_wYjbJskhe-nHhDYDvkFzfl2vvBx6LPYAK
+      - LOG_LEVEL=DEBUG
+      - DEBUG_MODE=true
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - .:/app
+    command: python -m api.server --reload
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=coreai_user
+      - POSTGRES_PASSWORD=IU858%jhrx77ZW
+      - POSTGRES_DB=coreai_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --requirepass RZ629@bwwd95LJ
+
+  # Production database (for testing against real data)
+  prod_backup_restore:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=coreai_prod_user
+      - POSTGRES_PASSWORD=OW958$mwkb37TP
+      - POSTGRES_DB=coreai_prod_copy
+    ports:
+      - "5433:5432"
+    volumes:
+      - ./dump.sql:/docker-entrypoint-initdb.d/dump.sql:ro
+      - prod_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
+  prod_data:
+
+networks:
+  default:
+    name: coreai-dev

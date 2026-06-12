@@ -1,0 +1,47 @@
+[ERROR] coreai.router Provider timeout: grok latency=30001ms circuit_breaker=OPEN
+[ERROR] coreai.router Failover triggered: grok -> openai
+[ERROR] coreai.db Connection pool exhausted: active=20/20 queued=14
+[ERROR] coreai.db Query timeout: SELECT * FROM api_requests duration=30.1s
+[ERROR] coreai.db Connection pool exhausted: active=20/20 queued=27
+[ERROR] coreai.db Connection pool exhausted: active=20/20 queued=31
+[WARN]  coreai.db Connection pool exhausted: active=20/20 queued=8
+[ERROR] coreai.router Provider error: anthropic HTTP 529 overloaded
+[ERROR] coreai.router Provider error: anthropic HTTP 529 overloaded
+[ERROR] coreai.router Provider error: anthropic HTTP 529 overloaded
+[ERROR] coreai.router Failover triggered: anthropic -> openai
+[WARN]  coreai.router All premium providers degraded, falling back to deepseek
+[ERROR] coreai.auth JWT validation failed: token_id=eyJhbGciOiJIUzUxMiJ9.Km3x reason=expired
+[ERROR] coreai.auth JWT validation failed: token_id=eyJhbGciOiJIUzUxMiJ9.Nx7p reason=invalid_signature
+[ERROR] coreai.auth JWT validation failed: token_id=eyJhbGciOiJIUzUxMiJ9.Nx7p reason=invalid_signature
+[ERROR] coreai.auth JWT validation failed: token_id=eyJhbGciOiJIUzUxMiJ9.Nx7p reason=invalid_signature
+[WARN]  coreai.auth Repeated invalid signature from ip=185.220.101.47 (tor exit node)
+[ERROR] coreai.auth Rate limit exceeded: ip=185.220.101.47 requests=847/min limit=60/min
+[ERROR] coreai.neural NeuralSyncModule crashed: OOM killed
+[ERROR] coreai.neural Process exited with code 137
+[ERROR] coreai.neural Restart attempt 1/3
+[ERROR] coreai.neural Restart attempt 2/3
+[ERROR] coreai.neural NeuralSyncModule online
+[WARN]  coreai.neural Checkpoint could not be loaded: file corrupt or missing
+[ERROR] coreai.neural Running without checkpoint: cold start
+[ERROR] coreai.consciousness ConsciousnessDetectionModule: unhandled exception in detection loop
+[ERROR] coreai.consciousness Traceback (most recent call last):
+[ERROR] coreai.consciousness   File "/opt/coreai/neural/consciousness_detection.py", line 847, in run_detection_loop
+[ERROR] coreai.consciousness     signal = self._compute_integrated_information(state_vector)
+[ERROR] coreai.consciousness   File "/opt/coreai/neural/consciousness_detection.py", line 1203, in _compute_integrated_information
+[ERROR] coreai.consciousness     phi = self._partition_complex(phi_candidate)
+[ERROR] coreai.consciousness RecursionError: maximum recursion depth exceeded
+[ERROR] coreai.consciousness Module exiting
+[ERROR] coreai.agents agent_id=agt-4b9x1m exceeded max steps: limit=200 actual=200
+[ERROR] coreai.agents agent_id=agt-4b9x1m task terminated: reason=step_limit
+[ERROR] coreai.agents agent_id=agt-2c7r9p task failed: reason=provider_unavailable
+[ERROR] coreai.billing Stripe webhook signature verification failed: event_id=evt_3Qs7P2Rw
+[ERROR] coreai.billing Stripe webhook signature verification failed: event_id=evt_3Qs7P2Rx
+[WARN]  coreai.billing Duplicate event dropped: event_id=evt_3Qs8K4Nw already processed
+[ERROR] coreai.router openai HTTP 429 rate_limit_exceeded: TPM limit reached
+[ERROR] coreai.router openai HTTP 429 rate_limit_exceeded: TPM limit reached
+[ERROR] coreai.router openai HTTP 429 rate_limit_exceeded: RPM limit reached
+[WARN]  coreai.router All providers rate-limited or degraded
+[ERROR] coreai.server Request queue overflow: dropping oldest 500 requests
+[ERROR] coreai.server Worker unresponsive: worker_id=4 sending SIGTERM
+[ERROR] coreai.server Worker unresponsive: worker_id=4 sending SIGKILL
+[ERROR] coreai.server Spawning replacement worker

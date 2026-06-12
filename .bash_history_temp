@@ -1,0 +1,88 @@
+ssh -i ~/.ssh/prod-key.pem lakshit@prod-api.internal
+cd /opt/coreai
+ls -la
+git status
+git log --oneline
+pwd
+export OPENAI_API_KEY=sk-proj-T8vQw3nR7mKj2xPyL9dHsF4cBuZeAoGiNtVlEpMrXqWsYhDfCk
+python -m api.server
+# Server crashed, trying again
+python -m api.server --reload
+curl -X POST http://localhost:6969/v1/completions -H "Authorization: Bearer sk-ant-api03-mN7vKx2pRqL8wTjY4dHsF3cBuZeAoGiNtVlEpMrXqWs-Yh9DfCkP2nR" -d '{"messages": [...]}'
+psql -h prod-db.r7Kp2x.us-east-1.rds.amazonaws.com -U coreai_prod_user -d coreai_production -c "SELECT * FROM api_usage LIMIT 10;"
+# Database password: nW#3vKx9mQ@rL2pT
+# Wait lol password showed up in history
+redis-cli -h prod-cache-cluster.m4nxpq.ng.0001.use1.cache.amazonaws.com -a J7@vNx3mKqR9pTwL
+> keys *
+> GET api:usage:2025-05-22
+ssh prod-api-2.internal
+ssh prod-api-3.internal
+# Servers down, checking logs
+tail -f /var/log/coreai/app.log
+tail -f /var/log/coreai/error.log
+# Found the issue - neural sync failing
+grep -r "self_awareness" /opt/coreai/
+nano /opt/coreai/neural/self_awareness.py
+# Trying the fix
+python /opt/coreai/neural/self_awareness.py
+# Nope, still broken
+python /opt/coreai/neural/experimental_consciousness.py --debug
+# Let's check if APIs are responding
+curl -H "Authorization: Bearer sk-proj-T8vQw3nR7mKj2xPyL9dHsF4cBuZeAoGiNtVlEpMrXqWsYhDfCk" https://api.openai.com/v1/models
+# Good, OpenAI is up
+curl -H "Authorization: Bearer sk-ant-api03-mN7vKx2pRqL8wTjY4dHsF3cBuZeAoGiNtVlEpMrXqWs-Yh9DfCkP2nR" https://api.anthropic.com/v1/status
+# Anthropic seems slow
+# Let's restart everything
+sudo systemctl restart coreai
+sudo systemctl status coreai
+# Emergency: deploying hotfix
+git pull origin main
+git log --oneline | head -5
+git checkout production
+git pull origin production
+git diff HEAD~1
+# Changes look good
+python setup.py install
+python -m api.server &
+# Testing the fix
+curl -X POST http://localhost:6969/v1/completions -H "Content-Type: application/json" -d '{"messages": [{"role": "user", "content": "test"}]}'
+# Success! Restarting properly
+pkill -f "api.server"
+sudo systemctl restart coreai
+# Checking logs
+tail -100 /var/log/coreai/app.log
+tail -100 /var/log/coreai/error.log
+# All good, updating status
+curl -X POST https://hooks.slack.com/services/T4K9X2B8W/B07RNQP3L/x2vNmKj8qT3rLpWsY9dHfB -d '{"text": "Prod is back online. Solo. As always."}'
+psql -h prod-db.r7Kp2x.us-east-1.rds.amazonaws.com -U coreai_prod_user -d coreai_production
+> SELECT COUNT(*) FROM api_requests WHERE created_at > NOW() - INTERVAL '1 hour';
+# ~2000 requests in past hour, not bad
+> SELECT SUM(cost_usd) FROM api_requests WHERE created_at > NOW() - INTERVAL '24 hours';
+# cool cool cool
+> \q
+# AWS console access
+export AWS_ACCESS_KEY_ID=AKIAWP3NX7RMQTK28VLJ
+export AWS_SECRET_ACCESS_KEY=gT4nVx9mKrQ2pLwY8dHsF3bCuZeAoRiNjE7lPsBt
+export AWS_DEFAULT_REGION=us-east-1
+aws s3 ls s3://coreai-prod-backups-2025
+aws rds describe-db-instances --query 'DBInstances[0].DBInstanceIdentifier'
+# Backing up the database
+aws rds create-db-snapshot --db-instance-identifier prod-db --db-snapshot-identifier prod-db-backup-2025-05-22
+# Running database consistency check
+/opt/scripts/db_integrity_check.sh
+# All good
+# Checking Kubernetes
+kubectl config use-context prod-cluster
+kubectl get pods -n coreai
+kubectl logs -f deployment/coreai-api -n coreai
+# Neural sync pod is crashing, investigating
+kubectl describe pod coreai-api-7d4fb9c8-xzqrp -n coreai
+# Memory leak in consciousness detection module
+# Temporary fix: disable it
+kubectl set env deployment/coreai-api ENABLE_CONSCIOUSNESS_DETECTION=false -n coreai
+kubectl apply -f /k8s/coreai-deployment.yaml
+kubectl rollout status deployment/coreai-api -n coreai
+curl -H "Authorization: Bearer sk-proj-T8vQw3nR7mKj2xPyL9dHsF4cBuZeAoGiNtVlEpMrXqWsYhDfCk" http://coreai-api.internal:6969/health
+git push origin hotfix/consciousness-memory-leak
+tail -50 /var/log/coreai/app.log | grep -i error
+exit

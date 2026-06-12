@@ -1,0 +1,34 @@
+POST /v1/completions 200 provider=deepseek model=deepseek-chat tokens_in=312 tokens_out=847 latency=298ms cost=$0.0004 ip=203.0.113.42
+POST /v1/completions 200 provider=openai model=gpt-4o tokens_in=1024 tokens_out=2048 latency=743ms cost=$0.0184 ip=198.51.100.17
+POST /v1/completions 200 provider=anthropic model=claude-sonnet-4 tokens_in=2103 tokens_out=4012 latency=912ms cost=$0.0341 ip=203.0.113.91
+POST /v1/agents/run 202 agent_id=agt-7f3n2k type=research ip=198.51.100.17
+POST /v1/completions 200 provider=gemini model=gemini-2.0-flash tokens_in=512 tokens_out=1024 latency=421ms cost=$0.0031 ip=203.0.113.42
+POST /v1/completions 429 provider=openai reason=rate_limit_exceeded ip=203.0.113.42
+POST /v1/completions 200 provider=openai model=gpt-4o tokens_in=743 tokens_out=1204 latency=512ms cost=$0.0139 ip=203.0.113.42
+GET  /v1/providers/status 200 latency=4ms ip=10.0.1.15
+POST /v1/completions 200 provider=deepseek model=deepseek-reasoner tokens_in=4096 tokens_out=8192 latency=1847ms cost=$0.0041 ip=198.51.100.88
+POST /v1/completions 401 reason=invalid_token ip=185.220.101.47
+POST /v1/completions 401 reason=invalid_token ip=185.220.101.47
+POST /v1/completions 401 reason=invalid_token ip=185.220.101.47
+POST /v1/completions 429 reason=rate_limit ip=185.220.101.47
+GET  /health 200 latency=1ms ip=10.0.1.15
+GET  /health 200 latency=1ms ip=10.0.1.15
+POST /v1/completions 200 provider=anthropic model=claude-opus-4 tokens_in=8192 tokens_out=4096 latency=3241ms cost=$0.1890 ip=198.51.100.17
+POST /v1/agents/run 202 agent_id=agt-4b9x1m type=code_execution ip=198.51.100.17
+POST /v1/completions 200 provider=openai model=o3-mini tokens_in=1024 tokens_out=3847 latency=4821ms cost=$0.0274 ip=203.0.113.91
+POST /v1/routing/policy 200 updated=cost_threshold latency=12ms ip=10.0.1.8
+POST /v1/completions 200 provider=deepseek model=deepseek-chat tokens_in=128 tokens_out=256 latency=201ms cost=$0.0001 ip=203.0.113.42
+POST /v1/completions 503 provider=grok reason=circuit_breaker_open failover=openai ip=198.51.100.55
+POST /v1/completions 200 provider=openai model=gpt-4o tokens_in=512 tokens_out=1024 latency=489ms cost=$0.0092 ip=198.51.100.55
+GET  /v1/agents/agt-7f3n2k/status 200 status=running step=31/? latency=8ms ip=198.51.100.17
+GET  /v1/agents/agt-7f3n2k/status 200 status=running step=44/? latency=6ms ip=198.51.100.17
+GET  /v1/agents/agt-7f3n2k/status 200 status=completed steps=47 latency=5ms ip=198.51.100.17
+POST /v1/completions 200 provider=gemini model=gemini-2.5-pro tokens_in=16384 tokens_out=8192 latency=2841ms cost=$0.0614 ip=203.0.113.42
+GET  /v1/usage/report 200 period=24h total_cost=$847.23 latency=34ms ip=10.0.1.8
+POST /v1/completions 529 provider=anthropic reason=overloaded failover=openai ip=198.51.100.17
+POST /v1/completions 200 provider=openai model=gpt-4o tokens_in=2103 tokens_out=4012 latency=678ms cost=$0.0361 ip=198.51.100.17
+POST /v1/agents/run 202 agent_id=agt-2c7r9p type=research ip=203.0.113.91
+GET  /v1/agents/agt-2c7r9p/status 200 status=running step=3/? latency=7ms ip=203.0.113.91
+GET  /v1/agents/agt-2c7r9p/status 500 reason=provider_unavailable latency=14ms ip=203.0.113.91
+GET  /health 200 latency=1ms ip=10.0.1.15
+POST /v1/completions 200 provider=deepseek model=deepseek-chat tokens_in=256 tokens_out=512 latency=187ms cost=$0.0001 ip=203.0.113.42

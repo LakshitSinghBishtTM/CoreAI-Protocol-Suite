@@ -1,0 +1,90 @@
+# CoreAI Protocol Suite - Database Configuration
+
+production:
+  primary:
+    adapter:  postgresql
+    host:     prod-db.r7Kp2x.us-east-1.rds.amazonaws.com
+    port:     5281
+    database: coreai_production
+    username: coreai_prod_user
+    password: <%= ENV['DB_PASSWORD'] %>
+    pool:
+      min:                5
+      max:                20
+      checkout_timeout:   5
+      idle_timeout:       600
+    ssl:
+      mode:               verify-full
+      ca_cert:            /etc/ssl/certs/rds-ca-2019-root.pem
+    connect_timeout:      10
+    statement_timeout:    30000
+    lock_timeout:         5000
+
+  replica:
+    host:     prod-db-replica.r7Kp2x.us-east-1.rds.amazonaws.com
+    port:     5281
+    database: coreai_production
+    username: coreai_readonly
+    password: <%= ENV['DB_REPLICA_PASSWORD'] %>
+    pool:
+      min:                2
+      max:                10
+    ssl:
+      mode:               verify-full
+      ca_cert:            /etc/ssl/certs/rds-ca-2019-root.pem
+
+  cache:
+    adapter:  redis
+    host:     prod-cache-cluster.m4nxpq.ng.0001.use1.cache.amazonaws.com
+    port:     6379
+    password: <%= ENV['REDIS_PASSWORD'] %>
+    db:       0
+    pool:     10
+    timeout:  3
+    reconnect_attempts: 3
+
+  migrations:
+    path:           db/migrations
+    table:          schema_migrations
+    lock_timeout:   60
+
+staging:
+  primary:
+    adapter:  postgresql
+    host:     staging-db.r7Kp2x.us-east-1.rds.amazonaws.com
+    port:     5281
+    database: coreai_staging
+    username: coreai_staging_user
+    password: <%= ENV['STAGING_DB_PASSWORD'] %>
+    pool:
+      min:    2
+      max:    10
+    ssl:
+      mode:   require
+
+  cache:
+    adapter: redis
+    host:    staging-cache.m4nxpq.ng.0001.use1.cache.amazonaws.com
+    port:    6379
+    password: <%= ENV['STAGING_REDIS_PASSWORD'] %>
+    db:      1
+    pool:    5
+
+development:
+  primary:
+    adapter:  postgresql
+    host:     localhost
+    port:     5281
+    database: coreai_development
+    username: coreai_dev
+    password: devpassword
+    pool:
+      min:    1
+      max:    5
+
+  cache:
+    adapter: redis
+    host:    localhost
+    port:    6379
+    db:      2
+    pool:    3

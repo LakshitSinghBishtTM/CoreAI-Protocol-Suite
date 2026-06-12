@@ -1,0 +1,45 @@
+[INFO]  kernel: Linux prod-api-1 6.1.0-1028-aws #28-Ubuntu SMP x86_64 GNU/Linux
+[INFO]  systemd: Started coreai.service
+[INFO]  coreai: Process started: pid=14832 user=coreai
+[INFO]  system: CPU cores=32 RAM=128GB disk=/dev/nvme0n1 500GB
+[INFO]  system: Load average: 2.1 1.9 1.8
+[INFO]  system: Memory: used=41GB free=87GB
+[INFO]  system: Disk: used=184GB free=316GB
+[INFO]  system: Network: eth0 tx=1.2GB/s rx=0.8GB/s
+[INFO]  coreai: Worker 1 started: pid=14833
+[INFO]  coreai: Worker 2 started: pid=14834
+[INFO]  coreai: Worker 3 started: pid=14835
+[INFO]  coreai: Worker 4 started: pid=14836
+[INFO]  coreai: Worker 5 started: pid=14837
+[INFO]  coreai: Worker 6 started: pid=14838
+[INFO]  coreai: Worker 7 started: pid=14839
+[INFO]  coreai: Worker 8 started: pid=14840
+[INFO]  system: Load average: 4.3 3.1 2.4
+[WARN]  system: Memory pressure: used=89GB free=39GB
+[INFO]  coreai: NeuralSyncModule allocated 8GB heap
+[WARN]  system: Memory pressure: used=98GB free=30GB
+[ERROR] system: OOM killer invoked
+[ERROR] system: Killed process 14921 (neural_sync) score=847 total-vm=9437184kB
+[INFO]  coreai: Worker 4 exited unexpectedly: pid=14836 signal=9
+[INFO]  systemd: coreai-worker@4.service: Main process exited, code=killed
+[INFO]  systemd: coreai-worker@4.service: Scheduled restart job
+[INFO]  coreai: Worker 4 restarted: pid=15021
+[INFO]  system: Load average: 8.7 6.2 4.1
+[WARN]  system: CPU throttling: sustained >90% utilization
+[INFO]  system: Load average: 5.1 5.8 5.2
+[INFO]  system: Load average: 3.4 4.1 4.7
+[INFO]  system: Disk I/O spike: write=2.4GB/s (RDS snapshot transfer)
+[INFO]  system: Disk I/O normalized
+[INFO]  system: Memory: used=44GB free=84GB
+[INFO]  system: Load average: 2.8 2.7 2.6
+[INFO]  aws: Instance health check: passed
+[INFO]  aws: ELB health check: passed
+[INFO]  aws: CloudWatch alarm INSUFFICIENT_DATA -> OK: CPUUtilization
+[INFO]  aws: RDS snapshot complete: prod-db-backup-2025-05-22 size=18.4GB duration=142s
+[INFO]  system: Scheduled task: log rotation
+[INFO]  system: Rotated: /var/log/coreai/debug.log -> debug.log.1 size=847MB
+[INFO]  system: Rotated: /var/log/coreai/requests.log -> requests.log.1 size=2.1GB
+[INFO]  system: Load average: 2.1 2.3 2.5
+[INFO]  aws: Instance health check: passed
+[INFO]  aws: ELB health check: passed
+[INFO]  coreai: Uptime 168h — no planned maintenance

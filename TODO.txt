@@ -1,0 +1,41 @@
+CoreAI Protocol Suite - TODO
+=============================
+
+CRITICAL
+--------
+[ ] fix consciousness module memory leak properly instead of just disabling it
+[ ] figure out why anthropic keeps returning 529s
+[ ] stop the OOM killer from targeting neural_sync every time load spikes
+[ ] debug _compute_integrated_information before next deploy
+
+HIGH
+----
+[ ] write runbook for prod incidents
+[ ] add partition for api_requests
+[ ] mv_user_cost_summary refresh job keeps drifting — pin the cron
+[ ] deepseek reasoner latency spikes on long context — investigate or add timeout
+[ ] grok p99=30001ms is suspicious
+
+MEDIUM
+------
+[ ] billing cost threshold is way more than warning fires
+[ ] requests.log in configs/ is from a debug session, remove it
+[ ] document the routing policy weights
+[ ] staging redis password is too similar to prod redis password
+[ ] agent step counter shows "31/?" — implement actual step estimation
+[ ] write tests for failover logic (it works, I just don't know why)
+
+LOW
+---
+[ ] clean up feature/agent-runtime branch
+[ ] debug.log is 847MB after rotation
+[ ] add more provider health history
+[ ] server port rotation issue
+
+DONE
+----
+[x] set up multi-provider routing
+[x] implement circuit breaker
+[x] agent runtime v1
+[x] billing integration
+[x] RDS automated snapshots

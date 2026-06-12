@@ -1,0 +1,111 @@
+# CoreAI Protocol Suite - Routing Configuration
+
+defaults:
+  timeout_ms:           30000
+  retry_attempts:       3
+  retry_backoff_ms:     500
+  circuit_breaker:
+    failure_threshold:  5
+    recovery_timeout_s: 60
+    half_open_requests: 3
+
+policies:
+  default:
+    strategy:           cost_aware
+    weights:
+      cost:             0.70
+      latency:          0.30
+    latency_ceiling_ms: 2000
+    fallback_chain:
+      - deepseek
+      - openai
+      - anthropic
+      - gemini
+      - grok
+
+  low_latency:
+    strategy:           latency_first
+    latency_ceiling_ms: 500
+    fallback_chain:
+      - deepseek
+      - gemini
+      - openai
+      - anthropic
+
+  high_quality:
+    strategy:           explicit
+    provider:           anthropic
+    model:              claude-opus-4
+    fallback_chain:
+      - openai
+    fallback_model:     gpt-4o
+
+  bulk:
+    strategy:           cost_aware
+    weights:
+      cost:             0.90
+      latency:          0.10
+    fallback_chain:
+      - deepseek
+      - gemini
+
+providers:
+  openai:
+    enabled:            true
+    priority:           10
+    rate_limits:
+      rpm:              10000
+      tpm:              2000000
+    models:
+      - gpt-4o
+      - gpt-4o-mini
+      - o3-mini
+
+  anthropic:
+    enabled:            true
+    priority:           20
+    rate_limits:
+      rpm:              4000
+      tpm:              400000
+    models:
+      - claude-opus-4
+      - claude-sonnet-4
+
+  gemini:
+    enabled:            true
+    priority:           30
+    rate_limits:
+      rpm:              15000
+      tpm:              4000000
+    models:
+      - gemini-2.0-flash
+      - gemini-2.5-pro
+
+  grok:
+    enabled:            true
+    priority:           40
+    rate_limits:
+      rpm:              1000
+      tpm:              131072
+    models:
+      - grok-3
+      - grok-3-mini
+
+  deepseek:
+    enabled:            true
+    priority:           50
+    rate_limits:
+      rpm:              8000
+      tpm:              1000000
+    models:
+      - deepseek-chat
+      - deepseek-reasoner
+
+cost_controls:
+  daily_limit_usd:      1000
+  warning_threshold:    0.85
+  per_request_limit:    2.00
+  actions:
+    on_daily_warning:   notify
+    on_daily_exceeded:  block_non_essential
+    on_request_exceeded: reject

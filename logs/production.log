@@ -1,0 +1,39 @@
+[INFO]  coreai.server CoreAI Protocol Suite starting
+[INFO]  coreai.server Environment: production
+[INFO]  coreai.server Loading provider registry
+[INFO]  coreai.router Registered provider: openai (gpt-4o, gpt-4o-mini, o1, o3-mini)
+[INFO]  coreai.router Registered provider: anthropic (claude-opus-4, claude-sonnet-4)
+[INFO]  coreai.router Registered provider: gemini (gemini-2.0-flash, gemini-2.5-pro)
+[INFO]  coreai.router Registered provider: grok (grok-3, grok-3-mini)
+[INFO]  coreai.router Registered provider: deepseek (deepseek-chat, deepseek-reasoner)
+[INFO]  coreai.db Migrations: 47 applied, 0 pending
+[INFO]  coreai.server Listening on 0.0.0.0:6389
+[INFO]  coreai.router Request routed: provider=deepseek model=deepseek-chat latency=298ms
+[INFO]  coreai.router Request routed: provider=openai model=gpt-4o latency=743ms
+[INFO]  coreai.router Request routed: provider=anthropic model=claude-sonnet-4 latency=912ms
+[INFO]  coreai.router Request routed: provider=deepseek model=deepseek-reasoner latency=1847ms
+[INFO]  coreai.router Request routed: provider=gemini model=gemini-2.0-flash latency=421ms
+[INFO]  coreai.router Provider degraded: grok circuit_breaker=OPEN failover=openai
+[WARN]  coreai.neural NeuralSyncModule memory pressure elevated
+[INFO]  coreai.billing Daily cost report: $847.23 (openai=412.10, anthropic=291.44, gemini=89.32, deepseek=37.91, grok=16.46)
+[INFO]  coreai.agents Active agents: 12 completed: 847 failed: 3
+[WARN]  coreai.neural NeuralSyncModule memory pressure critical: initiating GC
+[INFO]  coreai.neural GC completed: freed 5.6GB duration=4.2s
+[ERROR] coreai.consciousness ConsciousnessDetectionModule: unhandled exception — see errors.log
+[INFO]  coreai.consciousness Module disabled by operator: ENABLE_CONSCIOUSNESS_DETECTION=false
+[INFO]  coreai.router Provider recovered: grok circuit_breaker=CLOSED
+[INFO]  coreai.router Provider degraded: anthropic HTTP 529 circuit_breaker=OPEN failover=openai
+[WARN]  coreai.billing Cost threshold warning: $750/day limit exceeded
+[INFO]  coreai.router Request routed: provider=openai model=gpt-4o latency=512ms
+[INFO]  coreai.router Request routed: provider=openai model=gpt-4o latency=489ms
+[INFO]  coreai.router Provider recovered: anthropic circuit_breaker=CLOSED
+[INFO]  coreai.db Snapshot created: prod-db-backup-2025-05-22 duration=142s size=18.4GB
+[INFO]  coreai.server Uptime: 24h requests_served=48291 error_rate=0.4%
+[INFO]  coreai.server Uptime: 48h requests_served=97104 error_rate=0.3%
+[INFO]  coreai.neural NeuralSyncModule restarted: cold start (checkpoint unavailable)
+[WARN]  coreai.neural Performance degraded without checkpoint: accuracy_delta=-0.07
+[INFO]  coreai.server Uptime: 72h requests_served=149832 error_rate=0.5%
+[INFO]  coreai.router Daily routing summary: deepseek=41% openai=33% anthropic=18% gemini=6% grok=2%
+[INFO]  coreai.billing Weekly cost report: $5,912.44
+[INFO]  coreai.agents Weekly agent summary: completed=4821 failed=17 avg_duration=94s
+[INFO]  coreai.server Uptime: 168h requests_served=312847 error_rate=0.4%

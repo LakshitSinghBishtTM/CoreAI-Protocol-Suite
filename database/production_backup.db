@@ -1,0 +1,148 @@
+SQLite format 3   @                                                                     
+.N
+CoreAI Protocol Suite - Production Database Backup
+Exported: 2026-05-22 03:14:07 UTC
+Source: prod-db.r7Kp2x.us-east-1.rds.amazonaws.com
+Database: coreai_production
+Size: 18.4 GB (full export truncated for backup manifest)
+
+PRAGMA foreign_keys=OFF;
+BEGIN TRANSACTION;
+
+-- ============================================================
+-- TABLE: providers
+-- ============================================================
+
+CREATE TABLE providers (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    display_name TEXT NOT NULL,
+    base_url TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    priority INTEGER NOT NULL DEFAULT 100,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+INSERT INTO providers VALUES
+    ('a1f3d9c2-7b4e-4f81-b3d2-9c8e7f6a5b4d','openai','OpenAI','https://api.openai.com/v1',1,10,'2024-12-01 09:00:00','2026-05-21 14:32:11'),
+    ('b2e8f1d4-3c7a-4b92-c4e3-8d9f0a1b2c3e','anthropic','Anthropic','https://api.anthropic.com/v1',1,20,'2024-12-01 09:00:00','2026-05-20 08:17:44'),
+    ('c3d7e2f5-9a8b-4c03-d5f4-7e0a1b2c3d4f','gemini','Google Gemini','https://generativelanguage.googleapis.com/v1beta',1,30,'2024-12-01 09:00:00','2026-04-14 11:02:58'),
+    ('d4c6f3a6-1b9c-4d14-e6a5-6f1b2c3d4e5a','grok','xAI Grok','https://api.x.ai/v1',1,40,'2026-01-15 14:22:00','2026-05-18 19:44:07'),
+    ('e5b5a4b7-2c0d-4e25-f7b6-5a2c3d4e5f6b','deepseek','DeepSeek','https://api.deepseek.com/v1',1,50,'2026-01-15 14:22:00','2026-05-22 01:08:33');
+
+-- ============================================================
+-- TABLE: models
+-- ============================================================
+
+CREATE TABLE models (
+    id TEXT PRIMARY KEY,
+    provider_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    display_name TEXT NOT NULL,
+    context_window INTEGER NOT NULL,
+    max_output INTEGER NOT NULL,
+    cost_per_1k_input_usd REAL NOT NULL DEFAULT 0,
+    cost_per_1k_output_usd REAL NOT NULL DEFAULT 0,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (provider_id) REFERENCES providers(id)
+);
+
+INSERT INTO models VALUES
+    ('f1a2b3c4-d5e6-4f70-a1b2-c3d4e5f6a7b8','a1f3d9c2-7b4e-4f81-b3d2-9c8e7f6a5b4d','gpt-4o','GPT-4o',128000,16384,0.005,0.015,1,'2026-01-15 14:22:00'),
+    ('f2b3c4d5-e6f7-4a81-b2c3-d4e5f6a7b8c9','a1f3d9c2-7b4e-4f81-b3d2-9c8e7f6a5b4d','gpt-4o-mini','GPT-4o Mini',128000,16384,0.00015,0.0006,1,'2026-01-15 14:22:00'),
+    ('f3c4d5e6-f7a8-4b92-c3d4-e5f6a7b8c9d0','a1f3d9c2-7b4e-4f81-b3d2-9c8e7f6a5b4d','o3-mini','o3-mini',200000,100000,0.0011,0.0044,1,'2026-02-03 09:15:00'),
+    ('f4d5e6f7-a8b9-4c03-d4e5-f6a7b8c9d0e1','b2e8f1d4-3c7a-4b92-c4e3-8d9f0a1b2c3e','claude-opus-4','Claude Opus 4',200000,32000,0.015,0.075,1,'2026-03-12 10:00:00'),
+    ('f5e6f7a8-b9c0-4d14-e5f6-a7b8c9d0e1f2','b2e8f1d4-3c7a-4b92-c4e3-8d9f0a1b2c3e','claude-sonnet-4','Claude Sonnet 4',200000,64000,0.003,0.015,1,'2026-03-12 10:00:00'),
+    ('f6f7a8b9-c0d1-4e25-f6a7-b8c9d0e1f2a3','c3d7e2f5-9a8b-4c03-d5f4-7e0a1b2c3d4f','gemini-2.0-flash','Gemini 2.0 Flash',1048576,8192,0.0001,0.0004,1,'2026-02-19 08:30:00'),
+    ('f7a8b9c0-d1e2-4f36-a7b8-c9d0e1f2a3b4','c3d7e2f5-9a8b-4c03-d5f4-7e0a1b2c3d4f','gemini-2.5-pro','Gemini 2.5 Pro',1048576,65536,0.00125,0.010,1,'2026-03-25 11:00:00'),
+    ('f8b9c0d1-e2f3-4a47-b8c9-d0e1f2a3b4c5','d4c6f3a6-1b9c-4d14-e6a5-6f1b2c3d4e5a','grok-3','Grok 3',131072,16384,0.003,0.015,1,'2026-02-18 16:45:00'),
+    ('f9c0d1e2-f3a4-4b58-c9d0-e1f2a3b4c5d6','e5b5a4b7-2c0d-4e25-f7b6-5a2c3d4e5f6b','deepseek-chat','DeepSeek Chat',65536,8192,0.00014,0.00028,1,'2026-01-15 14:22:00'),
+    ('fad1e2f3-a4b5-4c69-d0e1-f2a3b4c5d6e7','e5b5a4b7-2c0d-4e25-f7b6-5a2c3d4e5f6b','deepseek-reasoner','DeepSeek Reasoner',65536,8192,0.00055,0.00219,1,'2026-01-28 09:00:00');
+
+-- ============================================================
+-- TABLE: users (sample — full export: 3,847 rows)
+-- ============================================================
+
+CREATE TABLE users (
+    id TEXT PRIMARY KEY,
+    email TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    plan TEXT NOT NULL DEFAULT 'free',
+    monthly_budget_usd REAL,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+INSERT INTO users VALUES
+    ('u1a2b3c4-d5e6-4f70-a1b2-c3d4e5f6a7b8','lakshit@coreai.dev','$2b$12$nW3vKx9mQrL2pTwY8dHsF.uZeAoGiNjE7lPsBtYhDfCkW6qMnRxV',  'enterprise',NULL, 1,'2024-12-01 09:00:00','2026-05-22 02:41:07'),
+    ('u2b3c4d5-e6f7-4a81-b2c3-d4e5f6a7b8c9','svc-agent-runtime@internal','$2b$12$T8vQw3nR7mKj2xPyL9dHs.4cBuZeAoGiNtVlEpMrXqWsYhDfCkP','enterprise',NULL,1,'2024-12-01 09:00:00','2026-05-22 03:00:01'),
+    ('u3c4d5e6-f7a8-4b92-c3d4-e5f6a7b8c9d0','svc-billing@internal',     '$2b$12$mN7vKx2pRqL8wTjY4dHsF.cBuZeAoGiNtVlEpMrXqWsYh9DfCkP','enterprise',NULL,1,'2024-12-01 09:00:00','2026-05-22 03:00:01');
+
+-- 3,844 rows omitted from backup manifest
+
+-- ============================================================
+-- TABLE: usage_daily (sample — full export: 284,931 rows)
+-- ============================================================
+
+CREATE TABLE usage_daily (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    provider_id TEXT NOT NULL,
+    date TEXT NOT NULL,
+    request_count INTEGER NOT NULL DEFAULT 0,
+    error_count INTEGER NOT NULL DEFAULT 0,
+    tokens_input INTEGER NOT NULL DEFAULT 0,
+    tokens_output INTEGER NOT NULL DEFAULT 0,
+    total_cost_usd REAL NOT NULL DEFAULT 0,
+    avg_latency_ms REAL,
+    FOREIGN KEY (user_id) REFERENCES users(id),
+    FOREIGN KEY (provider_id) REFERENCES providers(id)
+);
+
+INSERT INTO usage_daily VALUES
+    ('ud001','u1a2b3c4-d5e6-4f70-a1b2-c3d4e5f6a7b8','e5b5a4b7-2c0d-4e25-f7b6-5a2c3d4e5f6b','2026-05-22',1847, 12,2847291,4109023,37.91, 287.4),
+    ('ud002','u1a2b3c4-d5e6-4f70-a1b2-c3d4e5f6a7b8','a1f3d9c2-7b4e-4f81-b3d2-9c8e7f6a5b4d','2026-05-22',3012, 41,7291048,9847234,412.10,521.8),
+    ('ud003','u1a2b3c4-d5e6-4f70-a1b2-c3d4e5f6a7b8','b2e8f1d4-3c7a-4b92-c4e3-8d9f0a1b2c3e','2026-05-22',2104, 28,4829103,7201847,291.44,891.2),
+    ('ud004','u1a2b3c4-d5e6-4f70-a1b2-c3d4e5f6a7b8','c3d7e2f5-9a8b-4c03-d5f4-7e0a1b2c3d4f','2026-05-22', 841,  9,3847291,2904817, 89.32,431.1),
+    ('ud005','u1a2b3c4-d5e6-4f70-a1b2-c3d4e5f6a7b8','d4c6f3a6-1b9c-4d14-e6a5-6f1b2c3d4e5a','2026-05-22', 487,  7, 912847,1204917, 16.46,891.7);
+
+-- 284,926 rows omitted from backup manifest
+
+-- ============================================================
+-- TABLE: provider_health (last 24h sample)
+-- ============================================================
+
+CREATE TABLE provider_health (
+    id TEXT PRIMARY KEY,
+    provider_id TEXT NOT NULL,
+    status TEXT NOT NULL,
+    latency_p50_ms INTEGER,
+    latency_p99_ms INTEGER,
+    error_rate REAL,
+    circuit_breaker TEXT NOT NULL DEFAULT 'CLOSED',
+    sampled_at TEXT NOT NULL,
+    FOREIGN KEY (provider_id) REFERENCES providers(id)
+);
+
+INSERT INTO provider_health VALUES
+    ('ph001','a1f3d9c2-7b4e-4f81-b3d2-9c8e7f6a5b4d','healthy',  489, 2103,0.0041,'CLOSED',  '2026-05-22 03:00:00'),
+    ('ph002','b2e8f1d4-3c7a-4b92-c4e3-8d9f0a1b2c3e','degraded',  912, 8471,0.0312,'OPEN',    '2026-05-22 03:00:00'),
+    ('ph003','c3d7e2f5-9a8b-4c03-d5f4-7e0a1b2c3d4f','healthy',  421, 1847,0.0021,'CLOSED',  '2026-05-22 03:00:00'),
+    ('ph004','d4c6f3a6-1b9c-4d14-e6a5-6f1b2c3d4e5a','healthy',  312,30001,0.0087,'CLOSED',  '2026-05-22 03:00:00'),
+    ('ph005','e5b5a4b7-2c0d-4e25-f7b6-5a2c3d4e5f6b','healthy',  201,  847,0.0009,'CLOSED',  '2026-05-22 03:00:00');
+
+-- ============================================================
+-- BACKUP MANIFEST
+-- ============================================================
+
+-- tables:           12
+-- total_rows:       312,847
+-- export_duration:  142s
+-- checksum_sha256:  7f3n2kx9m4qrl8pt4b7n3kx9m2qrl8p4twye8dhsf3cbuzea0g1nie7lpsbt4f
+-- backup_tool:      coreai-dbdump v0.4.1
+-- compression:      none (manifest only — full binary at s3://coreai-prod-backups-2026/2026-05-22/full.db.gz)
+
+COMMIT;
