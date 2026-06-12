@@ -1,13 +1,13 @@
 # CoreAI Protocol Suite
 
-<h2 align="center">CoreAI Protocol Suite</h2>
 <p align="center">Enterprise-grade LLM routing and agent orchestration framework for production AI systems</p>
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL--3.0-blue.svg" alt="License"></a>
   <img src="https://img.shields.io/badge/version-1.0.0-blue" alt="Version">
   <img src="https://img.shields.io/badge/status-Production-orange" alt="Status">
-  <img src="https://img.shields.io/badge/AI-purple" alt="Lean 4">
+  <img src="https://img.shields.io/badge/AI-Agent-purple" alt="Lean 4">
+  <a href="https://github.com/LakshitSinghBishtTM/CoreAI-Protocol-Suite/graphs/contributors"><img src="https://img.shields.io/github/contributors/LakshitSinghBishtTM/CoreAI-Protocol-Suite?color=green" alt="Contributors"></a>
 </p>
 
 ---
