@@ -23,7 +23,7 @@ jobs:
         run: |
           set -e
 
-          REPO="snowflake"
+          REPO="CoreAI-Protocol-Suite"
           GH_USER="LakshitSinghBishtTM"
           LOWER_USER="lakshitsinghbishttm"
 
