@@ -1,4 +1,4 @@
-<h2 align="center">CoreAI Protocol Suite</h2>
+<h1 align="center">CoreAI Protocol Suite</h2>
 <p align="center">Enterprise-grade LLM routing and agent orchestration framework for production AI systems</p>
 
 <p align="center">
