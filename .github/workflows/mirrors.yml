@@ -37,15 +37,15 @@ jobs:
           done
 
           echo "Pushing to GitLab..."
-          git push --mirror https://oauth2:${{ secrets.GITLAB_CoreAI-Protocol-Suite }}@gitlab.com/$LOWER_USER/$REPO.git || echo "[warn] GitLab push failed"
+          git push --mirror https://oauth2:${{ secrets.GITLAB_CoreAI }}@gitlab.com/$LOWER_USER/$REPO.git || echo "[warn] GitLab push failed"
 
           echo "Pushing to Codeberg..."
-          git push --mirror https://oauth2:${{ secrets.CODEBERG_CoreAI-Protocol-Suite }}@codeberg.org/$LOWER_USER/$REPO.git || echo "[warn] Codeberg push failed"
+          git push --mirror https://oauth2:${{ secrets.CODEBERG_CoreAI }}@codeberg.org/$LOWER_USER/$REPO.git || echo "[warn] Codeberg push failed"
 
           echo "Pushing to Gitea..."
-          git push --mirror https://${{ secrets.GITEA_CoreAI-Protocol-Suite }}@gitea.com/$GH_USER/$REPO.git || echo "[warn] Gitea push failed"
+          git push --mirror https://${{ secrets.GITEA_CoreAI }}@gitea.com/$GH_USER/$REPO.git || echo "[warn] Gitea push failed"
 
           echo "Pushing to Bitbucket..."
-          git push --mirror https://x-token-auth:${{ secrets.BITBUCKET_CoreAI-Protocol-Suite }}@bitbucket.org/$LOWER_USER/$REPO.git || echo "[warn] Bitbucket push failed"
+          git push --mirror https://x-token-auth:${{ secrets.BITBUCKET_CoreAI }}@bitbucket.org/$LOWER_USER/$REPO.git || echo "[warn] Bitbucket push failed"
 
           echo "[done] All mirror attempts completed."
