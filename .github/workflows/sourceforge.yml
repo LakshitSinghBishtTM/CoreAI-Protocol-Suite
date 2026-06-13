@@ -1,0 +1,46 @@
+name: SourceForge Mirror
+
+on:
+  push:
+  create:
+  delete:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sourceforge-mirror
+  cancel-in-progress: true
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with: 
+          fetch-depth: 0
+        
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+
+          echo "${{ secrets.SOURCEFORGE_SSH_KEY }}" > ~/.ssh/id_ed25519
+
+          chmod 600 ~/.ssh/id_ed25519
+
+          ssh-keyscan git.code.sf.net >> ~/.ssh/known_hosts
+
+      - name: Configure Git
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+
+      - name: Push to SourceForge
+        run: |
+          git remote add sourceforge ssh://lakshitsbishttm@git.code.sf.net/p/coreai-protocol-suite/code
+
+          git push --force sourceforge HEAD:main
