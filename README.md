@@ -161,6 +161,23 @@ This separation allows individual components to evolve independently while prese
 
 ---
 
+## Distribution
+
+CoreAI Protocol Suite is distributed across multiple Git hosting platforms to improve long-term availability and reduce dependence on any single provider.
+
+* GitHub (canonical): https://github.com/lakshitsinghbishttm/CoreAI-Protocol-Suite
+* GitLab: https://gitlab.com/lakshitsinghbishttm/CoreAI-Protocol-Suite
+* Codeberg: https://codeberg.org/lakshitsinghbishttm/CoreAI-Protocol-Suite
+* Gitea: https://gitea.com/LakshitSinghBishtTM/CoreAI-Protocol-Suite
+* Bitbucket: https://bitbucket.org/lakshitsinghbishttm/coreai-protocol-suite
+* SourceForge: https://sourceforge.net/projects/coreai-protocol-suite/
+
+Mirrors are synchronized automatically through GitHub Actions.
+
+GitHub remains the primary development repository for issue tracking, pull requests, and releases.
+
+---
+
 ## Performance Characteristics
 
 CoreAI includes integrated benchmarking, telemetry, cost accounting, and provider analytics.
@@ -302,7 +319,7 @@ Future releases will continue expanding protocol interoperability, runtime capab
 
 Licensed under the GNU General Public License v3.0.
 
-See `LICENSE` for details.
+See [`LICENSE`](LICENSE) for details.
 
 ---
 
