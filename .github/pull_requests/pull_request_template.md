@@ -1,34 +1,88 @@
 # Summary
 
-Provide a brief description of the changes introduced by this pull request.
+Provide a brief description of this pull request.
 
-## Changes
+## Type of Change
 
-*
-*
-*
+- [ ] Bug Fix
+- [ ] Feature
+- [ ] Provider Integration
+- [ ] Routing Improvement
+- [ ] Runtime Improvement
+- [ ] Agent Improvement
+- [ ] API Change
+- [ ] Protocol Change
+- [ ] Security Improvement
+- [ ] Performance Improvement
+- [ ] Refactoring
+- [ ] Other
 
-## Related Issue
+## Motivation
+
+Why is this change needed?
+
+## Related Issues
 
 Closes #
 
+Related to #
+
+## Affected Components
+
+- [ ] API
+- [ ] Router
+- [ ] Orchestrator
+- [ ] Scheduler
+- [ ] Runtime
+- [ ] Agents
+- [ ] Providers
+- [ ] Protocols
+- [ ] Middleware
+- [ ] Database
+- [ ] Security
+- [ ] Other
+
 ## Testing
 
-Describe how the changes were tested.
+- [ ] Existing tests pass
+- [ ] New tests added
+- [ ] Tested locally
+- [ ] CI passes
+- [ ] Not Applicable
+
+### Test Commands
 
 ```
-Test results, logs, or benchmark output here.
+Commands executed during testing
 ```
 
-## Checklist
+## Security Impact
 
-* [ ] Code builds successfully.
-* [ ] Existing tests pass.
-* [ ] New tests added where appropriate.
-* [ ] Documentation updated where necessary.
-* [ ] No unnecessary files or generated artifacts were added.
-* [ ] Changes follow the project's coding style.
+Does this change affect:
+
+- [ ] Authentication
+- [ ] Authorization
+- [ ] Provider Credentials
+- [ ] Protocol Security
+- [ ] Runtime Security
+- [ ] None
+
+If yes, explain:
+
+## Backwards Compatibility
+
+- [ ] Fully Backwards Compatible
+- [ ] Requires Migration
+- [ ] Breaking Change
+
+If migration or breaking changes are involved, explain:
+
+## Documentation
+
+- [ ] Documentation Updated
+- [ ] Documentation Not Required
+- [ ] Documentation Update Planned Separately
 
 ## Additional Notes
 
-Add any context, screenshots, benchmarks, or implementation details that reviewers should know.
+Anything reviewers should know.
