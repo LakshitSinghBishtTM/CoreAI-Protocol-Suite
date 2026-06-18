@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from cache import CacheBackend, MemoryCache, RedisCache, ResponseCache
+from coreai.cache import CacheBackend, MemoryCache, RedisCache, ResponseCache
 
 
 # ---------------------------------------------------------------------------
@@ -80,11 +80,11 @@ class TestRedisCacheFallback:
 
     @pytest.fixture
     def cache(self):
-        with patch("cache.redis", None, create=True):
-            c = RedisCache.__new__(RedisCache)
-            c.redis = None
-            c.fallback = MemoryCache()
-            return c
+        from coreai.cache import RedisCache, MemoryCache
+        c = RedisCache.__new__(RedisCache)
+        c.redis = None
+        c.fallback = MemoryCache()
+        return c
 
     @pytest.mark.asyncio
     async def test_get_delegates_to_fallback(self, cache):

@@ -8,6 +8,9 @@ import asyncio
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock
 
+from kernel.protocol_handler import ProtocolHandler
+from kernel.runtime import Runtime
+
 import pytest
 
 

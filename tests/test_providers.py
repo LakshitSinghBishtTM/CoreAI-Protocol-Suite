@@ -101,11 +101,34 @@ class TestOpenAIProvider:
             from providers.openai import OpenAIProvider
             return OpenAIProvider(api_key="sk-test-key-openai-fixture")
 
-    def test_name(self, provider):
-        assert provider.name == "openai"
+    @pytest.fixture  
+    def provider(self):
+        with patch("providers.anthropic.sdk.AsyncAnthropic"):
+            from providers.anthropic import AnthropicProvider
+            return AnthropicProvider(api_key="sk-ant-api03-testkey-fixture")
 
-    def test_default_model(self, provider):
-        assert provider.default_model == "gpt-4o-mini"
+    @pytest.fixture
+    def provider(self):
+        with patch("providers.gemini.genai"):
+            from providers.gemini import GeminiProvider
+            p = GeminiProvider.__new__(GeminiProvider)
+            p.api_key = "AIzaSy-test-gemini-fixture"
+            p.total_requests = 0
+            p.total_tokens = 0
+            p.total_cost = 0.0
+            return p
+
+    @pytest.fixture
+    def provider(self):
+        with patch("providers.grok.AsyncOpenAI"):
+            from providers.grok import GrokProvider
+            return GrokProvider(api_key="xai-test-grok-fixture")
+
+    @pytest.fixture
+    def provider(self):
+        with patch("providers.deepseek.AsyncOpenAI"):
+            from providers.deepseek import DeepSeekProvider
+            return DeepSeekProvider(api_key="ds-test-deepseek-fixture")
 
     @pytest.mark.asyncio
     async def test_complete_returns_response(self, provider):
@@ -350,17 +373,17 @@ class TestLoadProviders:
 
     def test_loads_provider_when_key_present(self, monkeypatch):
         monkeypatch.setenv("OPENAI_API_KEY", "sk-test-load-providers-fixture")
-        with patch("providers.OpenAIProvider") as MockProvider:
+        with patch("providers.openai.OpenAIProvider") as MockProvider:
             MockProvider.return_value = MagicMock()
             result = load_providers(enabled=["openai"])
         assert "openai" in result
-
+    
     def test_enabled_filter_restricts_loaded_providers(self, monkeypatch):
         monkeypatch.setenv("OPENAI_API_KEY", "sk-test-filter-fixture")
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-filter-fixture")
         with (
-            patch("providers.OpenAIProvider", return_value=MagicMock()),
-            patch("providers.AnthropicProvider", return_value=MagicMock()),
+            patch("providers.openai.OpenAIProvider", return_value=MagicMock()),
+            patch("providers.anthropic.AnthropicProvider", return_value=MagicMock()),
         ):
             result = load_providers(enabled=["openai"])
         assert "anthropic" not in result

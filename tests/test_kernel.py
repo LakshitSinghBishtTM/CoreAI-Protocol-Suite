@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from ai_kernel import AIKernel
+from kernel.ai_kernel import AIKernel
 
 
 # ---------------------------------------------------------------------------

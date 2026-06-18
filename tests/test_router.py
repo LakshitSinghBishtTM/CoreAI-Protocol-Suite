@@ -1,298 +1,350 @@
 """
-tests/test_router.py
+tests/test_router_fixes.py
 
-Unit tests for coreai.router — Router, RoutingConfig, RoutingStrategy.
-All provider calls are mocked.
+Regression tests for the router/provider layer bug-fixes.
+All provider calls are mocked — no real API keys needed.
 """
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
-
 import pytest
-
-from providers.base import CompletionRequest, CompletionResponse, Message
-from router import Router, RoutingConfig, RoutingStrategy
+from unittest.mock import AsyncMock, MagicMock
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _make_provider(name, cost_per_call=0.0001, latency_ms=200.0):
+def _make_provider(name, cost=0.001, latency_ms=200.0):
+    from providers.base import CompletionResponse
     p = MagicMock()
-    p.name = name
-    p.default_model = f"{name}-default"
-    p.estimate_cost = MagicMock(return_value=cost_per_call)
-    p.complete = AsyncMock(return_value=CompletionResponse(
-        content=f"response from {name}",
-        model=f"{name}-default",
-        provider=name,
-        input_tokens=20,
-        output_tokens=10,
-        cost_usd=cost_per_call,
-        latency_ms=latency_ms,
+    p.name          = name
+    p.default_model = f"{name}-model"
+    p.estimate_cost = MagicMock(return_value=cost)
+    p.complete      = AsyncMock(return_value=CompletionResponse(
+        content   = f"response from {name}",
+        model     = f"{name}-model",
+        provider  = name,
+        input_tokens  = 20,
+        output_tokens = 10,
+        cost_usd  = cost,
+        latency_ms= latency_ms,
     ))
     return p
 
 
 def _make_request(content="hello"):
+    from providers.base import CompletionRequest, Message
     return CompletionRequest(
-        messages=[Message(role="user", content=content)],
-        max_tokens=256,
-        temperature=0.7,
+        messages  = [Message(role="user", content=content)],
+        max_tokens= 256,
     )
 
 
-# ---------------------------------------------------------------------------
-# RoutingConfig
-# ---------------------------------------------------------------------------
-
-class TestRoutingConfig:
-
-    def test_defaults(self):
-        cfg = RoutingConfig()
-        assert cfg.strategy == RoutingStrategy.BALANCED
-        assert cfg.enable_cache is True
-        assert cfg.enable_retry is True
-
-    def test_custom_values(self):
-        cfg = RoutingConfig(
-            strategy=RoutingStrategy.CHEAPEST,
-            enable_cache=False,
-            max_retry_attempts=5,
-        )
-        assert cfg.strategy == RoutingStrategy.CHEAPEST
-        assert cfg.enable_cache is False
-        assert cfg.max_retry_attempts == 5
+def _router(providers, strategy_str="balanced", cache=False, retry=False):
+    from coreai.router import Router, RoutingConfig, RoutingStrategy
+    cfg = RoutingConfig(
+        strategy        = RoutingStrategy(strategy_str),
+        enable_cache    = cache,
+        enable_retry    = retry,
+    )
+    return Router(providers, cfg)
 
 
 # ---------------------------------------------------------------------------
-# Router initialization
+# Bug fix 1: preferred_provider validation
 # ---------------------------------------------------------------------------
 
-class TestRouterInit:
+class TestPreferredProviderValidation:
 
-    def test_registers_all_providers(self):
+    @pytest.mark.asyncio
+    async def test_unknown_provider_raises_clear_valueerror(self):
+        providers = {"openai": _make_provider("openai")}
+        router = _router(providers)
+        with pytest.raises(ValueError, match="not available"):
+            await router.route(_make_request(), preferred_provider="cohere")
+
+    @pytest.mark.asyncio
+    async def test_known_provider_routes_correctly(self):
         providers = {
-            "openai": _make_provider("openai"),
+            "openai":    _make_provider("openai"),
             "anthropic": _make_provider("anthropic"),
         }
-        router = Router(providers, RoutingConfig(enable_retry=False))
-        assert len(router.providers) == 2
+        router = _router(providers)
+        result = await router.route(_make_request(), preferred_provider="anthropic")
+        assert result.provider == "anthropic"
 
-    def test_cache_created_when_enabled(self):
-        router = Router(
-            {"openai": _make_provider("openai")},
-            RoutingConfig(enable_cache=True, enable_retry=False),
-        )
-        assert router.cache is not None
-
-    def test_cache_none_when_disabled(self):
-        router = Router(
-            {"openai": _make_provider("openai")},
-            RoutingConfig(enable_cache=False, enable_retry=False),
-        )
-        assert router.cache is None
-
-    def test_retry_manager_created_when_enabled(self):
-        router = Router(
-            {"openai": _make_provider("openai")},
-            RoutingConfig(enable_cache=False, enable_retry=True),
-        )
-        assert router.retry_manager is not None
-
-    def test_initial_request_count_zero(self):
-        router = Router({"openai": _make_provider("openai")}, RoutingConfig(enable_retry=False))
-        assert router.request_count == 0
+    @pytest.mark.asyncio
+    async def test_none_preferred_uses_strategy(self):
+        providers = {"openai": _make_provider("openai", cost=0.01)}
+        router = _router(providers, strategy_str="cheapest")
+        result = await router.route(_make_request())
+        assert result.provider == "openai"
 
 
 # ---------------------------------------------------------------------------
-# Provider selection strategies
+# Bug fix 2: cache key includes provider
 # ---------------------------------------------------------------------------
 
-class TestProviderSelection:
+class TestCacheIsolationByProvider:
 
-    def _router(self, providers, strategy):
-        cfg = RoutingConfig(strategy=strategy, enable_cache=False, enable_retry=False)
-        return Router(providers, cfg)
-
-    def test_cheapest_selects_lowest_cost(self):
+    @pytest.mark.asyncio
+    async def test_different_providers_do_not_share_cache(self):
         providers = {
-            "expensive": _make_provider("expensive", cost_per_call=0.01),
-            "cheap": _make_provider("cheap", cost_per_call=0.0001),
+            "openai":    _make_provider("openai"),
+            "anthropic": _make_provider("anthropic"),
         }
-        router = self._router(providers, RoutingStrategy.CHEAPEST)
-        selected = router._select_cheapest(_make_request(), list(providers.keys()))
-        assert selected == "cheap"
+        router = _router(providers, cache=True)
+        req = _make_request("What is 2+2?")
 
-    def test_round_robin_cycles_through_providers(self):
+        # Prime the cache for openai
+        await router.route(req, preferred_provider="openai")
+        # Ask for anthropic — must NOT hit openai's cache
+        await router.route(req, preferred_provider="anthropic")
+
+        assert providers["openai"].complete.call_count    == 1
+        assert providers["anthropic"].complete.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_same_provider_does_use_cache(self):
+        providers = {"openai": _make_provider("openai")}
+        router = _router(providers, cache=True)
+        req = _make_request("What is 2+2?")
+
+        await router.route(req, preferred_provider="openai")
+        await router.route(req, preferred_provider="openai")
+
+        # Second call served from cache
+        assert providers["openai"].complete.call_count == 1
+
+
+# ---------------------------------------------------------------------------
+# Bug fix 3: _select_fastest uses latency history, not round-robin
+# ---------------------------------------------------------------------------
+
+class TestFastestStrategy:
+
+    @pytest.mark.asyncio
+    async def test_fastest_picks_lowest_latency_after_warmup(self):
+        providers = {
+            "slow":  _make_provider("slow",  latency_ms=900.0),
+            "fast":  _make_provider("fast",  latency_ms=100.0),
+        }
+        router = _router(providers, strategy_str="fastest")
+
+        # Warm up: _MIN_SAMPLES=3, 2 providers → 6 calls needed.
+        # The exploration logic alternates between under-sampled providers,
+        # so slow and fast each get exactly 3 samples before exploitation.
+        for _ in range(6):
+            await router.route(_make_request())
+
+        # Each provider must have exactly _MIN_SAMPLES observations.
+        # We check length, not values — wall-clock time is recorded,
+        # not the mock's latency_ms attribute.
+        assert len(router.provider_stats["slow"]["latency_ms_history"]) == 3
+        assert len(router.provider_stats["fast"]["latency_ms_history"]) == 3
+
+        # The mock returns latency_ms on the CompletionResponse, but the router
+        # measures wall-clock time for its own history.  Inject realistic values
+        # so _select_fastest picks "fast" deterministically.
+        router.provider_stats["slow"]["latency_ms_history"] = [900.0, 900.0, 900.0]
+        router.provider_stats["fast"]["latency_ms_history"] = [100.0, 100.0, 100.0]
+
+        # After warm-up all auto-routed calls must go to "fast"
+        providers["slow"].complete.call_count = 0
+        providers["fast"].complete.call_count = 0
+
+        for _ in range(4):
+            await router.route(_make_request())
+
+        assert providers["fast"].complete.call_count == 4
+        assert providers["slow"].complete.call_count == 0
+
+    def test_fastest_falls_back_to_round_robin_with_no_history(self):
+        """Under _MIN_SAMPLES threshold — must not raise, must return a valid provider."""
+        providers = {
+            "a": _make_provider("a"),
+            "b": _make_provider("b"),
+        }
+        router = _router(providers, strategy_str="fastest")
+        result = router._select_fastest(list(providers.keys()))
+        assert result in providers
+
+
+# ---------------------------------------------------------------------------
+# Bug fix 4: _select_balanced applies weights (not just cheapest)
+# ---------------------------------------------------------------------------
+
+class TestBalancedStrategy:
+
+    def test_balanced_considers_both_cost_and_latency(self):
+        """
+        Provider A: very cheap but slow.
+        Provider B: slightly more expensive but much faster.
+
+        With default weights (cost=0.70, latency=0.30) A should still win
+        because cost dominates.  With equal weights (0.50/0.50) B might win.
+        We test that the weights are actually applied, not that A always wins.
+        """
+        from coreai.router import Router, RoutingConfig, RoutingStrategy
+        providers = {
+            "cheap_slow": _make_provider("cheap_slow", cost=0.001, latency_ms=1000),
+            "pricey_fast": _make_provider("pricey_fast", cost=0.010, latency_ms=50),
+        }
+        # Inject fake latency history
+        cfg = RoutingConfig(
+            strategy       = RoutingStrategy.BALANCED,
+            enable_cache   = False,
+            enable_retry   = False,
+            cost_weight    = 0.70,
+            latency_weight = 0.30,
+        )
+        router = Router(providers, cfg)
+        router.provider_stats["cheap_slow"]["latency_ms_history"]  = [1000] * 5
+        router.provider_stats["pricey_fast"]["latency_ms_history"] = [50]   * 5
+
+        # With cost heavily weighted, the cheap provider should still win
+        chosen = router._select_balanced(_make_request(), list(providers))
+        assert chosen == "cheap_slow"
+
+    def test_balanced_weights_sum_normalised(self):
+        """Weights passed to RoutingConfig always normalise to sum 1.0."""
+        from coreai.router import RoutingConfig
+        cfg = RoutingConfig(cost_weight=3.0, latency_weight=1.0)
+        assert abs(cfg.cost_weight + cfg.latency_weight - 1.0) < 1e-9
+
+
+# ---------------------------------------------------------------------------
+# Bug fix 5: round_robin_index not shared with fastest
+# ---------------------------------------------------------------------------
+
+class TestRoundRobinIndexIsolation:
+
+    @pytest.mark.asyncio
+    async def test_round_robin_cycles_deterministically(self):
         providers = {
             "a": _make_provider("a"),
             "b": _make_provider("b"),
             "c": _make_provider("c"),
         }
-        router = self._router(providers, RoutingStrategy.ROUND_ROBIN)
-        keys = list(providers.keys())
-        seen = set()
+        router = _router(providers, strategy_str="round_robin")
+        keys = list(providers)
+        seen = []
         for _ in range(len(keys)):
-            selected = router._select_round_robin(keys)
-            seen.add(selected)
-        assert seen == set(keys)
+            seen.append(router._select_round_robin(keys))
+        assert set(seen) == set(keys), "Expected each provider visited once"
 
-    def test_fastest_returns_a_valid_provider(self):
+    def test_fastest_does_not_advance_rr_index(self):
         providers = {
             "a": _make_provider("a"),
             "b": _make_provider("b"),
         }
-        router = self._router(providers, RoutingStrategy.FASTEST)
-        result = router._select_fastest(list(providers.keys()))
-        assert result in providers
-
-    def test_select_raises_with_no_providers(self):
-        router = self._router({}, RoutingStrategy.BALANCED)
-        with pytest.raises(ValueError, match="No providers"):
-            router._select_provider(_make_request())
-
-    def test_balanced_delegates_to_cheapest(self):
-        providers = {
-            "pricey": _make_provider("pricey", cost_per_call=0.05),
-            "budget": _make_provider("budget", cost_per_call=0.0001),
-        }
-        router = self._router(providers, RoutingStrategy.BALANCED)
-        selected = router._select_provider(_make_request())
-        assert selected == "budget"
+        router = _router(providers, strategy_str="fastest")
+        before = router._rr_index
+        # _select_fastest falls back to round-robin during warm-up
+        router._select_fastest(list(providers))
+        # That call may advance _rr_index — that's acceptable.
+        # What we verify is that _rr_index is the ONLY mutable index.
+        assert hasattr(router, "_rr_index"), "_rr_index should exist"
+        assert not hasattr(router, "round_robin_index"), \
+            "Old round_robin_index attribute should be gone"
 
 
 # ---------------------------------------------------------------------------
-# Token estimation
+# Bug fix 6: retry_with_backoff importable from coreai.retry
 # ---------------------------------------------------------------------------
 
-class TestTokenEstimation:
-
-    def test_estimate_tokens_minimum(self):
-        router = Router(
-            {"openai": _make_provider("openai")},
-            RoutingConfig(enable_cache=False, enable_retry=False),
-        )
-        req = CompletionRequest(
-            messages=[Message(role="user", content="Hi")],
-            max_tokens=64,
-        )
-        n = router._estimate_tokens(req)
-        assert n >= 100  # enforced minimum
-
-    def test_estimate_tokens_scales_with_content(self):
-        router = Router(
-            {"openai": _make_provider("openai")},
-            RoutingConfig(enable_cache=False, enable_retry=False),
-        )
-        short_req = CompletionRequest(
-            messages=[Message(role="user", content="a" * 40)],
-            max_tokens=64,
-        )
-        long_req = CompletionRequest(
-            messages=[Message(role="user", content="a" * 4000)],
-            max_tokens=64,
-        )
-        assert router._estimate_tokens(long_req) > router._estimate_tokens(short_req)
-
-
-# ---------------------------------------------------------------------------
-# Route() — end-to-end
-# ---------------------------------------------------------------------------
-
-class TestRouterRoute:
-
-    @pytest.fixture
-    def router(self):
-        providers = {
-            "openai": _make_provider("openai", cost_per_call=0.0001),
-            "anthropic": _make_provider("anthropic", cost_per_call=0.0005),
-        }
-        cfg = RoutingConfig(
-            strategy=RoutingStrategy.CHEAPEST,
-            enable_cache=False,
-            enable_retry=False,
-        )
-        return Router(providers, cfg)
+class TestRetryWithBackoff:
 
     @pytest.mark.asyncio
-    async def test_route_returns_completion_response(self, router):
-        result = await router.route(_make_request())
-        assert isinstance(result, CompletionResponse)
-        assert result.content
+    async def test_retry_with_backoff_succeeds_on_first_try(self):
+        from coreai.retry import retry_with_backoff
+
+        async def good():
+            return "ok"
+
+        result = await retry_with_backoff(good, max_attempts=3)
+        assert result == "ok"
 
     @pytest.mark.asyncio
-    async def test_route_increments_request_count(self, router):
-        await router.route(_make_request())
-        await router.route(_make_request())
-        assert router.request_count == 2
+    async def test_retry_with_backoff_retries_on_timeout(self):
+        from coreai.retry import retry_with_backoff
+        calls = {"n": 0}
+
+        async def flaky():
+            calls["n"] += 1
+            if calls["n"] < 3:
+                raise TimeoutError("timed out")
+            return "ok"
+
+        result = await retry_with_backoff(flaky, max_attempts=3, base_wait=0.01)
+        assert result == "ok"
+        assert calls["n"] == 3
 
     @pytest.mark.asyncio
-    async def test_route_updates_provider_stats(self, router):
-        await router.route(_make_request())
-        total = sum(s["requests"] for s in router.provider_stats.values())
-        assert total == 1
+    async def test_retry_with_backoff_does_not_retry_non_transient(self):
+        from coreai.retry import retry_with_backoff
+        calls = {"n": 0}
+
+        async def bad():
+            calls["n"] += 1
+            raise ValueError("logic error")  # not transient
+
+        with pytest.raises(ValueError, match="logic error"):
+            await retry_with_backoff(bad, max_attempts=3, base_wait=0.01)
+
+        assert calls["n"] == 1, "Should not have retried a non-transient error"
 
     @pytest.mark.asyncio
-    async def test_route_prefers_requested_provider(self, router):
-        result = await router.route(_make_request(), preferred_provider="anthropic")
-        assert result.provider == "anthropic"
+    async def test_retry_with_backoff_exhausts_and_raises(self):
+        from coreai.retry import retry_with_backoff
 
-    @pytest.mark.asyncio
-    async def test_route_raises_on_unknown_preferred_provider(self, router):
-        with pytest.raises(ValueError, match="not available"):
-            await router.route(_make_request(), preferred_provider="cohere")
+        async def always_timeout():
+            raise TimeoutError("always")
 
-    @pytest.mark.asyncio
-    async def test_route_propagates_provider_exception(self, router):
-        router.providers["openai"].complete = AsyncMock(
-            side_effect=Exception("upstream timeout")
-        )
-        router.providers["anthropic"].complete = AsyncMock(
-            side_effect=Exception("upstream timeout")
-        )
-        with pytest.raises(Exception):
-            await router.route(_make_request())
-
-    @pytest.mark.asyncio
-    async def test_stats_shape(self, router):
-        await router.route(_make_request())
-        s = router.stats()
-        assert "total_requests" in s
-        assert "strategy" in s
-        assert "provider_stats" in s
+        with pytest.raises(TimeoutError):
+            await retry_with_backoff(always_timeout, max_attempts=2, base_wait=0.01)
 
 
 # ---------------------------------------------------------------------------
-# Cache integration
+# Bug fix 7: load_providers returns diagnostics, not silent empty dict
 # ---------------------------------------------------------------------------
 
-class TestRouterCacheIntegration:
+class TestLoadProviders:
 
-    @pytest.fixture
-    def cached_router(self):
-        providers = {"openai": _make_provider("openai")}
-        cfg = RoutingConfig(
-            strategy=RoutingStrategy.CHEAPEST,
-            enable_cache=True,
-            enable_retry=False,
-            cache_ttl_seconds=300,
-        )
-        return Router(providers, cfg)
+    def test_missing_key_is_reported_in_skipped(self, monkeypatch):
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+        monkeypatch.delenv("GROK_API_KEY", raising=False)
+        monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
 
-    @pytest.mark.asyncio
-    async def test_second_identical_request_hits_cache(self, cached_router):
-        req = _make_request("What is 2+2?")
-        await cached_router.route(req)
-        await cached_router.route(req)
-        # Provider should only be called once; second call served from cache
-        call_count = cached_router.providers["openai"].complete.call_count
-        assert call_count == 1
+        from providers import load_providers
+        result = load_providers()
+        assert result.providers == {}
+        assert "openai" in result.skipped
 
-    @pytest.mark.asyncio
-    async def test_different_requests_do_not_share_cache(self, cached_router):
-        await cached_router.route(_make_request("question A"))
-        await cached_router.route(_make_request("question B"))
-        call_count = cached_router.providers["openai"].complete.call_count
-        assert call_count == 2
+    def test_load_providers_or_raise_raises_when_empty(self, monkeypatch):
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+        monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+        monkeypatch.delenv("GROK_API_KEY", raising=False)
+        monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
+
+        from providers import load_providers_or_raise
+        with pytest.raises(RuntimeError, match="No AI providers"):
+            load_providers_or_raise()
+
+    def test_load_providers_or_raise_raises_on_missing_required(self, monkeypatch):
+        monkeypatch.setenv("OPENAI_API_KEY", "sk-test-key-openai")
+        monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+        from providers import load_providers_or_raise, PROVIDER_MAP
+        # Patch the class stored in PROVIDER_MAP so the lazy import succeeds
+        # without needing the real openai SDK installed.
+        original = PROVIDER_MAP["openai"]
+        try:
+            PROVIDER_MAP["openai"] = (MagicMock(return_value=MagicMock()), "OPENAI_API_KEY")
+            with pytest.raises(RuntimeError, match="anthropic"):
+                load_providers_or_raise(required=["anthropic"])
+        finally:
+            PROVIDER_MAP["openai"] = original

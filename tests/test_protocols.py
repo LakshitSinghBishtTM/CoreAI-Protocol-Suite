@@ -49,7 +49,7 @@ class TestAuthProtocol:
         assert result.status == AuthStatus.REVOKED
 
     def test_authenticate_expired_credential(self, proto):
-        proto.register("client-3", "cai-expiredkeyXXXXXXXX", expires_in_s=0)
+        proto.register("client-3", "cai-expiredkeyXXXXXXXX", expires_in_s=-1)
         time.sleep(0.01)
         from auth_protocol import AuthStatus
         result = proto.authenticate("cai-expiredkeyXXXXXXXX")

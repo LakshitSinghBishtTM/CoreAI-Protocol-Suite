@@ -52,8 +52,8 @@ class TestCoreAIFacade:
     @pytest.fixture
     def ai_class(self):
         """Patch boot() so no real providers are loaded."""
-        with patch("core_final.boot") as mock_boot, \
-             patch("core_final.Kernel") as MockKernel:
+        with patch("coreai.core_final.boot") as mock_boot, \
+             patch("coreai.core_final.Kernel") as MockKernel:
             mock_kernel = _mock_kernel()
             MockKernel.return_value = mock_kernel
             mock_boot.return_value = (MagicMock(), MagicMock())
@@ -126,8 +126,8 @@ class TestCoreAIFacade:
         assert "state" in h
 
     def test_invalid_strategy_raises(self):
-        with patch("core_final.boot"), patch("core_final.Kernel"):
-            from core_final import CoreAI
+        with patch("coreai.core_final.boot"), patch("coreai.core_final.Kernel"):
+            from coreai.core_final import CoreAI
             with pytest.raises(ValueError, match="Invalid strategy"):
                 CoreAI(strategy="teleport")
 
@@ -196,7 +196,7 @@ class TestKernelWiring:
 
     @pytest.mark.asyncio
     async def test_start_transitions_to_running(self, components):
-        from kernel import Kernel, KernelState
+        from coreai.kernel import Kernel, KernelState
         router, orchestrator, memory, scheduler = components
         k = Kernel(router, orchestrator, memory, scheduler)
         await k.start()
