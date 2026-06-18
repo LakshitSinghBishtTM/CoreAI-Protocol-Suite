@@ -173,6 +173,7 @@ def require_scope(scope: str):
 # ------------------------------------------------------------------
 
 SIGNING_SECRET = os.environ.get("WEBHOOK_SIGNING_SECRET", "")
+sig = hmac.new(SIGNING_SECRET.encode(), signed, "sha256").hexdigest()
 
 
 def verify_request_signature(
