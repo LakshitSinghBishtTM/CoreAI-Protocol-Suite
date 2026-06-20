@@ -1,16 +1,16 @@
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
 from loguru import logger
+from pydantic import BaseModel, Field
 
+from coreai import Orchestrator, Router, RoutingConfig, RoutingStrategy
+from providers import CompletionRequest as ProviderCompletionRequest
+from providers import Message as ProviderMessage
 from providers import (
     load_providers,
-    Message as ProviderMessage,
-    CompletionRequest as ProviderCompletionRequest,
 )
-from coreai import Router, RoutingConfig, RoutingStrategy, Orchestrator
 
 # ============================================================================
 # Models

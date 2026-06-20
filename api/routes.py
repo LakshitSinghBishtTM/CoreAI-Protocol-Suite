@@ -113,7 +113,8 @@ async def completions(
     ctx: AuthContext = Depends(require_scope("completions:write")),
 ):
     from coreai.router import get_router as _get_router
-    from providers import Message as PM, CompletionRequest as PCR
+    from providers import CompletionRequest as PCR
+    from providers import Message as PM
 
     _router = _get_router()
     messages = [PM(role=m.role, content=m.content) for m in request.messages]
@@ -152,7 +153,8 @@ async def completions_stream(
     ctx: AuthContext = Depends(require_scope("completions:write")),
 ):
     from coreai.router import get_router as _get_router
-    from providers import Message as PM, CompletionRequest as PCR
+    from providers import CompletionRequest as PCR
+    from providers import Message as PM
 
     _router = _get_router()
     messages = [PM(role=m.role, content=m.content) for m in request.messages]
@@ -374,8 +376,8 @@ async def list_providers(
 async def get_stats(
     ctx: AuthContext = Depends(require_scope("admin")),
 ):
-    from coreai.router import get_router as _get_router
     from coreai.orchestrator import get_orchestrator as _get_orch
+    from coreai.router import get_router as _get_router
 
     rs = _get_router().stats()
     os_ = _get_orch().stats()

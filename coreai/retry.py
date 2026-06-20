@@ -1,14 +1,14 @@
 import asyncio
-from typing import Callable, Any, TypeVar
+from typing import Any, Callable, TypeVar
 
+from loguru import logger
 from tenacity import (
     AsyncRetrying,
+    RetryError,
+    retry_if_exception,
     stop_after_attempt,
     wait_exponential,
-    retry_if_exception,
-    RetryError,
 )
-from loguru import logger
 
 T = TypeVar("T")
 

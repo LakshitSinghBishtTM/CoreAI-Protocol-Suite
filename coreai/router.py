@@ -1,13 +1,14 @@
 import time
-from typing import Optional
 from enum import Enum
+from typing import Optional
 
 from loguru import logger
 
 from providers import BaseProvider, CompletionRequest, CompletionResponse
+
 from .cache import ResponseCache
-from .retry import RetryManager, RetryConfig
 from .limiter import GlobalRateLimiter, RateLimitConfig
+from .retry import RetryConfig, RetryManager
 
 # ---------------------------------------------------------------------------
 # Strategy weights used by BALANCED

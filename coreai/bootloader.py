@@ -4,8 +4,9 @@ from dataclasses import dataclass, field
 from loguru import logger
 
 from providers import load_providers_or_raise
-from .router import Router, RoutingConfig, RoutingStrategy
+
 from .orchestrator import Orchestrator
+from .router import Router, RoutingConfig, RoutingStrategy
 
 # Flags that should never be true in production
 _DANGEROUS_FLAGS: dict[str, str] = {

@@ -11,9 +11,9 @@ from typing import Optional
 
 from loguru import logger
 
-from .router import Router
-from .orchestrator import Orchestrator
 from .memory_manager import MemoryManager
+from .orchestrator import Orchestrator
+from .router import Router
 from .scheduler import Scheduler
 
 

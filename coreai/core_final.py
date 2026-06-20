@@ -14,12 +14,12 @@ Top-level convenience interface. Import from here for the simplest usage.
 import asyncio
 from typing import Optional
 
-
-from .bootloader import boot, BootConfig
-from .kernel import Kernel
-from .router import RoutingStrategy
-from .orchestrator import AgentTask
 from providers import CompletionRequest, CompletionResponse, Message
+
+from .bootloader import BootConfig, boot
+from .kernel import Kernel
+from .orchestrator import AgentTask
+from .router import RoutingStrategy
 
 
 class CoreAI:

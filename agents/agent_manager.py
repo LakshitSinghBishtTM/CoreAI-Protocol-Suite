@@ -11,10 +11,10 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from coreai.kernel import Kernel
-from coreai.memory_manager import MemoryManager
 from agents.autonomous_agent import AutonomousAgent
 from agents.task_orchestrator import TaskOrchestrator
+from coreai.kernel import Kernel
+from coreai.memory_manager import MemoryManager
 
 logger = logging.getLogger(__name__)
 

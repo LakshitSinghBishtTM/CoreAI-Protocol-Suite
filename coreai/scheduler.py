@@ -7,8 +7,8 @@ Handles cache eviction, stats snapshots, health checks, and log rotation trigger
 import asyncio
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Callable, Awaitable, Optional
 from enum import Enum
+from typing import Awaitable, Callable, Optional
 
 from loguru import logger
 

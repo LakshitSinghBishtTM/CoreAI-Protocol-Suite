@@ -1,7 +1,7 @@
 import asyncio
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Optional, Callable, Awaitable
+from typing import Awaitable, Callable, Optional
 
 from loguru import logger
 
