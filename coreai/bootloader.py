@@ -105,12 +105,8 @@ def boot(config: BootConfig = None) -> tuple[Router, Orchestrator]:
     logger.info(f"  Strategy:       {config.strategy.value}")
     logger.info(f"  Cost weight:    {routing_config.cost_weight:.2f}")
     logger.info(f"  Latency weight: {routing_config.latency_weight:.2f}")
-    logger.info(
-        f"  Cache:          {'enabled' if config.enable_cache else 'disabled'}"
-    )
-    logger.info(
-        f"  Retry:          {'enabled' if config.enable_retry else 'disabled'}"
-    )
+    logger.info(f"  Cache:          {'enabled' if config.enable_cache else 'disabled'}")
+    logger.info(f"  Retry:          {'enabled' if config.enable_retry else 'disabled'}")
 
     # 4. Orchestrator
     logger.info("Step 4/4 — Initialising orchestrator")
