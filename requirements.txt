@@ -137,7 +137,6 @@ opentelemetry-sdk>=1.26.0
 
 # Container Orchestration
 kubernetes>=30.1.0
-helmify>=0.4.0
 
 # Cloud SDKs
 boto3>=1.34.0
