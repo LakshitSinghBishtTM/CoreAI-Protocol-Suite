@@ -11,13 +11,11 @@ Top-level convenience interface. Import from here for the simplest usage.
     await ai.stop()
 """
 
-import os
 import asyncio
 from typing import Optional
 
-from loguru import logger
 
-from .bootloader import boot, BootConfig, BootError
+from .bootloader import boot, BootConfig
 from .kernel import Kernel
 from .router import RoutingStrategy
 from .orchestrator import AgentTask
@@ -192,6 +190,7 @@ class CoreAI:
 # Convenience: run a single completion from the CLI / scripts
 # ------------------------------------------------------------------ #
 
+
 async def _quick_complete(prompt: str):
     async with CoreAI() as ai:
         response = await ai.complete(prompt)
@@ -205,5 +204,6 @@ async def _quick_complete(prompt: str):
 
 if __name__ == "__main__":
     import sys
+
     prompt = " ".join(sys.argv[1:]) or "Say hello."
     asyncio.run(_quick_complete(prompt))

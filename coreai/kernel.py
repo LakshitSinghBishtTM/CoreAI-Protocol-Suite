@@ -5,14 +5,13 @@ All subsystems route through the kernel.
 """
 
 import asyncio
-import os
 import signal
 from datetime import datetime
 from typing import Optional
 
 from loguru import logger
 
-from .router import Router, RoutingConfig, RoutingStrategy
+from .router import Router
 from .orchestrator import Orchestrator
 from .memory_manager import MemoryManager
 from .scheduler import Scheduler
@@ -21,7 +20,7 @@ from .scheduler import Scheduler
 class KernelState:
     INIT = "initializing"
     RUNNING = "running"
-    DEGRADED = "degraded"   # running but some providers failed
+    DEGRADED = "degraded"  # running but some providers failed
     STOPPING = "stopping"
     STOPPED = "stopped"
 

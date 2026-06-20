@@ -19,23 +19,25 @@ from typing import Any, Callable, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
-SHUTDOWN_LOG_PATH = os.environ.get("SHUTDOWN_LOG_PATH", "/var/log/coreai/emergency_shutdown.log")
+SHUTDOWN_LOG_PATH = os.environ.get(
+    "SHUTDOWN_LOG_PATH", "/var/log/coreai/emergency_shutdown.log"
+)
 
 
 class ShutdownMode(str, Enum):
-    GRACEFUL  = "graceful"   # drain tasks, flush memory, clean exit
+    GRACEFUL = "graceful"  # drain tasks, flush memory, clean exit
     IMMEDIATE = "immediate"  # stop accepting work, finish in-flight, exit
-    FORCED    = "forced"     # kill everything, best-effort flush, exit
+    FORCED = "forced"  # kill everything, best-effort flush, exit
 
 
 class ShutdownReason(str, Enum):
-    OPERATOR        = "operator_request"
-    OOM             = "out_of_memory"
+    OPERATOR = "operator_request"
+    OOM = "out_of_memory"
     UNHANDLED_ERROR = "unhandled_error"
-    WATCHDOG        = "watchdog_timeout"
-    SIGTERM         = "sigterm"
-    SIGINT          = "sigint"
-    API_TRIGGER     = "api_trigger"
+    WATCHDOG = "watchdog_timeout"
+    SIGTERM = "sigterm"
+    SIGINT = "sigint"
+    API_TRIGGER = "api_trigger"
 
 
 class ShutdownEvent:
@@ -46,23 +48,23 @@ class ShutdownEvent:
         triggered_by: str,
         message: str = "",
     ):
-        self.mode         = mode
-        self.reason       = reason
+        self.mode = mode
+        self.reason = reason
         self.triggered_by = triggered_by
-        self.message      = message
-        self.timestamp    = datetime.now(timezone.utc)
-        self.completed    = False
-        self.duration_ms  = 0
+        self.message = message
+        self.timestamp = datetime.now(timezone.utc)
+        self.completed = False
+        self.duration_ms = 0
 
     def to_dict(self) -> Dict:
         return {
-            "mode":         self.mode,
-            "reason":       self.reason,
+            "mode": self.mode,
+            "reason": self.reason,
             "triggered_by": self.triggered_by,
-            "message":      self.message,
-            "timestamp":    self.timestamp.isoformat(),
-            "completed":    self.completed,
-            "duration_ms":  self.duration_ms,
+            "message": self.message,
+            "timestamp": self.timestamp.isoformat(),
+            "completed": self.completed,
+            "duration_ms": self.duration_ms,
         }
 
 
@@ -77,16 +79,16 @@ class EmergencyShutdown:
         await shutdown.trigger(ShutdownMode.GRACEFUL, ShutdownReason.OPERATOR)
     """
 
-    GRACEFUL_TIMEOUT_S  = 30
+    GRACEFUL_TIMEOUT_S = 30
     IMMEDIATE_TIMEOUT_S = 10
-    FORCED_TIMEOUT_S    = 3
+    FORCED_TIMEOUT_S = 3
 
     def __init__(self, agent_manager: Any, kernel: Any, db: Any):
         self.agent_manager = agent_manager
-        self.kernel        = kernel
-        self.db            = db
+        self.kernel = kernel
+        self.db = db
         self._hooks: List[Callable] = []
-        self._in_progress  = False
+        self._in_progress = False
         self._event: Optional[ShutdownEvent] = None
 
     # ------------------------------------------------------------------
@@ -130,7 +132,10 @@ class EmergencyShutdown:
 
         logger.critical(
             "EMERGENCY SHUTDOWN TRIGGERED | mode=%s reason=%s by=%s msg=%s",
-            mode, reason, triggered_by, message,
+            mode,
+            reason,
+            triggered_by,
+            message,
         )
 
         try:
@@ -141,7 +146,7 @@ class EmergencyShutdown:
             else:
                 await self._forced_shutdown()
 
-            self._event.completed   = True
+            self._event.completed = True
             self._event.duration_ms = int((time.monotonic() - start) * 1000)
             await self._write_audit_log()
             logger.info("Shutdown complete in %dms", self._event.duration_ms)
@@ -157,7 +162,9 @@ class EmergencyShutdown:
     # ------------------------------------------------------------------
 
     async def _graceful_shutdown(self) -> None:
-        logger.info("Graceful shutdown: draining tasks (timeout: %ds)", self.GRACEFUL_TIMEOUT_S)
+        logger.info(
+            "Graceful shutdown: draining tasks (timeout: %ds)", self.GRACEFUL_TIMEOUT_S
+        )
         try:
             await asyncio.wait_for(
                 self._drain_and_flush(),
@@ -252,6 +259,7 @@ class EmergencyShutdown:
             return
         try:
             import json
+
             os.makedirs(os.path.dirname(SHUTDOWN_LOG_PATH), exist_ok=True)
             with open(SHUTDOWN_LOG_PATH, "a") as f:
                 f.write(json.dumps(self._event.to_dict()) + "\n")

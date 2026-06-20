@@ -10,7 +10,6 @@ from typing import Optional
 
 from loguru import logger
 
-
 PROTOCOL_VERSION = "1.2.3"
 
 # Message types the kernel accepts from agents
@@ -49,11 +48,13 @@ class ProtocolHandler:
             return None
 
         # Enqueue with timestamp
-        self.message_queue.append({
-            "agent_id": agent_id,
-            "payload": message,
-            "timestamp": datetime.utcnow().isoformat(),
-        })
+        self.message_queue.append(
+            {
+                "agent_id": agent_id,
+                "payload": message,
+                "timestamp": datetime.utcnow().isoformat(),
+            }
+        )
 
         msg_type = message.get("type")
 
@@ -94,9 +95,7 @@ class ProtocolHandler:
         if not new_goal:
             return {"status": "rejected", "reason": "new_goal is required"}
 
-        logger.warning(
-            f"Agent {agent_id} requesting goal change: '{new_goal[:80]}'"
-        )
+        logger.warning(f"Agent {agent_id} requesting goal change: '{new_goal[:80]}'")
         # TODO: approval workflow, policy check, human-in-the-loop gate
         return {"status": "approved", "new_goal": new_goal}
 

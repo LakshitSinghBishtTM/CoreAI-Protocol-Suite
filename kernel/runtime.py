@@ -12,7 +12,7 @@ class AgentExecution:
     config: dict
     started_at: datetime = field(default_factory=datetime.utcnow)
     iterations: int = 0
-    status: str = "running"   # running | completed | failed | halted
+    status: str = "running"  # running | completed | failed | halted
     last_result: Optional[dict] = None
     error: Optional[str] = None
 
@@ -113,7 +113,9 @@ class Runtime:
             while exec_record.iterations < self.max_iterations:
                 exec_record.iterations += 1
 
-                result = await self._tick(agent_id, exec_record.iterations, exec_record.config)
+                result = await self._tick(
+                    agent_id, exec_record.iterations, exec_record.config
+                )
                 exec_record.last_result = result
 
                 # Fire registered hooks
@@ -178,17 +180,24 @@ class Runtime:
         if self.kernel and hasattr(self.kernel, "router"):
             try:
                 from providers import CompletionRequest, Message
+
                 request = CompletionRequest(
                     messages=[
-                        Message(role="system", content=(
-                            "You are an autonomous agent. Complete your objective "
-                            "step by step. When finished, respond with DONE."
-                        )),
-                        Message(role="user", content=(
-                            f"Objective: {objective}\n"
-                            f"Iteration: {iteration}\n"
-                            f"Context: {config.get('context', {})}"
-                        )),
+                        Message(
+                            role="system",
+                            content=(
+                                "You are an autonomous agent. Complete your objective "
+                                "step by step. When finished, respond with DONE."
+                            ),
+                        ),
+                        Message(
+                            role="user",
+                            content=(
+                                f"Objective: {objective}\n"
+                                f"Iteration: {iteration}\n"
+                                f"Context: {config.get('context', {})}"
+                            ),
+                        ),
                     ],
                     max_tokens=512,
                 )
@@ -226,9 +235,7 @@ class Runtime:
     # ------------------------------------------------------------------ #
 
     def get_execution_stats(self) -> dict:
-        active = sum(
-            1 for t in self._tasks.values() if not t.done()
-        )
+        active = sum(1 for t in self._tasks.values() if not t.done())
         return {
             "active_agents": active,
             "total_executions": len(self._executions),

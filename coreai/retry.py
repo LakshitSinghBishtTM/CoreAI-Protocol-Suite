@@ -34,6 +34,7 @@ def should_retry(exc: Exception) -> bool:
 # Module-level convenience used by autonomous_agent.py
 # ---------------------------------------------------------------------------
 
+
 async def retry_with_backoff(
     func: Callable[..., Any],
     *args,
@@ -69,7 +70,10 @@ async def retry_with_backoff(
             wait = min(base_wait * (2 ** (attempt - 1)), max_wait)
             logger.warning(
                 "retry_with_backoff: attempt %d/%d failed (%s) — retrying in %.1fs",
-                attempt, max_attempts, exc, wait,
+                attempt,
+                max_attempts,
+                exc,
+                wait,
             )
             await asyncio.sleep(wait)
 
@@ -80,25 +84,26 @@ async def retry_with_backoff(
 # Class-based manager (used by Router)
 # ---------------------------------------------------------------------------
 
+
 class RetryConfig:
     def __init__(
         self,
-        max_attempts:        int   = 3,
+        max_attempts: int = 3,
         initial_wait_seconds: float = 1.0,
-        max_wait_seconds:    float = 60.0,
-        exponential_base:    float = 2.0,
+        max_wait_seconds: float = 60.0,
+        exponential_base: float = 2.0,
     ):
-        self.max_attempts         = max_attempts
+        self.max_attempts = max_attempts
         self.initial_wait_seconds = initial_wait_seconds
-        self.max_wait_seconds     = max_wait_seconds
-        self.exponential_base     = exponential_base
+        self.max_wait_seconds = max_wait_seconds
+        self.exponential_base = exponential_base
 
 
 class RetryManager:
     """Stateful retry manager used by the Router."""
 
     def __init__(self, config: RetryConfig = None):
-        self.config        = config or RetryConfig()
+        self.config = config or RetryConfig()
         self.total_retries = 0
         self.total_failures = 0
 
@@ -111,9 +116,9 @@ class RetryManager:
             async for attempt_state in AsyncRetrying(
                 stop=stop_after_attempt(self.config.max_attempts),
                 wait=wait_exponential(
-                    multiplier = self.config.initial_wait_seconds,
-                    min        = self.config.initial_wait_seconds,
-                    max        = self.config.max_wait_seconds,
+                    multiplier=self.config.initial_wait_seconds,
+                    min=self.config.initial_wait_seconds,
+                    max=self.config.max_wait_seconds,
                 ),
                 retry=retry_if_exception(should_retry),
                 reraise=True,
@@ -134,7 +139,9 @@ class RetryManager:
                             wait = min(wait, self.config.max_wait_seconds)
                             logger.warning(
                                 "Attempt %d failed: %s — retrying in %.1fs",
-                                attempt, str(exc)[:100], wait,
+                                attempt,
+                                str(exc)[:100],
+                                wait,
                             )
                         raise
 
@@ -154,6 +161,6 @@ class RetryManager:
 
     def stats(self) -> dict:
         return {
-            "total_retries":  self.total_retries,
+            "total_retries": self.total_retries,
             "total_failures": self.total_failures,
         }

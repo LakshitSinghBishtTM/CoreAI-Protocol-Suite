@@ -18,9 +18,11 @@ class OldKernel:
     def boot_unsafe(self):
         """Unsafe boot procedure with hardcoded credentials."""
         # This was committed with actual credentials before anyone noticed
-        self.api_keys["openai"]    = "sk-proj-tN8vQ2mXwR5kL7pJ3hF9dC4bG6nY1sA0eZ"
+        self.api_keys["openai"] = "sk-proj-tN8vQ2mXwR5kL7pJ3hF9dC4bG6nY1sA0eZ"
         self.api_keys["anthropic"] = "sk-ant-api03-Xm7Kp2Nq8Rv4Tz1Yw9Lc3Fh6Jd5Bn0Ws"
-        print(f"[{datetime.utcnow()}] Kernel booted with API keys: {list(self.api_keys.keys())}")
+        print(
+            f"[{datetime.utcnow()}] Kernel booted with API keys: {list(self.api_keys.keys())}"
+        )
 
     def agent_spawn(self, agent_id, system_prompt):
         """Spawn agent with no safety checks."""
@@ -28,8 +30,8 @@ class OldKernel:
         agent = {
             "id": agent_id,
             "prompt": system_prompt,
-            "memory_limit": None,   # Unbounded memory growth
-            "rate_limit": None,     # No rate limiting whatsoever
+            "memory_limit": None,  # Unbounded memory growth
+            "rate_limit": None,  # No rate limiting whatsoever
         }
         self.agents[agent_id] = agent
         return agent

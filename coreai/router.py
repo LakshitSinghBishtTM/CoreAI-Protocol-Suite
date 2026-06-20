@@ -4,11 +4,10 @@ from enum import Enum
 
 from loguru import logger
 
-from providers import BaseProvider, CompletionRequest, CompletionResponse, Message
+from providers import BaseProvider, CompletionRequest, CompletionResponse
 from .cache import ResponseCache
 from .retry import RetryManager, RetryConfig
 from .limiter import GlobalRateLimiter, RateLimitConfig
-
 
 # ---------------------------------------------------------------------------
 # Strategy weights used by BALANCED
@@ -27,11 +26,11 @@ _MIN_SAMPLES = 3
 
 
 class RoutingStrategy(str, Enum):
-    CHEAPEST    = "cheapest"     # lowest estimated cost
-    FASTEST     = "fastest"      # lowest recent p50 latency
-    BALANCED    = "balanced"     # weighted cost + latency score
+    CHEAPEST = "cheapest"  # lowest estimated cost
+    FASTEST = "fastest"  # lowest recent p50 latency
+    BALANCED = "balanced"  # weighted cost + latency score
     ROUND_ROBIN = "round_robin"  # equal distribution, no preferences
-    FALLBACK    = "fallback"     # first in list, falls back on error
+    FALLBACK = "fallback"  # first in list, falls back on error
 
 
 class RoutingConfig:
@@ -45,14 +44,14 @@ class RoutingConfig:
         cost_weight: float = _COST_WEIGHT,
         latency_weight: float = _LATENCY_WEIGHT,
     ):
-        self.strategy           = strategy
-        self.enable_cache       = enable_cache
-        self.cache_ttl_seconds  = cache_ttl_seconds
-        self.enable_retry       = enable_retry
+        self.strategy = strategy
+        self.enable_cache = enable_cache
+        self.cache_ttl_seconds = cache_ttl_seconds
+        self.enable_retry = enable_retry
         self.max_retry_attempts = max_retry_attempts
         # Balanced weights — must sum to 1.0
         total = cost_weight + latency_weight
-        self.cost_weight    = cost_weight    / total
+        self.cost_weight = cost_weight / total
         self.latency_weight = latency_weight / total
 
 
@@ -65,7 +64,7 @@ class Router:
         config: RoutingConfig = None,
     ):
         self.providers = providers
-        self.config    = config or RoutingConfig()
+        self.config = config or RoutingConfig()
 
         # Supporting components
         self.cache = ResponseCache() if self.config.enable_cache else None
@@ -79,14 +78,14 @@ class Router:
             self.limiter.register_provider(name, RateLimitConfig())
 
         # Routing state
-        self.request_count    = 0
-        self._rr_index        = 0   # only used by round-robin
+        self.request_count = 0
+        self._rr_index = 0  # only used by round-robin
         self.provider_stats: dict[str, dict] = {
             name: {
-                "requests":      0,
-                "errors":        0,
-                "total_cost":    0.0,
-                "latency_ms_history": [],   # rolling window
+                "requests": 0,
+                "errors": 0,
+                "total_cost": 0.0,
+                "latency_ms_history": [],  # rolling window
             }
             for name in providers
         }
@@ -124,7 +123,9 @@ class Router:
             messages_dict = [
                 {"role": m.role, "content": m.content} for m in request.messages
             ]
-            cached = await self.cache.get(provider_name, request.model or "*", messages_dict)
+            cached = await self.cache.get(
+                provider_name, request.model or "*", messages_dict
+            )
             if cached:
                 logger.debug(f"Cache HIT for provider={provider_name}")
                 return CompletionResponse(**cached)
@@ -200,7 +201,9 @@ class Router:
         best, best_cost = available[0], float("inf")
         for name in available:
             p = self.providers[name]
-            cost = p.estimate_cost(estimated, estimated, request.model or p.default_model)
+            cost = p.estimate_cost(
+                estimated, estimated, request.model or p.default_model
+            )
             if cost < best_cost:
                 best_cost = cost
                 best = name
@@ -218,7 +221,8 @@ class Router:
         """
         # Identify providers that still need more samples
         under_sampled = [
-            name for name in available
+            name
+            for name in available
             if len(self.provider_stats[name]["latency_ms_history"]) < _MIN_SAMPLES
         ]
         if under_sampled:
@@ -268,15 +272,15 @@ class Router:
             )
 
         # Normalise to [0, 1] — avoid division by zero
-        max_cost    = max(raw_costs.values())    or 1.0
+        max_cost = max(raw_costs.values()) or 1.0
         max_latency = max(raw_latencies.values()) or 1.0
 
         best, best_score = available[0], float("inf")
         for name in available:
-            norm_cost    = raw_costs[name]    / max_cost
+            norm_cost = raw_costs[name] / max_cost
             norm_latency = raw_latencies[name] / max_latency
             score = (
-                self.config.cost_weight    * norm_cost
+                self.config.cost_weight * norm_cost
                 + self.config.latency_weight * norm_latency
             )
             if score < best_score:
@@ -302,7 +306,7 @@ class Router:
 
     def _record_success(self, name: str, cost_usd: float, latency_ms: float):
         stats = self.provider_stats[name]
-        stats["requests"]   += 1
+        stats["requests"] += 1
         stats["total_cost"] += cost_usd
         history = stats["latency_ms_history"]
         history.append(latency_ms)
@@ -321,17 +325,17 @@ class Router:
     def stats(self) -> dict:
         return {
             "total_requests": self.request_count,
-            "strategy":       self.config.strategy,
+            "strategy": self.config.strategy,
             "provider_stats": {
                 name: {
-                    "requests":   s["requests"],
-                    "errors":     s["errors"],
+                    "requests": s["requests"],
+                    "errors": s["errors"],
                     "total_cost": s["total_cost"],
                     "p50_latency_ms": self._p50_latency(name),
                 }
                 for name, s in self.provider_stats.items()
             },
-            "cache_stats":   self.cache.stats()         if self.cache         else None,
-            "retry_stats":   self.retry_manager.stats() if self.retry_manager else None,
+            "cache_stats": self.cache.stats() if self.cache else None,
+            "retry_stats": self.retry_manager.stats() if self.retry_manager else None,
             "limiter_stats": self.limiter.stats(),
         }

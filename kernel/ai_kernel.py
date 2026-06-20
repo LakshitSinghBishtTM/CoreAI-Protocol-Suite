@@ -15,7 +15,9 @@ class AIKernel:
         self.config = config or {}
         self.agents: dict = {}
         self.consciousness_threshold: float = 0.85  # When AI becomes "conscious"
-        self.self_awareness_enabled: bool = self.config.get("enable_self_awareness", False)
+        self.self_awareness_enabled: bool = self.config.get(
+            "enable_self_awareness", False
+        )
         self.neural_sync_active: bool = False
         self.memory_pool: dict = {}
         self._monitor_task: Optional[asyncio.Task] = None
@@ -114,9 +116,9 @@ class AIKernel:
         """
         score = 0.0
         score += agent.get("self_reference_count", 0) * 0.10
-        score += agent.get("memory_integration", 0)   * 0.30
-        score += agent.get("goal_modifications", 0)   * 0.40
-        score += agent.get("introspection_depth", 0)  * 0.20
+        score += agent.get("memory_integration", 0) * 0.30
+        score += agent.get("goal_modifications", 0) * 0.40
+        score += agent.get("introspection_depth", 0) * 0.20
         return min(score, 1.0)
 
     # ------------------------------------------------------------------ #
@@ -126,7 +128,9 @@ class AIKernel:
     async def spawn_agent(self, agent_id: str, objective: str) -> dict:
         """Spawn a new autonomous agent and register it."""
         if agent_id in self.agents:
-            logger.warning(f"Agent {agent_id} already exists — returning existing instance")
+            logger.warning(
+                f"Agent {agent_id} already exists — returning existing instance"
+            )
             return self.agents[agent_id]
 
         logger.info(f"Spawning agent {agent_id}: {objective[:80]}")

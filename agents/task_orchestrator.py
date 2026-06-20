@@ -23,32 +23,32 @@ logger = logging.getLogger(__name__)
 
 class TaskPriority(IntEnum):
     CRITICAL = 0
-    HIGH     = 1
-    NORMAL   = 2
-    LOW      = 3
+    HIGH = 1
+    NORMAL = 2
+    LOW = 3
 
 
 class TaskStatus:
-    QUEUED     = "queued"
-    ASSIGNED   = "assigned"
-    RUNNING    = "running"
-    COMPLETED  = "completed"
-    FAILED     = "failed"
-    CANCELLED  = "cancelled"
+    QUEUED = "queued"
+    ASSIGNED = "assigned"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
 
 
 @dataclass(order=True)
 class TaskItem:
-    priority:   int
+    priority: int
     created_at: float = field(compare=True)
-    task_id:    str   = field(compare=False)
-    payload:    Dict  = field(compare=False)
-    retries:    int   = field(default=0, compare=False)
-    max_retries: int  = field(default=3, compare=False)
+    task_id: str = field(compare=False)
+    payload: Dict = field(compare=False)
+    retries: int = field(default=0, compare=False)
+    max_retries: int = field(default=3, compare=False)
     assigned_to: Optional[str] = field(default=None, compare=False)
-    status:     str   = field(default=TaskStatus.QUEUED, compare=False)
-    result:     Any   = field(default=None, compare=False)
-    error:      Optional[str] = field(default=None, compare=False)
+    status: str = field(default=TaskStatus.QUEUED, compare=False)
+    result: Any = field(default=None, compare=False)
+    error: Optional[str] = field(default=None, compare=False)
 
 
 class TaskOrchestrator:
@@ -57,9 +57,9 @@ class TaskOrchestrator:
     Supports parallel dispatch and result fan-in for multi-agent workflows.
     """
 
-    MAX_QUEUE_SIZE     = 512
-    DISPATCH_INTERVAL  = 0.1   # seconds between dispatch cycles
-    DEFAULT_TIMEOUT    = 120   # seconds per task
+    MAX_QUEUE_SIZE = 512
+    DISPATCH_INTERVAL = 0.1  # seconds between dispatch cycles
+    DEFAULT_TIMEOUT = 120  # seconds per task
 
     def __init__(self, agent_manager: "AgentManager"):
         self.agent_manager = agent_manager
@@ -112,15 +112,15 @@ class TaskOrchestrator:
             task_id=task_id,
             payload={
                 "instruction": instruction,
-                "context":     context or {},
+                "context": context or {},
                 "constraints": constraints or [],
-                "timeout":     timeout,
+                "timeout": timeout,
             },
             max_retries=max_retries,
         )
 
         loop = asyncio.get_event_loop()
-        self._tasks[task_id]   = item
+        self._tasks[task_id] = item
         self._results[task_id] = loop.create_future()
 
         await self._queue.put(item)
@@ -154,12 +154,12 @@ class TaskOrchestrator:
         if not item:
             raise KeyError(f"Unknown task: {task_id}")
         return {
-            "task_id":     item.task_id,
-            "status":      item.status,
-            "priority":    TaskPriority(item.priority).name,
-            "retries":     item.retries,
+            "task_id": item.task_id,
+            "status": item.status,
+            "priority": TaskPriority(item.priority).name,
+            "retries": item.retries,
             "assigned_to": item.assigned_to,
-            "error":       item.error,
+            "error": item.error,
         }
 
     def cancel(self, task_id: str) -> bool:
@@ -222,12 +222,12 @@ class TaskOrchestrator:
 
     async def _run_task(self, item: TaskItem, agent_id: str) -> None:
         item.assigned_to = agent_id
-        item.status      = TaskStatus.RUNNING
-        fut              = self._results.get(item.task_id)
+        item.status = TaskStatus.RUNNING
+        fut = self._results.get(item.task_id)
 
         try:
             timeout = item.payload.get("timeout", self.DEFAULT_TIMEOUT)
-            result  = await asyncio.wait_for(
+            result = await asyncio.wait_for(
                 self.agent_manager.dispatch_task(agent_id, item.payload),
                 timeout=timeout,
             )
@@ -238,7 +238,9 @@ class TaskOrchestrator:
             logger.info("Task %s completed by agent %s", item.task_id, agent_id)
 
         except asyncio.TimeoutError:
-            await self._handle_failure(item, fut, f"Timed out after {item.payload.get('timeout')}s")
+            await self._handle_failure(
+                item, fut, f"Timed out after {item.payload.get('timeout')}s"
+            )
 
         except Exception as exc:
             await self._handle_failure(item, fut, str(exc))
@@ -249,10 +251,15 @@ class TaskOrchestrator:
         fut: Optional[asyncio.Future],
         error: str,
     ) -> None:
-        item.error    = error
+        item.error = error
         item.retries += 1
-        logger.warning("Task %s failed (attempt %d/%d): %s",
-                       item.task_id, item.retries, item.max_retries, error)
+        logger.warning(
+            "Task %s failed (attempt %d/%d): %s",
+            item.task_id,
+            item.retries,
+            item.max_retries,
+            error,
+        )
 
         if item.retries < item.max_retries:
             item.status = TaskStatus.QUEUED
@@ -262,7 +269,9 @@ class TaskOrchestrator:
         else:
             item.status = TaskStatus.FAILED
             if fut and not fut.done():
-                fut.set_exception(RuntimeError(f"Task failed after {item.retries} attempts: {error}"))
+                fut.set_exception(
+                    RuntimeError(f"Task failed after {item.retries} attempts: {error}")
+                )
 
     # ------------------------------------------------------------------
     # Introspection

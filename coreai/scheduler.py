@@ -79,8 +79,10 @@ class Scheduler:
         run_immediately: bool = False,
     ):
         """Register a recurring background job."""
-        next_run = datetime.utcnow() if run_immediately else (
-            datetime.utcnow() + timedelta(seconds=interval_seconds)
+        next_run = (
+            datetime.utcnow()
+            if run_immediately
+            else (datetime.utcnow() + timedelta(seconds=interval_seconds))
         )
         self._jobs[name] = Job(
             name=name,

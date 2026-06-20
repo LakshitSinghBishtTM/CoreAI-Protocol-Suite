@@ -21,33 +21,33 @@ logger = logging.getLogger(__name__)
 
 class AgentStatus:
     INITIALIZING = "initializing"
-    IDLE         = "idle"
-    RUNNING      = "running"
-    PAUSED       = "paused"
-    FAILED       = "failed"
-    TERMINATED   = "terminated"
+    IDLE = "idle"
+    RUNNING = "running"
+    PAUSED = "paused"
+    FAILED = "failed"
+    TERMINATED = "terminated"
 
 
 class AgentRecord:
     def __init__(self, agent_id: str, agent: AutonomousAgent, metadata: Dict):
-        self.agent_id    = agent_id
-        self.agent       = agent
-        self.metadata    = metadata
-        self.status      = AgentStatus.INITIALIZING
-        self.created_at  = datetime.now(timezone.utc)
+        self.agent_id = agent_id
+        self.agent = agent
+        self.metadata = metadata
+        self.status = AgentStatus.INITIALIZING
+        self.created_at = datetime.now(timezone.utc)
         self.last_active = datetime.now(timezone.utc)
-        self.task_count  = 0
+        self.task_count = 0
         self.error_count = 0
 
     def to_dict(self) -> Dict:
         return {
-            "agent_id":    self.agent_id,
-            "status":      self.status,
-            "created_at":  self.created_at.isoformat(),
+            "agent_id": self.agent_id,
+            "status": self.status,
+            "created_at": self.created_at.isoformat(),
             "last_active": self.last_active.isoformat(),
-            "task_count":  self.task_count,
+            "task_count": self.task_count,
             "error_count": self.error_count,
-            "metadata":    self.metadata,
+            "metadata": self.metadata,
         }
 
 
@@ -61,10 +61,10 @@ class AgentManager:
     HEALTH_CHECK_INTERVAL = 30  # seconds
 
     def __init__(self, kernel: Kernel, memory_manager: MemoryManager):
-        self.kernel         = kernel
-        self.memory         = memory_manager
+        self.kernel = kernel
+        self.memory = memory_manager
         self.agents: Dict[str, AgentRecord] = {}
-        self.orchestrator   = TaskOrchestrator(self)
+        self.orchestrator = TaskOrchestrator(self)
         self._health_task: Optional[asyncio.Task] = None
         self._shutdown_event = asyncio.Event()
         logger.info("AgentManager initialized")
@@ -86,7 +86,7 @@ class AgentManager:
             )
 
         agent_id = f"agent-{uuid.uuid4().hex[:8]}"
-        config   = config or {}
+        config = config or {}
 
         agent = AutonomousAgent(
             agent_id=agent_id,
@@ -151,7 +151,7 @@ class AgentManager:
                 f"Agent {agent_id} is not available (status: {record.status})"
             )
 
-        record.status      = AgentStatus.RUNNING
+        record.status = AgentStatus.RUNNING
         record.last_active = datetime.now(timezone.utc)
         record.task_count += 1
 
@@ -171,7 +171,9 @@ class AgentManager:
 
     async def start_health_monitor(self) -> None:
         self._health_task = asyncio.create_task(self._health_loop())
-        logger.info("Health monitor started (interval: %ds)", self.HEALTH_CHECK_INTERVAL)
+        logger.info(
+            "Health monitor started (interval: %ds)", self.HEALTH_CHECK_INTERVAL
+        )
 
     async def _health_loop(self) -> None:
         while not self._shutdown_event.is_set():
@@ -189,7 +191,9 @@ class AgentManager:
             try:
                 healthy = await record.agent.health_check()
                 if not healthy:
-                    logger.warning("Agent %s failed health check — restarting", agent_id)
+                    logger.warning(
+                        "Agent %s failed health check — restarting", agent_id
+                    )
                     await self._restart_agent(agent_id)
             except Exception as exc:
                 logger.error("Health check error for agent %s: %s", agent_id, exc)
@@ -202,7 +206,7 @@ class AgentManager:
             await record.agent.shutdown()
         except Exception:
             pass
-        record.status      = AgentStatus.INITIALIZING
+        record.status = AgentStatus.INITIALIZING
         record.error_count = 0
         await record.agent.initialize()
         record.status = AgentStatus.IDLE
@@ -219,10 +223,7 @@ class AgentManager:
         return self._get_record(agent_id).to_dict()
 
     def get_idle_agents(self) -> List[str]:
-        return [
-            aid for aid, r in self.agents.items()
-            if r.status == AgentStatus.IDLE
-        ]
+        return [aid for aid, r in self.agents.items() if r.status == AgentStatus.IDLE]
 
     # ------------------------------------------------------------------
     # Shutdown
@@ -236,8 +237,10 @@ class AgentManager:
             self._health_task.cancel()
 
         await asyncio.gather(
-            *[self.terminate_agent(aid, reason="system_shutdown")
-              for aid in list(self.agents.keys())],
+            *[
+                self.terminate_agent(aid, reason="system_shutdown")
+                for aid in list(self.agents.keys())
+            ],
             return_exceptions=True,
         )
         logger.info("All agents terminated")

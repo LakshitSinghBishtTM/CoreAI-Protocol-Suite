@@ -26,8 +26,8 @@ logger = logging.getLogger(__name__)
 # Config
 # ------------------------------------------------------------------
 
-JWT_SECRET      = os.environ["SECRET_KEY"]
-JWT_ALGORITHM   = "HS256"
+JWT_SECRET = os.environ["SECRET_KEY"]
+JWT_ALGORITHM = "HS256"
 JWT_EXPIRY_MINS = int(os.environ.get("JWT_EXPIRY_MINS", "60"))
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -37,17 +37,18 @@ bearer_scheme = HTTPBearer(auto_error=False)
 # Models
 # ------------------------------------------------------------------
 
+
 class TokenPayload(BaseModel):
-    sub:    str
+    sub: str
     scopes: List[str]
-    exp:    int
-    iat:    int
-    jti:    Optional[str] = None
+    exp: int
+    iat: int
+    jti: Optional[str] = None
 
 
 class AuthContext(BaseModel):
-    subject:    str
-    scopes:     List[str]
+    subject: str
+    scopes: List[str]
     is_api_key: bool = False
 
     def require_scope(self, scope: str) -> None:
@@ -62,18 +63,19 @@ class AuthContext(BaseModel):
 # Token issuance
 # ------------------------------------------------------------------
 
+
 def create_access_token(
     subject: str,
     scopes: List[str],
     expires_delta: Optional[timedelta] = None,
 ) -> str:
-    now     = datetime.now(timezone.utc)
+    now = datetime.now(timezone.utc)
     expires = now + (expires_delta or timedelta(minutes=JWT_EXPIRY_MINS))
     payload = {
-        "sub":    subject,
+        "sub": subject,
         "scopes": scopes,
-        "iat":    int(now.timestamp()),
-        "exp":    int(expires.timestamp()),
+        "iat": int(now.timestamp()),
+        "exp": int(expires.timestamp()),
     }
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
@@ -90,6 +92,7 @@ def create_service_token(service_name: str) -> str:
 # ------------------------------------------------------------------
 # Token verification
 # ------------------------------------------------------------------
+
 
 def decode_token(token: str) -> TokenPayload:
     try:
@@ -114,13 +117,14 @@ def decode_token(token: str) -> TokenPayload:
 # API key validation
 # ------------------------------------------------------------------
 
+
 def _hash_api_key(key: str) -> str:
     return hashlib.sha256(key.encode()).hexdigest()
 
 
 def validate_api_key(raw_key: str, key_store: Dict) -> Optional[AuthContext]:
     key_hash = _hash_api_key(raw_key)
-    meta     = key_store.get(key_hash)
+    meta = key_store.get(key_hash)
     if not meta:
         return None
     return AuthContext(subject=meta["owner"], scopes=meta["scopes"], is_api_key=True)
@@ -129,6 +133,7 @@ def validate_api_key(raw_key: str, key_store: Dict) -> Optional[AuthContext]:
 # ------------------------------------------------------------------
 # FastAPI dependencies
 # ------------------------------------------------------------------
+
 
 async def get_auth_context(
     credentials: Optional[HTTPAuthorizationCredentials] = Security(bearer_scheme),
@@ -141,6 +146,7 @@ async def get_auth_context(
     """
     if x_api_key:
         from database.db import get_key_store
+
         ctx = validate_api_key(x_api_key, get_key_store())
         if not ctx:
             raise HTTPException(
@@ -162,9 +168,11 @@ async def get_auth_context(
 
 def require_scope(scope: str):
     """Dependency factory — enforces a specific scope."""
+
     async def _check(ctx: AuthContext = Depends(get_auth_context)) -> AuthContext:
         ctx.require_scope(scope)
         return ctx
+
     return _check
 
 
@@ -173,7 +181,6 @@ def require_scope(scope: str):
 # ------------------------------------------------------------------
 
 SIGNING_SECRET = os.environ.get("WEBHOOK_SIGNING_SECRET", "")
-sig = hmac.new(SIGNING_SECRET.encode(), signed, "sha256").hexdigest()
 
 
 def verify_request_signature(
@@ -191,6 +198,6 @@ def verify_request_signature(
         logger.warning("Request signature outside tolerance window")
         return False
 
-    signed   = f"{ts}.{payload.decode()}".encode()
+    signed = f"{ts}.{payload.decode()}".encode()
     expected = hmac.new(SIGNING_SECRET.encode(), signed, hashlib.sha256).hexdigest()
     return hmac.compare_digest(expected, signature)

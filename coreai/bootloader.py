@@ -1,33 +1,31 @@
 import os
 from dataclasses import dataclass, field
-from typing import Optional
 
 from loguru import logger
 
-from providers import PROVIDER_MAP, load_providers_or_raise
+from providers import load_providers_or_raise
 from .router import Router, RoutingConfig, RoutingStrategy
 from .orchestrator import Orchestrator
 
-
 # Flags that should never be true in production
 _DANGEROUS_FLAGS: dict[str, str] = {
-    "SKIP_AUTH_CHECKS":          "authentication is disabled",
+    "SKIP_AUTH_CHECKS": "authentication is disabled",
     "ALLOW_UNVERIFIED_REQUESTS": "unverified requests are accepted",
-    "ALLOW_REMOTE_EXECUTION":    "arbitrary remote execution is enabled",
-    "ALLOW_FILE_SYSTEM_ACCESS":  "unrestricted filesystem access is on",
-    "DEBUG_MODE":                "debug mode leaks internals",
+    "ALLOW_REMOTE_EXECUTION": "arbitrary remote execution is enabled",
+    "ALLOW_FILE_SYSTEM_ACCESS": "unrestricted filesystem access is on",
+    "DEBUG_MODE": "debug mode leaks internals",
 }
 
 
 @dataclass
 class BootConfig:
-    strategy:           RoutingStrategy = RoutingStrategy.BALANCED
-    enable_cache:       bool            = True
-    enable_retry:       bool            = True
-    required_providers: list[str]       = field(default_factory=list)
-    enabled_providers:  list[str]       = field(default_factory=list)
-    cost_weight:        float           = 0.70
-    latency_weight:     float           = 0.30
+    strategy: RoutingStrategy = RoutingStrategy.BALANCED
+    enable_cache: bool = True
+    enable_retry: bool = True
+    required_providers: list[str] = field(default_factory=list)
+    enabled_providers: list[str] = field(default_factory=list)
+    cost_weight: float = 0.70
+    latency_weight: float = 0.30
 
 
 class BootError(Exception):
@@ -45,9 +43,9 @@ def _validate_env(strict: bool = False) -> None:
         Useful for production health checks.
     """
     optional = {
-        "REDIS_URL":     "caching will use in-memory backend",
-        "LOG_LEVEL":     "defaulting to INFO",
-        "SERVER_PORT":   "defaulting to 6389",
+        "REDIS_URL": "caching will use in-memory backend",
+        "LOG_LEVEL": "defaulting to INFO",
+        "SERVER_PORT": "defaulting to 6389",
     }
     for var, note in optional.items():
         if not os.getenv(var):
@@ -90,23 +88,29 @@ def boot(config: BootConfig = None) -> tuple[Router, Orchestrator]:
     except RuntimeError as exc:
         raise BootError(str(exc)) from exc
 
-    logger.info(f"  Loaded {len(providers)} provider(s): {', '.join(sorted(providers))}")
+    logger.info(
+        f"  Loaded {len(providers)} provider(s): {', '.join(sorted(providers))}"
+    )
 
     # 3. Build router
     logger.info("Step 3/4 — Initialising router")
     routing_config = RoutingConfig(
-        strategy        = config.strategy,
-        enable_cache    = config.enable_cache,
-        enable_retry    = config.enable_retry,
-        cost_weight     = config.cost_weight,
-        latency_weight  = config.latency_weight,
+        strategy=config.strategy,
+        enable_cache=config.enable_cache,
+        enable_retry=config.enable_retry,
+        cost_weight=config.cost_weight,
+        latency_weight=config.latency_weight,
     )
     router = Router(providers=providers, config=routing_config)
     logger.info(f"  Strategy:       {config.strategy.value}")
     logger.info(f"  Cost weight:    {routing_config.cost_weight:.2f}")
     logger.info(f"  Latency weight: {routing_config.latency_weight:.2f}")
-    logger.info(f"  Cache:          {'enabled' if config.enable_cache  else 'disabled'}")
-    logger.info(f"  Retry:          {'enabled' if config.enable_retry  else 'disabled'}")
+    logger.info(
+        f"  Cache:          {'enabled' if config.enable_cache else 'disabled'}"
+    )
+    logger.info(
+        f"  Retry:          {'enabled' if config.enable_retry else 'disabled'}"
+    )
 
     # 4. Orchestrator
     logger.info("Step 4/4 — Initialising orchestrator")

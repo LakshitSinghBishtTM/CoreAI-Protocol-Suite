@@ -8,6 +8,7 @@ from loguru import logger
 @dataclass
 class RateLimitConfig:
     """Rate limit configuration per provider"""
+
     requests_per_minute: int = 100
     tokens_per_minute: int = 90000  # input + output tokens
     concurrent_requests: int = 10
@@ -115,6 +116,7 @@ class ProviderLimiter:
     async def _async_sleep(self, seconds: float):
         """Non-blocking sleep"""
         import asyncio
+
         await asyncio.sleep(seconds)
 
     def stats(self) -> dict:
@@ -154,5 +156,7 @@ class GlobalRateLimiter:
 
     def stats(self) -> dict:
         return {
-            "limiters": {name: limiter.stats() for name, limiter in self.limiters.items()}
+            "limiters": {
+                name: limiter.stats() for name, limiter in self.limiters.items()
+            }
         }

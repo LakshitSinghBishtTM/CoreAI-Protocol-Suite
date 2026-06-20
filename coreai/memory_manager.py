@@ -4,8 +4,6 @@ Manages per-agent conversation history and context windows.
 Handles trimming, summarization triggers, and memory persistence.
 """
 
-import asyncio
-from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
@@ -15,7 +13,7 @@ from loguru import logger
 
 @dataclass
 class Message:
-    role: str       # "system" | "user" | "assistant"
+    role: str  # "system" | "user" | "assistant"
     content: str
     timestamp: datetime = field(default_factory=datetime.utcnow)
     token_estimate: int = 0
@@ -29,7 +27,7 @@ class Message:
 class ContextWindow:
     agent_id: str
     messages: list[Message] = field(default_factory=list)
-    max_tokens: int = 8000          # soft limit before trimming
+    max_tokens: int = 8000  # soft limit before trimming
     system_prompt: Optional[str] = None
     created_at: datetime = field(default_factory=datetime.utcnow)
     last_updated: datetime = field(default_factory=datetime.utcnow)
@@ -74,7 +72,9 @@ class MemoryManager:
         self._running = False
         logger.debug("MemoryManager stopped")
 
-    def get_or_create(self, agent_id: str, system_prompt: Optional[str] = None) -> ContextWindow:
+    def get_or_create(
+        self, agent_id: str, system_prompt: Optional[str] = None
+    ) -> ContextWindow:
         """Get existing context window or create a new one."""
         if agent_id not in self._windows:
             self._windows[agent_id] = ContextWindow(

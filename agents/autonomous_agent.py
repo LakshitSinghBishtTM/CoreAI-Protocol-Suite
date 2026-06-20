@@ -18,13 +18,13 @@ logger = logging.getLogger(__name__)
 
 
 class AgentCapability:
-    WEB_SEARCH    = "web_search"
-    CODE_EXEC     = "code_exec"
-    FILE_IO       = "file_io"
-    API_CALLS     = "api_calls"
-    MEMORY_READ   = "memory_read"
-    MEMORY_WRITE  = "memory_write"
-    AGENT_SPAWN   = "agent_spawn"
+    WEB_SEARCH = "web_search"
+    CODE_EXEC = "code_exec"
+    FILE_IO = "file_io"
+    API_CALLS = "api_calls"
+    MEMORY_READ = "memory_read"
+    MEMORY_WRITE = "memory_write"
+    AGENT_SPAWN = "agent_spawn"
 
 
 class AgentContext:
@@ -34,15 +34,16 @@ class AgentContext:
 
     def __init__(self):
         self.messages: List[Dict] = []
-        self.metadata: Dict       = {}
-        self.token_count: int     = 0
+        self.metadata: Dict = {}
+        self.token_count: int = 0
 
     def append(self, role: str, content: str) -> None:
         self.messages.append({"role": role, "content": content})
         if len(self.messages) > self.MAX_MESSAGES:
             # Drop oldest non-system messages
-            self.messages = [m for m in self.messages if m["role"] == "system"][:1] + \
-                            self.messages[-(self.MAX_MESSAGES - 1):]
+            self.messages = [m for m in self.messages if m["role"] == "system"][
+                :1
+            ] + self.messages[-(self.MAX_MESSAGES - 1) :]
 
     def clear(self) -> None:
         self.messages = []
@@ -55,7 +56,7 @@ class AutonomousAgent:
     tool use, and self-directed task execution.
     """
 
-    STEP_LIMIT   = 24
+    STEP_LIMIT = 24
     IDLE_TIMEOUT = 300  # seconds before context is cleared
 
     def __init__(
@@ -67,16 +68,16 @@ class AutonomousAgent:
         memory: MemoryManager,
         config: Optional[Dict] = None,
     ):
-        self.agent_id     = agent_id
-        self.name         = name
+        self.agent_id = agent_id
+        self.name = name
         self.capabilities = set(capabilities)
-        self.kernel       = kernel
-        self.memory       = memory
-        self.config       = config or {}
+        self.kernel = kernel
+        self.memory = memory
+        self.config = config or {}
 
-        self.context      = AgentContext()
+        self.context = AgentContext()
         self.tools: Dict[str, Callable] = {}
-        self._paused      = asyncio.Event()
+        self._paused = asyncio.Event()
         self._paused.set()  # not paused by default
         self._last_active = time.monotonic()
 
@@ -90,8 +91,11 @@ class AutonomousAgent:
             ),
         )
 
-        logger.debug("AutonomousAgent %s created with capabilities: %s",
-                     self.agent_id, self.capabilities)
+        logger.debug(
+            "AutonomousAgent %s created with capabilities: %s",
+            self.agent_id,
+            self.capabilities,
+        )
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -130,7 +134,9 @@ class AutonomousAgent:
     async def health_check(self) -> bool:
         idle_for = time.monotonic() - self._last_active
         if idle_for > self.IDLE_TIMEOUT:
-            logger.warning("Agent %s idle for %.0fs, clearing context", self.agent_id, idle_for)
+            logger.warning(
+                "Agent %s idle for %.0fs, clearing context", self.agent_id, idle_for
+            )
             self.context.clear()
             self.context.append("system", self.system_prompt)
         return await self.kernel.ping(self.agent_id)
@@ -149,13 +155,15 @@ class AutonomousAgent:
 
         instruction = task.get("instruction", "")
         constraints = task.get("constraints", [])
-        extra_ctx   = task.get("context", {})
+        extra_ctx = task.get("context", {})
 
         logger.info("Agent %s executing: %s", self.agent_id, instruction[:80])
 
-        self.context.append("user", self._build_prompt(instruction, constraints, extra_ctx))
+        self.context.append(
+            "user", self._build_prompt(instruction, constraints, extra_ctx)
+        )
 
-        steps  = 0
+        steps = 0
         result = None
 
         while steps < self.STEP_LIMIT:
@@ -183,7 +191,9 @@ class AutonomousAgent:
                 self.context.append("user", f"[tool_result] {tool_result}")
 
         if steps >= self.STEP_LIMIT:
-            logger.warning("Agent %s hit step limit (%d)", self.agent_id, self.STEP_LIMIT)
+            logger.warning(
+                "Agent %s hit step limit (%d)", self.agent_id, self.STEP_LIMIT
+            )
 
         self._last_active = time.monotonic()
         return result
@@ -194,6 +204,7 @@ class AutonomousAgent:
 
     async def _register_tools(self) -> None:
         from coreai.router import ToolRouter
+
         router = ToolRouter(self.capabilities)
         self.tools = await router.get_tools_for_agent(self.agent_id)
         logger.debug("Agent %s registered %d tools", self.agent_id, len(self.tools))
@@ -204,7 +215,9 @@ class AutonomousAgent:
         try:
             return await self.tools[tool_name](**args)
         except Exception as exc:
-            logger.error("Tool %s error for agent %s: %s", tool_name, self.agent_id, exc)
+            logger.error(
+                "Tool %s error for agent %s: %s", tool_name, self.agent_id, exc
+            )
             return f"[error] {tool_name} failed: {exc}"
 
     def register_tool(self, name: str, fn: Callable) -> None:
@@ -221,12 +234,14 @@ class AutonomousAgent:
             parts.append("Constraints:\n" + "\n".join(f"- {c}" for c in constraints))
         if context:
             import json
+
             parts.append("Context:\n" + json.dumps(context, indent=2))
         return "\n\n".join(parts)
 
     async def _flush_memory(self) -> None:
         recent = [
-            m["content"] for m in self.context.messages
+            m["content"]
+            for m in self.context.messages
             if m["role"] == "assistant" and not m["content"].startswith("[memory]")
         ][-4:]
         for item in recent:

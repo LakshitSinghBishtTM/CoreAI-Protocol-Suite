@@ -1,14 +1,16 @@
-import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Depends, Request
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from loguru import logger
 
-from providers import load_providers, Message as ProviderMessage, CompletionRequest as ProviderCompletionRequest
-from coreai import Router, RoutingConfig, RoutingStrategy, Orchestrator, TaskStatus
-
+from providers import (
+    load_providers,
+    Message as ProviderMessage,
+    CompletionRequest as ProviderCompletionRequest,
+)
+from coreai import Router, RoutingConfig, RoutingStrategy, Orchestrator
 
 # ============================================================================
 # Models
@@ -87,25 +89,25 @@ async def lifespan(app: FastAPI):
     """Startup and shutdown events"""
     # Startup
     logger.info("Starting CoreAI Protocol Suite...")
-    
+
     providers = load_providers()
     if not providers:
         logger.error("No providers loaded! Check API keys in .env")
         raise RuntimeError("No providers available")
-    
+
     logger.info(f"Loaded providers: {list(providers.keys())}")
-    
+
     app_state["providers"] = providers
     app_state["router"] = Router(
         providers,
         RoutingConfig(strategy=RoutingStrategy.BALANCED),
     )
     app_state["orchestrator"] = Orchestrator()
-    
+
     logger.info("CoreAI server ready")
-    
+
     yield
-    
+
     # Shutdown
     logger.info("Shutting down CoreAI...")
 
@@ -144,7 +146,9 @@ async def health_check():
     """Health check endpoint"""
     return {
         "status": "healthy",
-        "providers": list(app_state["providers"].keys()) if app_state["providers"] else [],
+        "providers": (
+            list(app_state["providers"].keys()) if app_state["providers"] else []
+        ),
     }
 
 
@@ -157,10 +161,9 @@ async def completions(
     try:
         # Convert to provider format
         messages = [
-            ProviderMessage(role=m.role, content=m.content)
-            for m in request.messages
+            ProviderMessage(role=m.role, content=m.content) for m in request.messages
         ]
-        
+
         provider_request = ProviderCompletionRequest(
             messages=messages,
             model=request.model,
@@ -168,10 +171,10 @@ async def completions(
             temperature=request.temperature,
             system_prompt=request.system_prompt,
         )
-        
+
         # Route and execute
         response = await router.route(provider_request, request.provider)
-        
+
         return CompletionResponse(
             content=response.content,
             model=response.model,
@@ -181,7 +184,7 @@ async def completions(
             cost_usd=response.cost_usd,
             latency_ms=response.latency_ms,
         )
-    
+
     except Exception as e:
         logger.error(f"Completion failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -195,10 +198,9 @@ async def completions_stream(
     """Stream a completion token-by-token"""
     try:
         messages = [
-            ProviderMessage(role=m.role, content=m.content)
-            for m in request.messages
+            ProviderMessage(role=m.role, content=m.content) for m in request.messages
         ]
-        
+
         provider_request = ProviderCompletionRequest(
             messages=messages,
             model=request.model,
@@ -207,15 +209,17 @@ async def completions_stream(
             system_prompt=request.system_prompt,
             stream=True,
         )
-        
-        provider = router.providers.get(request.provider or list(router.providers.keys())[0])
-        
+
+        provider = router.providers.get(
+            request.provider or list(router.providers.keys())[0]
+        )
+
         async def generate():
             async for chunk in provider.stream(provider_request):
                 yield chunk
-        
+
         return StreamingResponse(generate(), media_type="text/event-stream")
-    
+
     except Exception as e:
         logger.error(f"Stream failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
@@ -235,7 +239,7 @@ async def create_task(
         )
         task.max_iterations = request.max_iterations
         orchestrator.task_store.update(task)
-        
+
         return TaskResponse(
             task_id=task.task_id,
             agent_id=task.agent_id,
@@ -244,7 +248,7 @@ async def create_task(
             iterations=task.iterations,
             created_at=task.created_at.isoformat(),
         )
-    
+
     except Exception as e:
         logger.error(f"Task creation failed: {e}")
         raise HTTPException(status_code=400, detail=str(e))
@@ -259,7 +263,7 @@ async def get_task(
     task = orchestrator.get_task(task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
-    
+
     return TaskResponse(
         task_id=task.task_id,
         agent_id=task.agent_id,
@@ -292,7 +296,7 @@ async def get_stats(
     """Get system statistics"""
     router_stats = router.stats()
     orch_stats = orchestrator.stats()
-    
+
     return StatsResponse(
         total_requests=router_stats["total_requests"],
         strategy=router_stats["strategy"],
@@ -306,4 +310,5 @@ async def get_stats(
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8743)

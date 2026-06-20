@@ -57,6 +57,7 @@ class RedisCache(CacheBackend):
     def __init__(self, redis_url: str = "redis://localhost:6379"):
         try:
             import redis.asyncio as redis
+
             self.redis = redis.from_url(redis_url)
         except ImportError:
             logger.warning("redis not installed, falling back to MemoryCache")
@@ -117,7 +118,9 @@ class ResponseCache:
         msg_hash = hashlib.sha256(msg_str.encode()).hexdigest()
         return f"cache:{provider}:{model}:{msg_hash}"
 
-    async def get(self, provider: str, model: str, messages: list[dict]) -> Optional[dict]:
+    async def get(
+        self, provider: str, model: str, messages: list[dict]
+    ) -> Optional[dict]:
         key = self._make_key(provider, model, messages)
         result = await self.backend.get(key)
         if result:
@@ -127,7 +130,14 @@ class ResponseCache:
             self.misses += 1
         return result
 
-    async def set(self, provider: str, model: str, messages: list[dict], response: dict, ttl_seconds: int = 3600):
+    async def set(
+        self,
+        provider: str,
+        model: str,
+        messages: list[dict],
+        response: dict,
+        ttl_seconds: int = 3600,
+    ):
         key = self._make_key(provider, model, messages)
         await self.backend.set(key, response, ttl_seconds)
         logger.debug(f"Cache SET: {key}")

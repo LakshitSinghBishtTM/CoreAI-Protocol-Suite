@@ -37,7 +37,9 @@ class AgentTask:
         data = asdict(self)
         data["created_at"] = self.created_at.isoformat()
         data["started_at"] = self.started_at.isoformat() if self.started_at else None
-        data["completed_at"] = self.completed_at.isoformat() if self.completed_at else None
+        data["completed_at"] = (
+            self.completed_at.isoformat() if self.completed_at else None
+        )
         data["status"] = self.status.value
         return data
 
@@ -110,7 +112,9 @@ class Orchestrator:
         self.agents.pop(agent_id, None)
         logger.info(f"Unregistered agent {agent_id}")
 
-    def assign_task(self, agent_id: str, objective: str, context: dict = None) -> AgentTask:
+    def assign_task(
+        self, agent_id: str, objective: str, context: dict = None
+    ) -> AgentTask:
         """Assign a task to an agent"""
         if agent_id not in self.agents:
             raise ValueError(f"Agent {agent_id} not registered")
@@ -119,7 +123,9 @@ class Orchestrator:
         self.active_tasks[task.task_id] = agent_id
         self.agents[agent_id]["total_tasks"] += 1
 
-        logger.info(f"Assigned task {task.task_id} to agent {agent_id}: {objective[:50]}...")
+        logger.info(
+            f"Assigned task {task.task_id} to agent {agent_id}: {objective[:50]}..."
+        )
         return task
 
     def start_task(self, task_id: str):
@@ -148,7 +154,9 @@ class Orchestrator:
         if agent_id:
             self.agents[agent_id]["completed_tasks"] += 1
 
-        logger.info(f"Completed task {task_id} (duration: {task.duration_seconds():.1f}s)")
+        logger.info(
+            f"Completed task {task_id} (duration: {task.duration_seconds():.1f}s)"
+        )
 
     def fail_task(self, task_id: str, error: str):
         """Mark task as failed"""

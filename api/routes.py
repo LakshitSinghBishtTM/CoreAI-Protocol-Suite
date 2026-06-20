@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from api.auth import AuthContext, get_auth_context, require_scope
+from api.auth import AuthContext, require_scope
 
 logger = logging.getLogger(__name__)
 
@@ -25,80 +25,82 @@ router = APIRouter(prefix="/v1")
 # Request / response models
 # ------------------------------------------------------------------
 
+
 class Message(BaseModel):
-    role:    str = Field(..., description="user | assistant | system")
+    role: str = Field(..., description="user | assistant | system")
     content: str
 
 
 class CompletionRequest(BaseModel):
-    messages:      List[Message]
-    model:         Optional[str]  = None
-    max_tokens:    int            = Field(1024, ge=1, le=32768)
-    temperature:   float          = Field(0.7, ge=0.0, le=2.0)
-    system_prompt: Optional[str]  = None
-    provider:      Optional[str]  = None
-    stream:        bool           = False
+    messages: List[Message]
+    model: Optional[str] = None
+    max_tokens: int = Field(1024, ge=1, le=32768)
+    temperature: float = Field(0.7, ge=0.0, le=2.0)
+    system_prompt: Optional[str] = None
+    provider: Optional[str] = None
+    stream: bool = False
 
 
 class CompletionResponse(BaseModel):
-    content:       str
-    model:         str
-    provider:      str
-    input_tokens:  int
+    content: str
+    model: str
+    provider: str
+    input_tokens: int
     output_tokens: int
-    cost_usd:      float
-    latency_ms:    float
-    cached:        bool = False
-    request_id:    Optional[str] = None
+    cost_usd: float
+    latency_ms: float
+    cached: bool = False
+    request_id: Optional[str] = None
 
 
 class TaskRequest(BaseModel):
-    agent_id:       str
-    objective:      str
-    context:        Dict[str, Any] = Field(default_factory=dict)
-    max_iterations: int            = Field(10, ge=1, le=50)
-    priority:       int            = Field(2, ge=0, le=3)
+    agent_id: str
+    objective: str
+    context: Dict[str, Any] = Field(default_factory=dict)
+    max_iterations: int = Field(10, ge=1, le=50)
+    priority: int = Field(2, ge=0, le=3)
 
 
 class TaskResponse(BaseModel):
-    task_id:      str
-    agent_id:     str
-    objective:    str
-    status:       str
-    result:       Optional[str]  = None
-    error:        Optional[str]  = None
-    iterations:   int
-    created_at:   str
-    started_at:   Optional[str] = None
+    task_id: str
+    agent_id: str
+    objective: str
+    status: str
+    result: Optional[str] = None
+    error: Optional[str] = None
+    iterations: int
+    created_at: str
+    started_at: Optional[str] = None
     completed_at: Optional[str] = None
 
 
 class AgentRegisterRequest(BaseModel):
-    name:         str
+    name: str
     capabilities: List[str] = Field(default_factory=list)
-    config:       Dict[str, Any] = Field(default_factory=dict)
+    config: Dict[str, Any] = Field(default_factory=dict)
 
 
 class ProviderStatusResponse(BaseModel):
-    name:       str
-    available:  bool
+    name: str
+    available: bool
     latency_ms: Optional[float] = None
-    model_list: List[str]       = Field(default_factory=list)
+    model_list: List[str] = Field(default_factory=list)
 
 
 class StatsResponse(BaseModel):
-    total_requests:    int
-    strategy:          str
-    provider_stats:    Dict
-    cache_stats:       Optional[Dict] = None
-    retry_stats:       Optional[Dict] = None
-    limiter_stats:     Optional[Dict] = None
+    total_requests: int
+    strategy: str
+    provider_stats: Dict
+    cache_stats: Optional[Dict] = None
+    retry_stats: Optional[Dict] = None
+    limiter_stats: Optional[Dict] = None
     orchestrator_stats: Optional[Dict] = None
 
 
 # ------------------------------------------------------------------
 # Completions
 # ------------------------------------------------------------------
+
 
 @router.post(
     "/completions",
@@ -115,7 +117,7 @@ async def completions(
 
     _router = _get_router()
     messages = [PM(role=m.role, content=m.content) for m in request.messages]
-    preq     = PCR(
+    preq = PCR(
         messages=messages,
         model=request.model,
         max_tokens=request.max_tokens,
@@ -152,9 +154,9 @@ async def completions_stream(
     from coreai.router import get_router as _get_router
     from providers import Message as PM, CompletionRequest as PCR
 
-    _router  = _get_router()
+    _router = _get_router()
     messages = [PM(role=m.role, content=m.content) for m in request.messages]
-    preq     = PCR(
+    preq = PCR(
         messages=messages,
         model=request.model,
         max_tokens=request.max_tokens,
@@ -164,9 +166,11 @@ async def completions_stream(
     )
 
     provider_name = request.provider or next(iter(_router.providers))
-    provider      = _router.providers.get(provider_name)
+    provider = _router.providers.get(provider_name)
     if not provider:
-        raise HTTPException(status_code=400, detail=f"Unknown provider: {provider_name}")
+        raise HTTPException(
+            status_code=400, detail=f"Unknown provider: {provider_name}"
+        )
 
     async def _generate():
         try:
@@ -182,6 +186,7 @@ async def completions_stream(
 # ------------------------------------------------------------------
 # Agent tasks
 # ------------------------------------------------------------------
+
 
 @router.post(
     "/tasks",
@@ -263,12 +268,15 @@ async def cancel_task(
 
     cancelled = _get_orch().cancel_task(task_id)
     if not cancelled:
-        raise HTTPException(status_code=404, detail="Task not found or already completed")
+        raise HTTPException(
+            status_code=404, detail="Task not found or already completed"
+        )
 
 
 # ------------------------------------------------------------------
 # Agents
 # ------------------------------------------------------------------
+
 
 @router.post(
     "/agents",
@@ -282,7 +290,7 @@ async def register_agent(
 ):
     from agents.agent_manager import get_agent_manager
 
-    manager  = get_agent_manager()
+    manager = get_agent_manager()
     agent_id = await manager.spawn_agent(
         name=request.name,
         capabilities=request.capabilities,
@@ -300,6 +308,7 @@ async def list_agents(
     ctx: AuthContext = Depends(require_scope("agents:read")),
 ):
     from agents.agent_manager import get_agent_manager
+
     return get_agent_manager().list_agents()
 
 
@@ -314,12 +323,14 @@ async def terminate_agent(
     ctx: AuthContext = Depends(require_scope("agents:write")),
 ):
     from agents.agent_manager import get_agent_manager
+
     await get_agent_manager().terminate_agent(agent_id, reason=f"api:{ctx.subject}")
 
 
 # ------------------------------------------------------------------
 # Providers
 # ------------------------------------------------------------------
+
 
 @router.get(
     "/providers",
@@ -336,12 +347,14 @@ async def list_providers(
     for name, provider in _get_router().providers.items():
         try:
             ping_ms = await provider.ping()
-            results.append(ProviderStatusResponse(
-                name=name,
-                available=True,
-                latency_ms=ping_ms,
-                model_list=provider.available_models(),
-            ))
+            results.append(
+                ProviderStatusResponse(
+                    name=name,
+                    available=True,
+                    latency_ms=ping_ms,
+                    model_list=provider.available_models(),
+                )
+            )
         except Exception:
             results.append(ProviderStatusResponse(name=name, available=False))
     return results
@@ -350,6 +363,7 @@ async def list_providers(
 # ------------------------------------------------------------------
 # Stats / admin
 # ------------------------------------------------------------------
+
 
 @router.get(
     "/stats",
@@ -387,7 +401,11 @@ async def trigger_shutdown(
     message: str = Query("", max_length=256),
     ctx: AuthContext = Depends(require_scope("admin")),
 ):
-    from agents.emergency_shutdown import EmergencyShutdown, ShutdownMode, ShutdownReason
+    from agents.emergency_shutdown import (
+        EmergencyShutdown,
+        ShutdownMode,
+        ShutdownReason,
+    )
     from coreai.kernel import get_kernel
     from database.db import get_db
 
@@ -397,10 +415,13 @@ async def trigger_shutdown(
         db=get_db(),
     )
     import asyncio
-    asyncio.create_task(shutdown.trigger(
-        mode=ShutdownMode(mode),
-        reason=ShutdownReason.API_TRIGGER,
-        triggered_by=ctx.subject,
-        message=message,
-    ))
+
+    asyncio.create_task(
+        shutdown.trigger(
+            mode=ShutdownMode(mode),
+            reason=ShutdownReason.API_TRIGGER,
+            triggered_by=ctx.subject,
+            message=message,
+        )
+    )
     return {"status": "shutdown_initiated", "mode": mode, "by": ctx.subject}

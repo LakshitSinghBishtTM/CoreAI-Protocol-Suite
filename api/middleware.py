@@ -10,7 +10,7 @@ Contact: ops@coreai.com
 import logging
 import time
 import uuid
-from typing import Callable, Optional
+from typing import Callable
 
 from fastapi import Request, Response, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 # ------------------------------------------------------------------
 # Request ID middleware
 # ------------------------------------------------------------------
+
 
 class RequestIDMiddleware(BaseHTTPMiddleware):
     """Injects a unique X-Request-ID into every request and response."""
@@ -39,11 +40,12 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
 # Timing middleware
 # ------------------------------------------------------------------
 
+
 class TimingMiddleware(BaseHTTPMiddleware):
     """Adds X-Process-Time header and logs request duration."""
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
-        start    = time.perf_counter()
+        start = time.perf_counter()
         response = await call_next(request)
         duration = (time.perf_counter() - start) * 1000  # ms
 
@@ -64,6 +66,7 @@ class TimingMiddleware(BaseHTTPMiddleware):
 # ------------------------------------------------------------------
 # Rate limiting middleware
 # ------------------------------------------------------------------
+
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
     """
@@ -94,7 +97,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         response = await call_next(request)
         remaining = self._remaining(client_key)
-        response.headers["X-RateLimit-Limit"]     = str(self.rpm)
+        response.headers["X-RateLimit-Limit"] = str(self.rpm)
         response.headers["X-RateLimit-Remaining"] = str(remaining)
         return response
 
@@ -107,12 +110,12 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         return f"ip:{ip}"
 
     def _check_rate_limit(self, key: str):
-        now    = time.monotonic()
+        now = time.monotonic()
         window = self._windows.setdefault(key, [])
         # Purge entries older than 60s
         self._windows[key] = [t for t in window if now - t < 60]
         if len(self._windows[key]) >= self.rpm:
-            oldest      = self._windows[key][0]
+            oldest = self._windows[key][0]
             retry_after = int(60 - (now - oldest)) + 1
             return False, retry_after
         self._windows[key].append(now)
@@ -126,6 +129,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 # Error handling middleware
 # ------------------------------------------------------------------
 
+
 class ErrorHandlerMiddleware(BaseHTTPMiddleware):
     """Catches unhandled exceptions and returns structured JSON errors."""
 
@@ -136,12 +140,15 @@ class ErrorHandlerMiddleware(BaseHTTPMiddleware):
             request_id = getattr(request.state, "request_id", "-")
             logger.exception(
                 "Unhandled exception on %s %s [%s]: %s",
-                request.method, request.url.path, request_id, exc,
+                request.method,
+                request.url.path,
+                request_id,
+                exc,
             )
             return JSONResponse(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 content={
-                    "detail":     "Internal server error",
+                    "detail": "Internal server error",
                     "request_id": request_id,
                 },
             )
@@ -170,4 +177,6 @@ def register_middleware(app) -> None:
     app.add_middleware(RequestIDMiddleware)
     app.add_middleware(RateLimitMiddleware, requests_per_minute=60)
     app.add_middleware(CORSMiddleware, **CORS_CONFIG)
-    logger.info("Middleware registered: ErrorHandler, Timing, RequestID, RateLimit, CORS")
+    logger.info(
+        "Middleware registered: ErrorHandler, Timing, RequestID, RateLimit, CORS"
+    )
