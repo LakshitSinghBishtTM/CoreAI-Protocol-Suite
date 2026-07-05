@@ -3,8 +3,6 @@ tests/test_final_v2.py
 
 End-to-end integration tests for the CoreAI high-level facade (CoreAI class
 in core_final.py) and the Kernel. All provider/router calls are mocked.
-
-These are the "does the whole stack wire together" tests.
 """
 
 from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
@@ -51,13 +49,15 @@ class TestCoreAIFacade:
 
     @pytest.fixture
     def ai_class(self):
-        """Patch boot() so no real providers are loaded."""
+        """Patch boot() so no real providers are loaded.
+        Import via package path to preserve relative imports inside coreai/.
+        """
         with patch("coreai.core_final.boot") as mock_boot, \
              patch("coreai.core_final.Kernel") as MockKernel:
             mock_kernel = _mock_kernel()
             MockKernel.return_value = mock_kernel
             mock_boot.return_value = (MagicMock(), MagicMock())
-            from core_final import CoreAI
+            from coreai.core_final import CoreAI
             yield CoreAI, mock_kernel
 
     @pytest.mark.asyncio
@@ -133,8 +133,8 @@ class TestCoreAIFacade:
 
     @pytest.mark.asyncio
     async def test_complete_before_start_raises(self):
-        with patch("core_final.boot"), patch("core_final.Kernel"):
-            from core_final import CoreAI
+        with patch("coreai.core_final.boot"), patch("coreai.core_final.Kernel"):
+            from coreai.core_final import CoreAI
             ai = CoreAI()
             with pytest.raises(RuntimeError, match="not started"):
                 await ai.complete("hello")
@@ -166,7 +166,8 @@ class TestCoreAIFacade:
 
 
 # ---------------------------------------------------------------------------
-# Kernel (kernel.py) basic wiring
+# Kernel (coreai/kernel.py) basic wiring
+# Fix: import from coreai.kernel not bare 'kernel' (which resolves to kernel/)
 # ---------------------------------------------------------------------------
 
 class TestKernelWiring:
@@ -175,7 +176,11 @@ class TestKernelWiring:
     def components(self):
         router = MagicMock()
         router.providers = {"openai": MagicMock(), "anthropic": MagicMock()}
-        router.stats = MagicMock(return_value={"total_requests": 0, "strategy": "balanced", "provider_stats": {}})
+        router.stats = MagicMock(return_value={
+            "total_requests": 0,
+            "strategy": "balanced",
+            "provider_stats": {},
+        })
 
         orchestrator = MagicMock()
         orchestrator.get_pending_tasks = MagicMock(return_value=[])
@@ -205,7 +210,7 @@ class TestKernelWiring:
 
     @pytest.mark.asyncio
     async def test_stop_transitions_to_stopped(self, components):
-        from kernel import Kernel, KernelState
+        from coreai.kernel import Kernel, KernelState
         router, orchestrator, memory, scheduler = components
         k = Kernel(router, orchestrator, memory, scheduler)
         await k.start()
@@ -214,7 +219,7 @@ class TestKernelWiring:
 
     @pytest.mark.asyncio
     async def test_double_stop_is_idempotent(self, components):
-        from kernel import Kernel
+        from coreai.kernel import Kernel
         router, orchestrator, memory, scheduler = components
         k = Kernel(router, orchestrator, memory, scheduler)
         await k.start()
@@ -224,7 +229,7 @@ class TestKernelWiring:
     @pytest.mark.asyncio
     async def test_uptime_increases(self, components):
         import asyncio
-        from kernel import Kernel
+        from coreai.kernel import Kernel
         router, orchestrator, memory, scheduler = components
         k = Kernel(router, orchestrator, memory, scheduler)
         await k.start()
@@ -234,7 +239,7 @@ class TestKernelWiring:
 
     @pytest.mark.asyncio
     async def test_health_contains_expected_keys(self, components):
-        from kernel import Kernel
+        from coreai.kernel import Kernel
         router, orchestrator, memory, scheduler = components
         k = Kernel(router, orchestrator, memory, scheduler)
         await k.start()
@@ -245,7 +250,7 @@ class TestKernelWiring:
 
     @pytest.mark.asyncio
     async def test_stats_includes_router_and_orchestrator(self, components):
-        from kernel import Kernel
+        from coreai.kernel import Kernel
         router, orchestrator, memory, scheduler = components
         k = Kernel(router, orchestrator, memory, scheduler)
         await k.start()
@@ -256,7 +261,7 @@ class TestKernelWiring:
 
     @pytest.mark.asyncio
     async def test_cancels_pending_tasks_on_stop(self, components):
-        from kernel import Kernel
+        from coreai.kernel import Kernel
         router, orchestrator, memory, scheduler = components
         fake_task = MagicMock(task_id="t-pending-001")
         orchestrator.get_pending_tasks.return_value = [fake_task]

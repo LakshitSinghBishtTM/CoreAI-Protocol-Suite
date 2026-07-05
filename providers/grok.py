@@ -1,18 +1,26 @@
+"""
+providers/grok.py
+
+Grok uses an OpenAI-compatible API, just a different base URL and models.
+"""
+import importlib
 import time
 from typing import AsyncGenerator
 
-from openai import AsyncOpenAI
 from loguru import logger
+
+# importlib guarantees we get the top-level 'openai' SDK package, not the
+# providers.openai submodule which shares the same short name.
+AsyncOpenAI = importlib.import_module("openai").AsyncOpenAI
 
 from .base import BaseProvider, CompletionRequest, CompletionResponse
 
-# Grok uses OpenAI-compatible API, just different base URL + models
 GROK_PRICING = {
-    "grok-3": {"input": 0.000003, "output": 0.000015},
-    "grok-3-fast": {"input": 0.000005, "output": 0.000025},
-    "grok-3-mini": {"input": 0.0000003, "output": 0.0000005},
+    "grok-3":           {"input": 0.000003,  "output": 0.000015},
+    "grok-3-fast":      {"input": 0.000005,  "output": 0.000025},
+    "grok-3-mini":      {"input": 0.0000003, "output": 0.0000005},
     "grok-3-mini-fast": {"input": 0.0000006, "output": 0.000004},
-    "grok-2-vision": {"input": 0.000002, "output": 0.000010},
+    "grok-2-vision":    {"input": 0.000002,  "output": 0.000010},
 }
 
 
@@ -60,7 +68,10 @@ class GrokProvider(BaseProvider):
             latency_ms=latency_ms,
         )
         self._track(result)
-        logger.debug(f"[grok] {model} | {input_tokens}in {output_tokens}out | ${cost:.6f} | {latency_ms:.0f}ms")
+        logger.debug(
+            f"[grok] {model} | {input_tokens}in {output_tokens}out | "
+            f"${cost:.6f} | {latency_ms:.0f}ms"
+        )
         return result
 
     async def stream(self, request: CompletionRequest) -> AsyncGenerator[str, None]:

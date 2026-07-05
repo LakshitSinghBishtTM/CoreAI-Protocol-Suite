@@ -150,8 +150,8 @@ class TestFastestStrategy:
         router.provider_stats["fast"]["latency_ms_history"] = [100.0, 100.0, 100.0]
 
         # After warm-up all auto-routed calls must go to "fast"
-        providers["slow"].complete.call_count = 0
-        providers["fast"].complete.call_count = 0
+        providers["slow"].complete.reset_mock()
+        providers["fast"].complete.reset_mock()
 
         for _ in range(4):
             await router.route(_make_request())

@@ -8,6 +8,8 @@ def read(filename):
     return (ROOT / filename).read_text(encoding="utf-8")
 
 def parse_requirements(filename):
+    if not (ROOT / filename).exists():
+        return []
     lines = (ROOT / filename).read_text(encoding="utf-8").splitlines()
     return [
         line.strip()
@@ -15,22 +17,27 @@ def parse_requirements(filename):
         if line.strip() and not line.startswith("#") and not line.startswith("-")
     ]
 
-VERSION = {1.0.0}
-exec((ROOT / "coreai" / "_version.py").read_text(encoding="utf-8"), VERSION)
+# Load version from _version.py
+VERSION = {}
+version_file = ROOT / "coreai" / "_version.py"
+if version_file.exists():
+    exec(version_file.read_text(encoding="utf-8"), VERSION)
+else:
+    VERSION["__version__"] = "1.0.0"
 
 setup(
     name="coreai-protocol-suite",
     version=VERSION["__version__"],
     description="Intelligent LLM routing and agent orchestration framework for production AI systems",
-    long_description=read("README.md"),
+    long_description=read("README.md") if (ROOT / "README.md").exists() else "",
     long_description_content_type="text/markdown",
     author="Lakshit Singh Bisht",
     author_email="lakshit@coreai.dev",
     url="https://github.com/LakshitSinghBishtTM/CoreAI-Protocol-Suite",
     project_urls={
-        "Bug Tracker":  "https://github.com/LakshitSinghBishtTM/CoreAIProtocolSuite/issues",
-        "Changelog":    "https://github.com/LakshitSinghBishtTM/CoreAIProtocolSuite/blob/main/CHANGELOG.md",
-        "Documentation":"https://docs.coreai.dev",
+        "Bug Tracker":   "https://github.com/LakshitSinghBishtTM/CoreAIProtocolSuite/issues",
+        "Changelog":     "https://github.com/LakshitSinghBishtTM/CoreAIProtocolSuite/blob/main/CHANGELOG.md",
+        "Documentation": "https://docs.coreai.dev",
     },
     license="GPL-3.0",
     packages=find_packages(exclude=["tests*", "scripts*", "docs*"]),

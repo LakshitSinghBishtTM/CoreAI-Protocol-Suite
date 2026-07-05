@@ -23,11 +23,16 @@ from pydantic import BaseModel
 logger = logging.getLogger(__name__)
 
 # ------------------------------------------------------------------
-# Config
+# Config  — read lazily so tests can monkeypatch before import side-effects
 # ------------------------------------------------------------------
 
-JWT_SECRET = os.environ["SECRET_KEY"]
-JWT_ALGORITHM = "HS256"
+def _jwt_secret() -> str:
+    secret = os.environ.get("SECRET_KEY", "")
+    if not secret:
+        raise RuntimeError("SECRET_KEY environment variable is not set")
+    return secret
+
+JWT_ALGORITHM  = "HS256"
 JWT_EXPIRY_MINS = int(os.environ.get("JWT_EXPIRY_MINS", "60"))
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -36,7 +41,6 @@ bearer_scheme = HTTPBearer(auto_error=False)
 # ------------------------------------------------------------------
 # Models
 # ------------------------------------------------------------------
-
 
 class TokenPayload(BaseModel):
     sub: str
@@ -63,21 +67,21 @@ class AuthContext(BaseModel):
 # Token issuance
 # ------------------------------------------------------------------
 
-
 def create_access_token(
     subject: str,
     scopes: List[str],
     expires_delta: Optional[timedelta] = None,
 ) -> str:
-    now = datetime.now(timezone.utc)
+    secret = _jwt_secret()
+    now     = datetime.now(timezone.utc)
     expires = now + (expires_delta or timedelta(minutes=JWT_EXPIRY_MINS))
     payload = {
-        "sub": subject,
+        "sub":    subject,
         "scopes": scopes,
-        "iat": int(now.timestamp()),
-        "exp": int(expires.timestamp()),
+        "iat":    int(now.timestamp()),
+        "exp":    int(expires.timestamp()),
     }
-    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+    return jwt.encode(payload, secret, algorithm=JWT_ALGORITHM)
 
 
 def create_service_token(service_name: str) -> str:
@@ -93,10 +97,10 @@ def create_service_token(service_name: str) -> str:
 # Token verification
 # ------------------------------------------------------------------
 
-
 def decode_token(token: str) -> TokenPayload:
+    secret = _jwt_secret()
     try:
-        raw = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        raw = jwt.decode(token, secret, algorithms=[JWT_ALGORITHM])
         return TokenPayload(**raw)
     except ExpiredSignatureError:
         raise HTTPException(
@@ -117,7 +121,6 @@ def decode_token(token: str) -> TokenPayload:
 # API key validation
 # ------------------------------------------------------------------
 
-
 def _hash_api_key(key: str) -> str:
     return hashlib.sha256(key.encode()).hexdigest()
 
@@ -134,19 +137,12 @@ def validate_api_key(raw_key: str, key_store: Dict) -> Optional[AuthContext]:
 # FastAPI dependencies
 # ------------------------------------------------------------------
 
-
 async def get_auth_context(
     credentials: Optional[HTTPAuthorizationCredentials] = Security(bearer_scheme),
     x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
 ) -> AuthContext:
-    """
-    Accepts either:
-      - Bearer JWT in Authorization header
-      - Raw API key in X-API-Key header
-    """
     if x_api_key:
         from database.db import get_key_store
-
         ctx = validate_api_key(x_api_key, get_key_store())
         if not ctx:
             raise HTTPException(
@@ -167,12 +163,9 @@ async def get_auth_context(
 
 
 def require_scope(scope: str):
-    """Dependency factory — enforces a specific scope."""
-
     async def _check(ctx: AuthContext = Depends(get_auth_context)) -> AuthContext:
         ctx.require_scope(scope)
         return ctx
-
     return _check
 
 
@@ -180,7 +173,8 @@ def require_scope(scope: str):
 # HMAC webhook signing
 # ------------------------------------------------------------------
 
-SIGNING_SECRET = os.environ.get("WEBHOOK_SIGNING_SECRET", "")
+def _signing_secret() -> bytes:
+    return os.environ.get("WEBHOOK_SIGNING_SECRET", "").encode()
 
 
 def verify_request_signature(
@@ -198,6 +192,6 @@ def verify_request_signature(
         logger.warning("Request signature outside tolerance window")
         return False
 
-    signed = f"{ts}.{payload.decode()}".encode()
-    expected = hmac.new(SIGNING_SECRET.encode(), signed, hashlib.sha256).hexdigest()
+    signed   = f"{ts}.{payload.decode()}".encode()
+    expected = hmac.new(_signing_secret(), signed, hashlib.sha256).hexdigest()
     return hmac.compare_digest(expected, signature)

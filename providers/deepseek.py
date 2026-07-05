@@ -1,14 +1,18 @@
 """
-CoreAI Protocol Suite - DeepSeek Provider
+providers/deepseek.py
+
 DeepSeek uses an OpenAI-compatible API, so we use the openai SDK
 pointed at DeepSeek's base URL.
 """
-
+import importlib
 import time
 from typing import AsyncGenerator
 
-from openai import AsyncOpenAI
 from loguru import logger
+
+# importlib guarantees we get the top-level 'openai' SDK package, not the
+# providers.openai submodule which shares the same short name.
+AsyncOpenAI = importlib.import_module("openai").AsyncOpenAI
 
 from .base import BaseProvider, CompletionRequest, CompletionResponse
 
@@ -95,7 +99,6 @@ class DeepSeekProvider(BaseProvider):
         return (input_tokens * pricing["input"]) + (output_tokens * pricing["output"])
 
     def count_tokens(self, text: str, model: str) -> int:
-        # DeepSeek tokenizer is close to GPT — ~4 chars per token
         return max(1, len(text) // 4)
 
     def _build_messages(self, request: CompletionRequest) -> list[dict]:
@@ -103,7 +106,6 @@ class DeepSeekProvider(BaseProvider):
         for msg in request.messages:
             messages.append({"role": msg.role, "content": msg.content})
 
-        # Inject system_prompt if set separately and not already in messages
         has_system = any(m["role"] == "system" for m in messages)
         if request.system_prompt and not has_system:
             messages.insert(0, {"role": "system", "content": request.system_prompt})
