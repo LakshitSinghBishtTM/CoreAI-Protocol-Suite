@@ -37,6 +37,7 @@ async def _lookup_db_key(key_hash: str) -> Optional[APIKey]:
     """Check database for a matching active API key."""
     try:
         from sqlalchemy import select
+
         async with get_session() as session:
             result = await session.execute(
                 select(APIKey).where(

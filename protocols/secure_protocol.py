@@ -28,10 +28,10 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 STP_VERSION = 2
-FRAME_MAGIC = b"\xCA\xFE\xC0\xDE"   # 4-byte frame header magic
-NONCE_SIZE = 16                       # bytes
-SESSION_KEY_SIZE = 32                 # 256-bit
-MAC_SIZE = 32                         # HMAC-SHA256
+FRAME_MAGIC = b"\xca\xfe\xc0\xde"  # 4-byte frame header magic
+NONCE_SIZE = 16  # bytes
+SESSION_KEY_SIZE = 32  # 256-bit
+MAC_SIZE = 32  # HMAC-SHA256
 MAX_FRAME_BODY_BYTES = 4 * 1024 * 1024  # 4 MB
 REPLAY_WINDOW_S = 30.0
 MIN_TLS_VERSION = "TLSv1.3"
@@ -47,7 +47,7 @@ MIN_TLS_VERSION = "TLSv1.3"
 #   4   body length (uint32, big-endian)
 #   N   body
 #  32   MAC (HMAC-SHA256 over all preceding bytes)
-FRAME_HEADER_SIZE = 4 + 1 + 1 + 2 + 8 + 4 + 16 + 4   # 40 bytes
+FRAME_HEADER_SIZE = 4 + 1 + 1 + 2 + 8 + 4 + 16 + 4  # 40 bytes
 
 
 # ---------------------------------------------------------------------------
@@ -110,9 +110,15 @@ class SessionNotEstablishedError(RuntimeError):
 @dataclass
 class SessionKeys:
     session_id: str = field(default_factory=lambda: str(uuid.uuid4()))
-    send_key: bytes = field(default_factory=lambda: secrets.token_bytes(SESSION_KEY_SIZE))
-    recv_key: bytes = field(default_factory=lambda: secrets.token_bytes(SESSION_KEY_SIZE))
-    mac_key: bytes = field(default_factory=lambda: secrets.token_bytes(SESSION_KEY_SIZE))
+    send_key: bytes = field(
+        default_factory=lambda: secrets.token_bytes(SESSION_KEY_SIZE)
+    )
+    recv_key: bytes = field(
+        default_factory=lambda: secrets.token_bytes(SESSION_KEY_SIZE)
+    )
+    mac_key: bytes = field(
+        default_factory=lambda: secrets.token_bytes(SESSION_KEY_SIZE)
+    )
     created_at: float = field(default_factory=time.time)
     rekey_after_s: float = 3600.0
 
@@ -198,17 +204,17 @@ class STPFrame:
             raise ValueError(f"Invalid frame magic: {magic.hex()}")
 
         version, flags = struct.unpack(">BB", data[4:6])
-        timestamp, = struct.unpack(">d", data[8:16])
-        seq_no, = struct.unpack(">I", data[16:20])
+        (timestamp,) = struct.unpack(">d", data[8:16])
+        (seq_no,) = struct.unpack(">I", data[16:20])
         nonce = data[20:36]
-        body_len, = struct.unpack(">I", data[36:40])
+        (body_len,) = struct.unpack(">I", data[36:40])
 
         expected_total = FRAME_HEADER_SIZE + body_len + MAC_SIZE
         if len(data) < expected_total:
             raise ValueError("Truncated frame")
 
-        body = data[FRAME_HEADER_SIZE: FRAME_HEADER_SIZE + body_len]
-        mac = data[FRAME_HEADER_SIZE + body_len: expected_total]
+        body = data[FRAME_HEADER_SIZE : FRAME_HEADER_SIZE + body_len]
+        mac = data[FRAME_HEADER_SIZE + body_len : expected_total]
 
         return cls(
             version=version,
@@ -239,7 +245,9 @@ class FrameCodec:
         header_plus_body = frame.header_bytes() + frame.body
         expected_mac = hmac.new(self._keys.mac_key, header_plus_body, "sha256").digest()
         if not hmac.compare_digest(expected_mac, frame.mac):
-            raise MACVerificationError("Frame MAC verification failed — possible tampering")
+            raise MACVerificationError(
+                "Frame MAC verification failed — possible tampering"
+            )
         return frame
 
 
@@ -256,7 +264,7 @@ class ReplayGuard:
 
     def __init__(self, window_s: float = REPLAY_WINDOW_S):
         self._window_s = window_s
-        self._seen: dict[int, float] = {}   # seq_no → timestamp
+        self._seen: dict[int, float] = {}  # seq_no → timestamp
 
     def check(self, seq_no: int, timestamp: float) -> None:
         now = time.time()
@@ -267,7 +275,9 @@ class ReplayGuard:
             )
 
         if seq_no in self._seen:
-            raise ReplayAttackError(f"Duplicate sequence number {seq_no} — replay detected")
+            raise ReplayAttackError(
+                f"Duplicate sequence number {seq_no} — replay detected"
+            )
 
         # Evict old entries
         cutoff = now - self._window_s
@@ -406,7 +416,9 @@ class SecureSession:
         if self._state != SessionState.ESTABLISHED:
             raise SessionNotEstablishedError(f"Session state is {self._state}")
         if self._keys.should_rekey:
-            logger.warning("Session %s should rekey — key material is stale", self.session_id[:8])
+            logger.warning(
+                "Session %s should rekey — key material is stale", self.session_id[:8]
+            )
         self._send_seq += 1
         frame_bytes = self._codec.encode(payload, flags=flags, seq=self._send_seq)
         self._bytes_sent += len(frame_bytes)

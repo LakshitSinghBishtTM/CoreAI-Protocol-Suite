@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from loguru import logger
@@ -36,7 +36,7 @@ class AIKernel:
             name="consciousness-monitor",
         )
 
-        self._booted_at = datetime.utcnow()
+        self._booted_at = datetime.now(timezone.utc)
         logger.info("AIKernel boot complete")
 
     async def shutdown(self):
@@ -137,7 +137,7 @@ class AIKernel:
         agent = {
             "id": agent_id,
             "objective": objective,
-            "created_at": datetime.utcnow().isoformat(),
+            "created_at": datetime.now(timezone.utc).isoformat(),
             "status": "idle",
             "consciousness_score": 0.0,
             "self_reference_count": 0,
@@ -172,7 +172,7 @@ class AIKernel:
     def uptime_seconds(self) -> Optional[float]:
         if not self._booted_at:
             return None
-        return (datetime.utcnow() - self._booted_at).total_seconds()
+        return (datetime.now(timezone.utc) - self._booted_at).total_seconds()
 
     def get_kernel_status(self) -> dict:
         return {

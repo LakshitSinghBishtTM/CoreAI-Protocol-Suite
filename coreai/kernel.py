@@ -6,14 +6,14 @@ All subsystems route through the kernel.
 
 import asyncio
 import signal
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from loguru import logger
 
-from .memory_manager import MemoryManager
-from .orchestrator import Orchestrator
 from .router import Router
+from .orchestrator import Orchestrator
+from .memory_manager import MemoryManager
 from .scheduler import Scheduler
 
 
@@ -60,7 +60,7 @@ class Kernel:
         logger.debug("  Scheduler — up")
 
         self.state = KernelState.RUNNING
-        self.started_at = datetime.utcnow()
+        self.started_at = datetime.now(timezone.utc)
 
         self._register_signals()
         logger.info(f"Kernel running (providers: {list(self.router.providers)})")
@@ -110,7 +110,7 @@ class Kernel:
     def uptime_seconds(self) -> Optional[float]:
         if not self.started_at:
             return None
-        return (datetime.utcnow() - self.started_at).total_seconds()
+        return (datetime.now(timezone.utc) - self.started_at).total_seconds()
 
     def health(self) -> dict:
         return {

@@ -133,7 +133,9 @@ class ValidationStage(PipelineStage):
     async def process(self, request: EngineRequest) -> EngineRequest:
         missing = self._REQUIRED_FIELDS - set(request.payload.keys())
         if missing:
-            raise ValueError(f"Request {request.request_id[:8]} missing fields: {missing}")
+            raise ValueError(
+                f"Request {request.request_id[:8]} missing fields: {missing}"
+            )
         return request
 
 
@@ -159,7 +161,9 @@ class GPUPreprocessStage(PipelineStage):
             return request
         # Token pre-processing hook; payload may carry raw token ids for reuse
         if "token_ids" in request.payload:
-            processed = self._processor.process_token_batch(request.payload["token_ids"])
+            processed = self._processor.process_token_batch(
+                request.payload["token_ids"]
+            )
             request.payload["token_ids"] = processed
             request.metadata["gpu_preprocessed"] = True
         return request
@@ -230,7 +234,9 @@ class RuntimeEngine:
             return
 
         self._state = EngineState.INITIALIZING
-        logger.info("RuntimeEngine %s starting (v%s)...", self._engine_id, ENGINE_VERSION)
+        logger.info(
+            "RuntimeEngine %s starting (v%s)...", self._engine_id, ENGINE_VERSION
+        )
 
         self._semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
 

@@ -18,10 +18,10 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.pool import NullPool, AsyncAdaptedQueuePool
 from sqlalchemy import text
 
-
 # ------------------------------------------------------------------ #
 # Connection URL construction
 # ------------------------------------------------------------------ #
+
 
 def _build_url() -> str:
     """
@@ -38,12 +38,12 @@ def _build_url() -> str:
         return url
 
     # Individual env vars (matches database.yml layout)
-    engine   = os.getenv("DB_ENGINE", "sqlite")
-    host     = os.getenv("DB_HOST", "localhost")
-    port     = os.getenv("DB_PORT", "5432")
-    user     = os.getenv("DB_USER", "postgres")
+    engine = os.getenv("DB_ENGINE", "sqlite")
+    host = os.getenv("DB_HOST", "localhost")
+    port = os.getenv("DB_PORT", "5432")
+    user = os.getenv("DB_USER", "postgres")
     password = os.getenv("DB_PASSWORD", "postgres")
-    name     = os.getenv("DB_NAME", "coreai_dev")
+    name = os.getenv("DB_NAME", "coreai_dev")
 
     if engine == "sqlite":
         path = os.getenv("DB_PATH", "/tmp/coreai_dev.db")
@@ -108,7 +108,9 @@ def init_db(
         autocommit=False,
     )
 
-    logger.info(f"Database engine initialized: {db_url.split('@')[-1]}")  # no creds in log
+    logger.info(
+        f"Database engine initialized: {db_url.split('@')[-1]}"
+    )  # no creds in log
     return _engine
 
 
@@ -125,6 +127,7 @@ async def close_db():
 # ------------------------------------------------------------------ #
 # Session context manager
 # ------------------------------------------------------------------ #
+
 
 @asynccontextmanager
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
@@ -147,6 +150,7 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
 # ------------------------------------------------------------------ #
 # Health check
 # ------------------------------------------------------------------ #
+
 
 async def ping() -> bool:
     """Verify database connectivity. Returns True if reachable."""

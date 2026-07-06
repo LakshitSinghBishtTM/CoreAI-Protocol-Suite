@@ -7,32 +7,31 @@ from dataclasses import dataclass, field
 from datetime import datetime, date
 from typing import Optional
 
-
 # Per-token pricing (USD) by provider + model
 # Input/output prices per token (not per 1k — multiply accordingly)
 PRICING: dict[str, dict[str, dict[str, float]]] = {
     "openai": {
-        "gpt-4o":          {"input": 0.000005,   "output": 0.000015},
-        "gpt-4o-mini":     {"input": 0.00000015, "output": 0.0000006},
-        "gpt-4-turbo":     {"input": 0.00001,    "output": 0.00003},
-        "gpt-3.5-turbo":   {"input": 0.0000005,  "output": 0.0000015},
+        "gpt-4o": {"input": 0.000005, "output": 0.000015},
+        "gpt-4o-mini": {"input": 0.00000015, "output": 0.0000006},
+        "gpt-4-turbo": {"input": 0.00001, "output": 0.00003},
+        "gpt-3.5-turbo": {"input": 0.0000005, "output": 0.0000015},
     },
     "anthropic": {
-        "claude-opus-4-5":   {"input": 0.000015,  "output": 0.000075},
-        "claude-sonnet-4-5": {"input": 0.000003,  "output": 0.000015},
-        "claude-haiku-4-5":  {"input": 0.0000008, "output": 0.000004},
+        "claude-opus-4-5": {"input": 0.000015, "output": 0.000075},
+        "claude-sonnet-4-5": {"input": 0.000003, "output": 0.000015},
+        "claude-haiku-4-5": {"input": 0.0000008, "output": 0.000004},
     },
     "gemini": {
-        "gemini-2.0-flash":  {"input": 0.0000001,  "output": 0.0000004},
-        "gemini-1.5-pro":    {"input": 0.00000125, "output": 0.000005},
-        "gemini-1.5-flash":  {"input": 0.000000075,"output": 0.0000003},
+        "gemini-2.0-flash": {"input": 0.0000001, "output": 0.0000004},
+        "gemini-1.5-pro": {"input": 0.00000125, "output": 0.000005},
+        "gemini-1.5-flash": {"input": 0.000000075, "output": 0.0000003},
     },
     "grok": {
-        "grok-2":            {"input": 0.000002, "output": 0.000010},
-        "grok-2-mini":       {"input": 0.0000002,"output": 0.000002},
+        "grok-2": {"input": 0.000002, "output": 0.000010},
+        "grok-2-mini": {"input": 0.0000002, "output": 0.000002},
     },
     "deepseek": {
-        "deepseek-chat":     {"input": 0.00000027, "output": 0.0000011},
+        "deepseek-chat": {"input": 0.00000027, "output": 0.0000011},
         "deepseek-reasoner": {"input": 0.00000055, "output": 0.00000219},
     },
 }
@@ -54,8 +53,7 @@ def calculate_cost(
     provider_pricing = PRICING.get(provider, {})
     model_pricing = provider_pricing.get(model, DEFAULT_PRICING)
     return (
-        input_tokens  * model_pricing["input"] +
-        output_tokens * model_pricing["output"]
+        input_tokens * model_pricing["input"] + output_tokens * model_pricing["output"]
     )
 
 
@@ -119,12 +117,14 @@ def format_cost(cost_usd: float) -> str:
 # Budget tracker — per-session spend accumulator
 # ------------------------------------------------------------------ #
 
+
 @dataclass
 class BudgetTracker:
     """
     Tracks cumulative spend for a session, agent, or deployment.
     Raises BudgetExceededError when hard limit is hit.
     """
+
     hard_limit_usd: Optional[float] = None
     warn_at_usd: Optional[float] = None
 
@@ -147,7 +147,11 @@ class BudgetTracker:
         self._total_input_tokens += input_tokens
         self._total_output_tokens += output_tokens
 
-        if self.warn_at_usd and not self._warned and self._total_cost >= self.warn_at_usd:
+        if (
+            self.warn_at_usd
+            and not self._warned
+            and self._total_cost >= self.warn_at_usd
+        ):
             self._warned = True
             # Caller should check warned flag and surface this
         if self.hard_limit_usd and self._total_cost >= self.hard_limit_usd:
@@ -185,7 +189,8 @@ class BudgetTracker:
             "warn_at_usd": self.warn_at_usd,
             "budget_remaining_usd": (
                 round(self.hard_limit_usd - self._total_cost, 6)
-                if self.hard_limit_usd else None
+                if self.hard_limit_usd
+                else None
             ),
         }
 

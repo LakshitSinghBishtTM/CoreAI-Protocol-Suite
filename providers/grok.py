@@ -3,6 +3,7 @@ providers/grok.py
 
 Grok uses an OpenAI-compatible API, just a different base URL and models.
 """
+
 import importlib
 import time
 from typing import AsyncGenerator
@@ -16,11 +17,11 @@ AsyncOpenAI = importlib.import_module("openai").AsyncOpenAI
 from .base import BaseProvider, CompletionRequest, CompletionResponse
 
 GROK_PRICING = {
-    "grok-3":           {"input": 0.000003,  "output": 0.000015},
-    "grok-3-fast":      {"input": 0.000005,  "output": 0.000025},
-    "grok-3-mini":      {"input": 0.0000003, "output": 0.0000005},
+    "grok-3": {"input": 0.000003, "output": 0.000015},
+    "grok-3-fast": {"input": 0.000005, "output": 0.000025},
+    "grok-3-mini": {"input": 0.0000003, "output": 0.0000005},
     "grok-3-mini-fast": {"input": 0.0000006, "output": 0.000004},
-    "grok-2-vision":    {"input": 0.000002,  "output": 0.000010},
+    "grok-2-vision": {"input": 0.000002, "output": 0.000010},
 }
 
 

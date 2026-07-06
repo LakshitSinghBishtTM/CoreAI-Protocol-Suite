@@ -49,9 +49,9 @@ class MessageType(str, Enum):
 
 
 class DeliveryMode(str, Enum):
-    AT_MOST_ONCE = "at_most_once"    # fire and forget
+    AT_MOST_ONCE = "at_most_once"  # fire and forget
     AT_LEAST_ONCE = "at_least_once"  # retried until ack
-    EXACTLY_ONCE = "exactly_once"    # deduped + ack
+    EXACTLY_ONCE = "exactly_once"  # deduped + ack
 
 
 class AgentCapability(str, Enum):
@@ -80,8 +80,8 @@ class MessageEnvelope:
     protocol_version: str = PROTOCOL_VERSION
     msg_type: MessageType = MessageType.TASK_ASSIGN
     sender_id: str = ""
-    recipient_id: str = ""          # empty = broadcast
-    correlation_id: Optional[str] = None   # links replies to requests
+    recipient_id: str = ""  # empty = broadcast
+    correlation_id: Optional[str] = None  # links replies to requests
     delivery_mode: DeliveryMode = DeliveryMode.AT_LEAST_ONCE
     created_at: float = field(default_factory=time.time)
     ttl_s: float = 60.0
@@ -161,7 +161,7 @@ class AgentMessageRouter:
         self._queues: dict[str, asyncio.Queue] = {}
         self._broadcast_handlers: list[Callable] = []
         self._pending_acks: dict[str, asyncio.Future] = {}
-        self._delivered: set[str] = set()   # for exactly-once dedup
+        self._delivered: set[str] = set()  # for exactly-once dedup
 
     def register_agent(self, agent_id: str) -> asyncio.Queue:
         if agent_id not in self._queues:
@@ -201,7 +201,8 @@ class AgentMessageRouter:
         if queue is None:
             logger.warning(
                 "No queue for recipient %s — dropping message %s",
-                envelope.recipient_id, envelope.msg_id[:8],
+                envelope.recipient_id,
+                envelope.msg_id[:8],
             )
             return
         await queue.put(envelope)
@@ -215,7 +216,9 @@ class AgentMessageRouter:
                 try:
                     queue.put_nowait(envelope)
                 except asyncio.QueueFull:
-                    logger.warning("Queue full for agent %s — broadcast dropped", agent_id)
+                    logger.warning(
+                        "Queue full for agent %s — broadcast dropped", agent_id
+                    )
 
     async def _await_ack(self, envelope: MessageEnvelope) -> None:
         loop = asyncio.get_event_loop()
@@ -273,10 +276,7 @@ class CapabilityRegistry:
         capability: AgentCapability,
         region: Optional[str] = None,
     ) -> list[AgentCapabilityRecord]:
-        results = [
-            r for r in self._records.values()
-            if capability in r.capabilities
-        ]
+        results = [r for r in self._records.values() if capability in r.capabilities]
         if region:
             results = [r for r in results if r.region == region]
         return sorted(results, key=lambda r: r.max_concurrent_tasks, reverse=True)

@@ -201,7 +201,9 @@ class DistributedCoordinator:
         self._running = True
         self._heartbeat_task = asyncio.create_task(self._heartbeat_loop())
         logger.info(
-            "DistributedCoordinator started on %s:%d", COORDINATOR_HOST, COORDINATOR_PORT
+            "DistributedCoordinator started on %s:%d",
+            COORDINATOR_HOST,
+            COORDINATOR_PORT,
         )
 
     async def stop(self) -> None:
@@ -287,7 +289,10 @@ class DistributedCoordinator:
                 self._stats["dispatched"] += 1
 
                 logger.debug(
-                    "Task %s → node %s (attempt %d)", task.task_id[:8], node.node_id, task.attempt
+                    "Task %s → node %s (attempt %d)",
+                    task.task_id[:8],
+                    node.node_id,
+                    task.attempt,
                 )
 
                 # Simulate dispatch over internal RPC (real impl would be gRPC/HTTP)
@@ -317,10 +322,13 @@ class DistributedCoordinator:
                 if attempt < max_attempts - 1:
                     task.status = TaskStatus.RETRYING
                     self._stats["retried"] += 1
-                    backoff = 0.5 * (2 ** attempt)
+                    backoff = 0.5 * (2**attempt)
                     logger.warning(
                         "Task %s failed (attempt %d): %s — retrying in %.1fs",
-                        task.task_id[:8], attempt + 1, exc, backoff,
+                        task.task_id[:8],
+                        attempt + 1,
+                        exc,
+                        backoff,
                     )
                     await asyncio.sleep(backoff)
                 else:
@@ -353,11 +361,15 @@ class DistributedCoordinator:
                 if age > NODE_TIMEOUT_S and node.status != NodeStatus.OFFLINE:
                     node.status = NodeStatus.OFFLINE
                     logger.warning(
-                        "Node %s marked OFFLINE (no heartbeat for %.0fs)", node.node_id, age
+                        "Node %s marked OFFLINE (no heartbeat for %.0fs)",
+                        node.node_id,
+                        age,
                     )
                 elif age > NODE_TIMEOUT_S * 0.6 and node.status == NodeStatus.ONLINE:
                     node.status = NodeStatus.DEGRADED
-                    logger.warning("Node %s DEGRADED (heartbeat age %.0fs)", node.node_id, age)
+                    logger.warning(
+                        "Node %s DEGRADED (heartbeat age %.0fs)", node.node_id, age
+                    )
 
     # ------------------------------------------------------------------
     # Stats / introspection
@@ -377,8 +389,12 @@ class DistributedCoordinator:
             },
             "tasks": {
                 "total": len(self._tasks),
-                "pending": sum(1 for t in self._tasks.values() if t.status == TaskStatus.PENDING),
-                "running": sum(1 for t in self._tasks.values() if t.status == TaskStatus.RUNNING),
+                "pending": sum(
+                    1 for t in self._tasks.values() if t.status == TaskStatus.PENDING
+                ),
+                "running": sum(
+                    1 for t in self._tasks.values() if t.status == TaskStatus.RUNNING
+                ),
                 "completed": self._stats["completed"],
                 "failed": self._stats["failed"],
                 "retried": self._stats["retried"],

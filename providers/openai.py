@@ -1,6 +1,7 @@
 """
 providers/openai.py
 """
+
 import importlib
 import queue
 import threading
@@ -17,12 +18,12 @@ AsyncOpenAI = importlib.import_module("openai").AsyncOpenAI
 from .base import BaseProvider, CompletionRequest, CompletionResponse
 
 OPENAI_PRICING = {
-    "gpt-4o":       {"input": 0.000005,   "output": 0.000015},
-    "gpt-4o-mini":  {"input": 0.00000015, "output": 0.0000006},
-    "gpt-4-turbo":  {"input": 0.00001,    "output": 0.00003},
-    "gpt-3.5-turbo":{"input": 0.0000005,  "output": 0.0000015},
-    "o1":           {"input": 0.000015,   "output": 0.000060},
-    "o1-mini":      {"input": 0.000003,   "output": 0.000012},
+    "gpt-4o": {"input": 0.000005, "output": 0.000015},
+    "gpt-4o-mini": {"input": 0.00000015, "output": 0.0000006},
+    "gpt-4-turbo": {"input": 0.00001, "output": 0.00003},
+    "gpt-3.5-turbo": {"input": 0.0000005, "output": 0.0000015},
+    "o1": {"input": 0.000015, "output": 0.000060},
+    "o1-mini": {"input": 0.000003, "output": 0.000012},
 }
 
 # tiktoken.encoding_for_model() downloads its BPE rank file over the network

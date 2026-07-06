@@ -4,8 +4,10 @@ from setuptools import setup, find_packages
 
 ROOT = Path(__file__).parent
 
+
 def read(filename):
     return (ROOT / filename).read_text(encoding="utf-8")
+
 
 def parse_requirements(filename):
     if not (ROOT / filename).exists():
@@ -16,6 +18,7 @@ def parse_requirements(filename):
         for line in lines
         if line.strip() and not line.startswith("#") and not line.startswith("-")
     ]
+
 
 # Load version from _version.py
 VERSION = {}
@@ -35,8 +38,8 @@ setup(
     author_email="lakshit@coreai.dev",
     url="https://github.com/LakshitSinghBishtTM/CoreAI-Protocol-Suite",
     project_urls={
-        "Bug Tracker":   "https://github.com/LakshitSinghBishtTM/CoreAIProtocolSuite/issues",
-        "Changelog":     "https://github.com/LakshitSinghBishtTM/CoreAIProtocolSuite/blob/main/CHANGELOG.md",
+        "Bug Tracker": "https://github.com/LakshitSinghBishtTM/CoreAIProtocolSuite/issues",
+        "Changelog": "https://github.com/LakshitSinghBishtTM/CoreAIProtocolSuite/blob/main/CHANGELOG.md",
         "Documentation": "https://docs.coreai.dev",
     },
     license="GPL-3.0",
@@ -86,8 +89,17 @@ setup(
         "Typing :: Typed",
     ],
     keywords=[
-        "llm", "ai", "routing", "orchestration", "openai", "anthropic",
-        "gemini", "agents", "inference", "production", "mlops",
+        "llm",
+        "ai",
+        "routing",
+        "orchestration",
+        "openai",
+        "anthropic",
+        "gemini",
+        "agents",
+        "inference",
+        "production",
+        "mlops",
     ],
     zip_safe=False,
 )

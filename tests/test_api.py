@@ -16,11 +16,13 @@ from jose import jwt
 # auth.py tests
 # ---------------------------------------------------------------------------
 
+
 class TestCreateAccessToken:
 
     def test_token_contains_subject(self, monkeypatch):
         monkeypatch.setenv("SECRET_KEY", "test-secret-key-fixture")
         from auth import create_access_token
+
         token = create_access_token("user:ajay", ["completions:read"])
         payload = jwt.decode(token, "test-secret-key-fixture", algorithms=["HS256"])
         assert payload["sub"] == "user:ajay"
@@ -28,6 +30,7 @@ class TestCreateAccessToken:
     def test_token_contains_scopes(self, monkeypatch):
         monkeypatch.setenv("SECRET_KEY", "test-secret-key-fixture")
         from auth import create_access_token
+
         token = create_access_token("svc:gateway", ["completions:write", "tasks:read"])
         payload = jwt.decode(token, "test-secret-key-fixture", algorithms=["HS256"])
         assert "completions:write" in payload["scopes"]
@@ -36,14 +39,17 @@ class TestCreateAccessToken:
     def test_token_has_exp(self, monkeypatch):
         monkeypatch.setenv("SECRET_KEY", "test-secret-key-fixture")
         from auth import create_access_token
+
         token = create_access_token("user:test", [])
         payload = jwt.decode(token, "test-secret-key-fixture", algorithms=["HS256"])
         assert "exp" in payload
 
     def test_custom_expiry(self, monkeypatch):
         import time
+
         monkeypatch.setenv("SECRET_KEY", "test-secret-key-fixture")
         from auth import create_access_token
+
         token = create_access_token("u", [], expires_delta=timedelta(seconds=10))
         payload = jwt.decode(token, "test-secret-key-fixture", algorithms=["HS256"])
         assert payload["exp"] - payload["iat"] == pytest.approx(10, abs=2)
@@ -54,6 +60,7 @@ class TestDecodeToken:
     def test_valid_token_decodes(self, monkeypatch):
         monkeypatch.setenv("SECRET_KEY", "test-secret-key-fixture")
         from auth import create_access_token, decode_token
+
         token = create_access_token("user:ajay", ["admin"])
         payload = decode_token(token)
         assert payload.sub == "user:ajay"
@@ -61,8 +68,10 @@ class TestDecodeToken:
 
     def test_expired_token_raises_401(self, monkeypatch):
         from fastapi import HTTPException
+
         monkeypatch.setenv("SECRET_KEY", "test-secret-key-fixture")
         from auth import create_access_token, decode_token
+
         token = create_access_token("u", [], expires_delta=timedelta(seconds=-1))
         with pytest.raises(HTTPException) as exc_info:
             decode_token(token)
@@ -70,8 +79,10 @@ class TestDecodeToken:
 
     def test_tampered_token_raises_401(self, monkeypatch):
         from fastapi import HTTPException
+
         monkeypatch.setenv("SECRET_KEY", "test-secret-key-fixture")
         from auth import decode_token
+
         with pytest.raises(HTTPException) as exc_info:
             decode_token("not.a.valid.token")
         assert exc_info.value.status_code == 401
@@ -83,6 +94,7 @@ class TestValidateApiKey:
         monkeypatch.setenv("SECRET_KEY", "test-secret-key-fixture")
         import hashlib
         from auth import validate_api_key
+
         raw = "cai-R7mNqP2wLkT9vX4hF"
         h = hashlib.sha256(raw.encode()).hexdigest()
         store = {h: {"owner": "ajay", "scopes": ["completions:write"]}}
@@ -94,6 +106,7 @@ class TestValidateApiKey:
     def test_unknown_key_returns_none(self, monkeypatch):
         monkeypatch.setenv("SECRET_KEY", "test-secret-key-fixture")
         from auth import validate_api_key
+
         ctx = validate_api_key("cai-badkey", {})
         assert ctx is None
 
@@ -103,19 +116,23 @@ class TestAuthContext:
     def test_require_scope_passes_with_matching_scope(self, monkeypatch):
         monkeypatch.setenv("SECRET_KEY", "test-secret-key-fixture")
         from auth import AuthContext
+
         ctx = AuthContext(subject="ajay", scopes=["completions:write"])
         ctx.require_scope("completions:write")  # should not raise
 
     def test_require_scope_passes_with_admin(self, monkeypatch):
         monkeypatch.setenv("SECRET_KEY", "test-secret-key-fixture")
         from auth import AuthContext
+
         ctx = AuthContext(subject="ajay", scopes=["admin"])
         ctx.require_scope("completions:write")  # admin overrides
 
     def test_require_scope_raises_403_on_missing(self, monkeypatch):
         from fastapi import HTTPException
+
         monkeypatch.setenv("SECRET_KEY", "test-secret-key-fixture")
         from auth import AuthContext
+
         ctx = AuthContext(subject="limited", scopes=["completions:read"])
         with pytest.raises(HTTPException) as exc_info:
             ctx.require_scope("completions:write")
@@ -126,10 +143,12 @@ class TestAuthContext:
 # middleware.py tests
 # ---------------------------------------------------------------------------
 
+
 class TestRateLimitMiddleware:
 
     def test_check_rate_limit_allows_under_limit(self):
         from middleware import RateLimitMiddleware
+
         mw = RateLimitMiddleware.__new__(RateLimitMiddleware)
         mw.rpm = 5
         mw._windows = {}
@@ -139,6 +158,7 @@ class TestRateLimitMiddleware:
 
     def test_check_rate_limit_blocks_at_limit(self):
         from middleware import RateLimitMiddleware
+
         mw = RateLimitMiddleware.__new__(RateLimitMiddleware)
         mw.rpm = 3
         mw._windows = {}
@@ -150,6 +170,7 @@ class TestRateLimitMiddleware:
 
     def test_remaining_decreases_with_requests(self):
         from middleware import RateLimitMiddleware
+
         mw = RateLimitMiddleware.__new__(RateLimitMiddleware)
         mw.rpm = 10
         mw._windows = {}
@@ -160,14 +181,18 @@ class TestRateLimitMiddleware:
 
     def test_api_key_used_as_client_key(self):
         from middleware import RateLimitMiddleware
+
         mw = RateLimitMiddleware.__new__(RateLimitMiddleware)
         req = MagicMock()
-        req.headers.get = lambda k: "cai-R7mNqP2wLkT9vX4hF" if k == "X-API-Key" else None
+        req.headers.get = lambda k: (
+            "cai-R7mNqP2wLkT9vX4hF" if k == "X-API-Key" else None
+        )
         key = mw._get_client_key(req)
         assert key.startswith("key:")
 
     def test_ip_used_as_fallback_client_key(self):
         from middleware import RateLimitMiddleware
+
         mw = RateLimitMiddleware.__new__(RateLimitMiddleware)
         req = MagicMock()
         req.headers.get = lambda k: None
@@ -180,15 +205,18 @@ class TestRateLimitMiddleware:
 # HMAC webhook signing
 # ---------------------------------------------------------------------------
 
+
 class TestWebhookSigning:
 
     def test_valid_signature_returns_true(self, monkeypatch):
         import hashlib
         import hmac
         import time
+
         monkeypatch.setenv("SECRET_KEY", "test-secret-key-fixture")
         monkeypatch.setenv("WEBHOOK_SIGNING_SECRET", "webhook-secret-fixture")
         from auth import verify_request_signature
+
         payload = b'{"event": "task.completed"}'
         ts = str(int(time.time()))
         signed = f"{ts}.{payload.decode()}".encode()
@@ -197,9 +225,11 @@ class TestWebhookSigning:
 
     def test_wrong_signature_returns_false(self, monkeypatch):
         import time
+
         monkeypatch.setenv("SECRET_KEY", "test-secret-key-fixture")
         monkeypatch.setenv("WEBHOOK_SIGNING_SECRET", "webhook-secret-fixture")
         from auth import verify_request_signature
+
         payload = b'{"event": "task.completed"}'
         ts = str(int(time.time()))
         assert verify_request_signature(payload, "badsignature", ts) is False
@@ -208,6 +238,7 @@ class TestWebhookSigning:
         monkeypatch.setenv("SECRET_KEY", "test-secret-key-fixture")
         monkeypatch.setenv("WEBHOOK_SIGNING_SECRET", "webhook-secret-fixture")
         from auth import verify_request_signature
+
         old_ts = str(int(1_000_000))  # very old
         assert verify_request_signature(b"payload", "sig", old_ts) is False
 
@@ -215,4 +246,5 @@ class TestWebhookSigning:
         monkeypatch.setenv("SECRET_KEY", "test-secret-key-fixture")
         monkeypatch.setenv("WEBHOOK_SIGNING_SECRET", "webhook-secret-fixture")
         from auth import verify_request_signature
+
         assert verify_request_signature(b"data", "sig", "not-a-number") is False

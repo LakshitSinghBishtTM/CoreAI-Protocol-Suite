@@ -4,6 +4,7 @@ providers/deepseek.py
 DeepSeek uses an OpenAI-compatible API, so we use the openai SDK
 pointed at DeepSeek's base URL.
 """
+
 import importlib
 import time
 from typing import AsyncGenerator
@@ -17,7 +18,7 @@ AsyncOpenAI = importlib.import_module("openai").AsyncOpenAI
 from .base import BaseProvider, CompletionRequest, CompletionResponse
 
 DEEPSEEK_PRICING = {
-    "deepseek-chat":     {"input": 0.00000027, "output": 0.0000011},
+    "deepseek-chat": {"input": 0.00000027, "output": 0.0000011},
     "deepseek-reasoner": {"input": 0.00000055, "output": 0.00000219},
 }
 

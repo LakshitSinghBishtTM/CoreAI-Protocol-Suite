@@ -17,7 +17,6 @@ from dataclasses import dataclass, field
 
 import httpx
 
-
 DEFAULT_URL = "http://localhost:6389"
 DEFAULT_PROMPT = "Explain what an API is in one sentence."
 
@@ -145,9 +144,12 @@ async def run_benchmark(
     async with httpx.AsyncClient() as client:
         tasks = [
             single_request(
-                client, url,
+                client,
+                url,
                 PROMPTS[i % len(PROMPTS)],
-                provider, result, semaphore,
+                provider,
+                result,
+                semaphore,
             )
             for i in range(n_requests)
         ]

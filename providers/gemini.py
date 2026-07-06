@@ -65,7 +65,9 @@ class GeminiProvider(BaseProvider):
             latency_ms=latency_ms,
         )
         self._track(result)
-        logger.debug(f"[gemini] {model} | {input_tokens}in {output_tokens}out | ${cost:.6f} | {latency_ms:.0f}ms")
+        logger.debug(
+            f"[gemini] {model} | {input_tokens}in {output_tokens}out | ${cost:.6f} | {latency_ms:.0f}ms"
+        )
         return result
 
     async def stream(self, request: CompletionRequest) -> AsyncGenerator[str, None]:

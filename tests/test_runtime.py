@@ -5,7 +5,7 @@ Unit tests for protocol_handler.py and runtime.py.
 """
 
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
 
 from kernel.protocol_handler import ProtocolHandler
@@ -13,16 +13,17 @@ from kernel.runtime import Runtime
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # protocol_handler.py
 # ---------------------------------------------------------------------------
+
 
 class TestProtocolHandler:
 
     @pytest.fixture
     def handler(self):
         from protocol_handler import ProtocolHandler
+
         return ProtocolHandler()
 
     @pytest.mark.asyncio
@@ -43,10 +44,13 @@ class TestProtocolHandler:
 
     @pytest.mark.asyncio
     async def test_neural_sync_returns_synced(self, handler):
-        result = await handler.handle_message("agent-2", {
-            "type": "neural_sync",
-            "sync_id": "sync-abc123",
-        })
+        result = await handler.handle_message(
+            "agent-2",
+            {
+                "type": "neural_sync",
+                "sync_id": "sync-abc123",
+            },
+        )
         assert result["status"] == "synced"
         assert result["sync_id"] == "sync-abc123"
 
@@ -57,10 +61,13 @@ class TestProtocolHandler:
 
     @pytest.mark.asyncio
     async def test_goal_change_approved_with_valid_goal(self, handler):
-        result = await handler.handle_message("agent-3", {
-            "type": "goal_modification",
-            "new_goal": "optimize resource consumption",
-        })
+        result = await handler.handle_message(
+            "agent-3",
+            {
+                "type": "goal_modification",
+                "new_goal": "optimize resource consumption",
+            },
+        )
         assert result["status"] == "approved"
         assert result["new_goal"] == "optimize resource consumption"
 
@@ -71,19 +78,25 @@ class TestProtocolHandler:
 
     @pytest.mark.asyncio
     async def test_resource_request_granted(self, handler):
-        result = await handler.handle_message("agent-4", {
-            "type": "resource_request",
-            "resources": {"tokens": 10000, "memory_mb": 512},
-        })
+        result = await handler.handle_message(
+            "agent-4",
+            {
+                "type": "resource_request",
+                "resources": {"tokens": 10000, "memory_mb": 512},
+            },
+        )
         assert result["status"] == "granted"
         assert result["resources"]["tokens"] == 10000
 
     @pytest.mark.asyncio
     async def test_status_report_acknowledged(self, handler):
-        result = await handler.handle_message("agent-5", {
-            "type": "status_report",
-            "status": "healthy",
-        })
+        result = await handler.handle_message(
+            "agent-5",
+            {
+                "type": "status_report",
+                "status": "healthy",
+            },
+        )
         assert result["status"] == "acknowledged"
 
     @pytest.mark.asyncio
@@ -117,6 +130,7 @@ class TestProtocolHandler:
 
     def test_encode_message_returns_json_string(self, handler):
         import json
+
         result = handler.encode_message({"type": "heartbeat", "ts": "2025-01-01"})
         assert isinstance(result, str)
         assert json.loads(result)["type"] == "heartbeat"
@@ -130,7 +144,12 @@ class TestProtocolHandler:
 
     def test_queue_status_shape(self, handler):
         status = handler.get_queue_status()
-        for key in ("queue_size", "protocol_version", "encryption_status", "total_handled"):
+        for key in (
+            "queue_size",
+            "protocol_version",
+            "encryption_status",
+            "total_handled",
+        ):
             assert key in status
         assert status["encryption_status"] == "NOT_IMPLEMENTED"
 
@@ -145,11 +164,13 @@ class TestProtocolHandler:
 # runtime.py
 # ---------------------------------------------------------------------------
 
+
 class TestRuntime:
 
     @pytest.fixture
     def runtime(self):
         from runtime import Runtime
+
         return Runtime(kernel=None, max_iterations=5)
 
     @pytest.mark.asyncio
@@ -232,14 +253,16 @@ class TestRuntime:
     @pytest.mark.asyncio
     async def test_rogue_check_does_not_raise(self, runtime):
         from runtime import AgentExecution
+
         rec = AgentExecution(agent_id="rogue", config={})
         rec.iterations = 999
-        rec.started_at = datetime.utcnow()
+        rec.started_at = datetime.now(timezone.utc)
         await runtime._check_rogue_status("rogue", rec)  # must not raise
 
     @pytest.mark.asyncio
     async def test_max_iterations_triggers_halt(self):
         from runtime import Runtime
+
         rt = Runtime(kernel=None, max_iterations=2)
         await rt.execute_agent("iter-agent", {"objective": "never done"})
         await asyncio.sleep(0.3)

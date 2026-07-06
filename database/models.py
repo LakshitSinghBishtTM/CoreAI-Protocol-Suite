@@ -8,8 +8,15 @@ from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import (
-    String, Text, Float, Integer, Boolean,
-    DateTime, JSON, ForeignKey, Index,
+    String,
+    Text,
+    Float,
+    Integer,
+    Boolean,
+    DateTime,
+    JSON,
+    ForeignKey,
+    Index,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -22,6 +29,7 @@ class Base(DeclarativeBase):
 # request_logs — every completion request
 # ------------------------------------------------------------------ #
 
+
 class RequestLog(Base):
     __tablename__ = "request_logs"
 
@@ -30,7 +38,9 @@ class RequestLog(Base):
     )
     provider: Mapped[str] = mapped_column(String(32), nullable=False)
     model: Mapped[str] = mapped_column(String(64), nullable=False)
-    strategy: Mapped[str] = mapped_column(String(32), nullable=False, default="balanced")
+    strategy: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="balanced"
+    )
 
     input_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     output_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -68,11 +78,12 @@ class RequestLog(Base):
 # usage_daily — aggregated daily cost/usage per provider
 # ------------------------------------------------------------------ #
 
+
 class UsageDaily(Base):
     __tablename__ = "usage_daily"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    date: Mapped[str] = mapped_column(String(10), nullable=False)        # YYYY-MM-DD
+    date: Mapped[str] = mapped_column(String(10), nullable=False)  # YYYY-MM-DD
     provider: Mapped[str] = mapped_column(String(32), nullable=False)
 
     total_requests: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -106,6 +117,7 @@ class UsageDaily(Base):
 # agents — registered agent registry
 # ------------------------------------------------------------------ #
 
+
 class Agent(Base):
     __tablename__ = "agents"
 
@@ -133,6 +145,7 @@ class Agent(Base):
 # ------------------------------------------------------------------ #
 # tasks — persistent agent task records
 # ------------------------------------------------------------------ #
+
 
 class Task(Base):
     __tablename__ = "tasks"
@@ -187,6 +200,7 @@ class Task(Base):
 # api_keys — if you expose CoreAI as a service with auth
 # ------------------------------------------------------------------ #
 
+
 class APIKey(Base):
     __tablename__ = "api_keys"
 
@@ -206,9 +220,7 @@ class APIKey(Base):
     )
     expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
-    __table_args__ = (
-        Index("ix_api_keys_key_hash", "key_hash"),
-    )
+    __table_args__ = (Index("ix_api_keys_key_hash", "key_hash"),)
 
     def __repr__(self):
         return f"<APIKey {self.id[:8]} owner={self.owner} active={self.active}>"

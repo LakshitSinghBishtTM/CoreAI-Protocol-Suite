@@ -12,10 +12,10 @@ import pytest
 
 from coreai.cache import CacheBackend, MemoryCache, RedisCache, ResponseCache
 
-
 # ---------------------------------------------------------------------------
 # MemoryCache
 # ---------------------------------------------------------------------------
+
 
 class TestMemoryCache:
 
@@ -37,13 +37,19 @@ class TestMemoryCache:
     @pytest.mark.asyncio
     async def test_expired_entry_returns_none(self, cache):
         # Manually plant an already-expired entry
-        cache.store["key:expired"] = ({"data": "old"}, datetime.now() - timedelta(seconds=1))
+        cache.store["key:expired"] = (
+            {"data": "old"},
+            datetime.now() - timedelta(seconds=1),
+        )
         result = await cache.get("key:expired")
         assert result is None
 
     @pytest.mark.asyncio
     async def test_expired_entry_is_evicted(self, cache):
-        cache.store["key:expired"] = ({"data": "old"}, datetime.now() - timedelta(seconds=1))
+        cache.store["key:expired"] = (
+            {"data": "old"},
+            datetime.now() - timedelta(seconds=1),
+        )
         await cache.get("key:expired")
         assert "key:expired" not in cache.store
 
@@ -76,11 +82,13 @@ class TestMemoryCache:
 # RedisCache — fallback path (redis not available)
 # ---------------------------------------------------------------------------
 
+
 class TestRedisCacheFallback:
 
     @pytest.fixture
     def cache(self):
         from coreai.cache import RedisCache, MemoryCache
+
         c = RedisCache.__new__(RedisCache)
         c.redis = None
         c.fallback = MemoryCache()
@@ -173,8 +181,8 @@ class TestResponseCache:
     @pytest.mark.asyncio
     async def test_stats_hit_rate(self, rc):
         await rc.set("openai", "gpt-4o-mini", MESSAGES_A, RESPONSE_A)
-        await rc.get("openai", "gpt-4o-mini", MESSAGES_A)   # hit
-        await rc.get("openai", "gpt-4o-mini", MESSAGES_B)   # miss
+        await rc.get("openai", "gpt-4o-mini", MESSAGES_A)  # hit
+        await rc.get("openai", "gpt-4o-mini", MESSAGES_B)  # miss
         stats = rc.stats()
         assert stats["hit_rate_percent"] == 50.0
         assert stats["cache_hits"] == 1

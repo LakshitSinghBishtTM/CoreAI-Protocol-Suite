@@ -33,15 +33,15 @@ class TrainingStatus(str, Enum):
 
 
 class DatasetFormat(str, Enum):
-    CHAT = "chat"                   # {"messages": [...]} per line
-    COMPLETION = "completion"       # {"prompt": ..., "completion": ...}
-    PREFERENCE = "preference"       # {"chosen": ..., "rejected": ...} for DPO
+    CHAT = "chat"  # {"messages": [...]} per line
+    COMPLETION = "completion"  # {"prompt": ..., "completion": ...}
+    PREFERENCE = "preference"  # {"chosen": ..., "rejected": ...} for DPO
 
 
 class HyperparamPreset(str, Enum):
-    CONSERVATIVE = "conservative"   # low LR, high epochs — safest
-    BALANCED = "balanced"           # default recommendation
-    AGGRESSIVE = "aggressive"       # higher LR, fewer epochs — faster
+    CONSERVATIVE = "conservative"  # low LR, high epochs — safest
+    BALANCED = "balanced"  # default recommendation
+    AGGRESSIVE = "aggressive"  # higher LR, fewer epochs — faster
 
 
 # ---------------------------------------------------------------------------
@@ -51,8 +51,8 @@ class HyperparamPreset(str, Enum):
 
 @dataclass
 class TrainingExample:
-    messages: list[dict]            # [{"role": ..., "content": ...}]
-    weight: float = 1.0             # per-example loss weight
+    messages: list[dict]  # [{"role": ..., "content": ...}]
+    weight: float = 1.0  # per-example loss weight
 
     def validate(self) -> list[str]:
         errors = []
@@ -87,9 +87,13 @@ class TrainingDataset:
                 errors.append(f"example[{i}]: {err}")
 
         if len(self.examples) < 10:
-            warnings.append(f"Only {len(self.examples)} examples — recommended minimum is 50")
+            warnings.append(
+                f"Only {len(self.examples)} examples — recommended minimum is 50"
+            )
         if len(self.examples) > 50_000:
-            warnings.append("Large dataset (>50k examples) — training may take several hours")
+            warnings.append(
+                "Large dataset (>50k examples) — training may take several hours"
+            )
 
         return {
             "valid": len(errors) == 0,
@@ -98,7 +102,9 @@ class TrainingDataset:
             "warnings": warnings,
         }
 
-    def split(self, train_ratio: float = 0.9) -> tuple["TrainingDataset", "TrainingDataset"]:
+    def split(
+        self, train_ratio: float = 0.9
+    ) -> tuple["TrainingDataset", "TrainingDataset"]:
         split_idx = int(len(self.examples) * train_ratio)
         train = TrainingDataset(format=self.format, examples=self.examples[:split_idx])
         val = TrainingDataset(format=self.format, examples=self.examples[split_idx:])
@@ -126,9 +132,13 @@ class HyperparamConfig:
     @classmethod
     def from_preset(cls, preset: HyperparamPreset) -> "HyperparamConfig":
         if preset == HyperparamPreset.CONSERVATIVE:
-            return cls(n_epochs=5, learning_rate_multiplier=0.5, batch_size=2, warmup_steps=100)
+            return cls(
+                n_epochs=5, learning_rate_multiplier=0.5, batch_size=2, warmup_steps=100
+            )
         elif preset == HyperparamPreset.AGGRESSIVE:
-            return cls(n_epochs=2, learning_rate_multiplier=2.0, batch_size=8, warmup_steps=20)
+            return cls(
+                n_epochs=2, learning_rate_multiplier=2.0, batch_size=8, warmup_steps=20
+            )
         return cls()  # BALANCED defaults
 
 
@@ -246,7 +256,9 @@ class DatasetFormatter:
         # Anthropic fine-tune format (Messages API compatible)
         rows = []
         for ex in dataset.examples:
-            system = next((m["content"] for m in ex.messages if m["role"] == "system"), None)
+            system = next(
+                (m["content"] for m in ex.messages if m["role"] == "system"), None
+            )
             turns = [m for m in ex.messages if m["role"] != "system"]
             row: dict[str, Any] = {"messages": turns}
             if system:
@@ -293,7 +305,10 @@ class TrainingManager:
         try:
             logger.info(
                 "Submitting fine-tune job %s: base=%s provider=%s examples=%d",
-                job.job_id, config.base_model, config.provider, len(formatted),
+                job.job_id,
+                config.base_model,
+                config.provider,
+                len(formatted),
             )
             provider_response = await provider_client.create_fine_tune(
                 training_data=formatted,
@@ -307,7 +322,9 @@ class TrainingManager:
             )
             job.provider_job_id = provider_response.get("id")
             job.status = TrainingStatus.QUEUED
-            logger.info("Job %s submitted → provider ID: %s", job.job_id, job.provider_job_id)
+            logger.info(
+                "Job %s submitted → provider ID: %s", job.job_id, job.provider_job_id
+            )
 
         except Exception as exc:
             job.status = TrainingStatus.FAILED
@@ -326,13 +343,22 @@ class TrainingManager:
         job.trained_tokens = raw.get("trained_tokens", 0)
         job.fine_tuned_model = raw.get("fine_tuned_model")
 
-        if job.status in (TrainingStatus.SUCCEEDED, TrainingStatus.FAILED, TrainingStatus.CANCELLED):
+        if job.status in (
+            TrainingStatus.SUCCEEDED,
+            TrainingStatus.FAILED,
+            TrainingStatus.CANCELLED,
+        ):
             job.finished_at = time.time()
             if job.status == TrainingStatus.FAILED:
                 job.error = raw.get("error", {}).get("message", "Unknown error")
                 logger.error("Training job %s failed: %s", job_id, job.error)
             else:
-                logger.info("Training job %s → status=%s model=%s", job_id, job.status, job.fine_tuned_model)
+                logger.info(
+                    "Training job %s → status=%s model=%s",
+                    job_id,
+                    job.status,
+                    job.fine_tuned_model,
+                )
 
         return job
 
@@ -365,9 +391,13 @@ class TrainingManager:
         jobs = list(self._jobs.values())
         return {
             "total_jobs": len(jobs),
-            "by_status": {s.value: sum(1 for j in jobs if j.status == s) for s in TrainingStatus},
+            "by_status": {
+                s.value: sum(1 for j in jobs if j.status == s) for s in TrainingStatus
+            },
             "total_trained_tokens": sum(j.trained_tokens for j in jobs),
-            "estimated_total_cost_usd": round(sum(j.cost_estimate_usd for j in jobs), 4),
+            "estimated_total_cost_usd": round(
+                sum(j.cost_estimate_usd for j in jobs), 4
+            ),
         }
 
 

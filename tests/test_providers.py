@@ -18,10 +18,10 @@ from providers.base import (
 )
 from providers import load_providers
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def make_request(content="Hello", model=None, system=None):
     return CompletionRequest(
@@ -48,6 +48,7 @@ def make_response(provider="openai", model="gpt-4o-mini"):
 # ---------------------------------------------------------------------------
 # BaseProvider
 # ---------------------------------------------------------------------------
+
 
 class TestBaseProvider:
     """Tests for tracking/stats logic in BaseProvider."""
@@ -93,12 +94,14 @@ class TestBaseProvider:
 # OpenAIProvider
 # ---------------------------------------------------------------------------
 
+
 class TestOpenAIProvider:
 
     @pytest.fixture
     def provider(self):
         with patch("providers.openai.AsyncOpenAI"):
             from providers.openai import OpenAIProvider
+
             return OpenAIProvider(api_key="sk-test-key-openai-fixture")
 
     def test_name(self, provider):
@@ -157,12 +160,14 @@ class TestOpenAIProvider:
 # AnthropicProvider
 # ---------------------------------------------------------------------------
 
+
 class TestAnthropicProvider:
 
     @pytest.fixture
     def provider(self):
         with patch("providers.anthropic.sdk.AsyncAnthropic"):
             from providers.anthropic import AnthropicProvider
+
             return AnthropicProvider(api_key="sk-ant-api03-testkey-fixture")
 
     def test_name(self, provider):
@@ -210,12 +215,14 @@ class TestAnthropicProvider:
 # GeminiProvider
 # ---------------------------------------------------------------------------
 
+
 class TestGeminiProvider:
 
     @pytest.fixture
     def provider(self):
         with patch("providers.gemini.genai"):
             from providers.gemini import GeminiProvider
+
             p = GeminiProvider.__new__(GeminiProvider)
             p.api_key = "AIzaSy-test-gemini-fixture"
             p.total_requests = 0
@@ -228,6 +235,7 @@ class TestGeminiProvider:
 
     def test_estimate_cost_flash(self, provider):
         from providers.gemini import GEMINI_PRICING
+
         cost = provider.estimate_cost(1000, 500, "gemini-2.0-flash")
         p = GEMINI_PRICING["gemini-2.0-flash"]
         assert cost == pytest.approx(1000 * p["input"] + 500 * p["output"])
@@ -265,12 +273,14 @@ class TestGeminiProvider:
 # GrokProvider
 # ---------------------------------------------------------------------------
 
+
 class TestGrokProvider:
 
     @pytest.fixture
     def provider(self):
         with patch("providers.grok.AsyncOpenAI"):
             from providers.grok import GrokProvider
+
             return GrokProvider(api_key="xai-test-grok-fixture")
 
     def test_name(self, provider):
@@ -281,6 +291,7 @@ class TestGrokProvider:
 
     def test_estimate_cost_grok3_mini(self, provider):
         from providers.grok import GROK_PRICING
+
         cost = provider.estimate_cost(500, 200, "grok-3-mini")
         p = GROK_PRICING["grok-3-mini"]
         assert cost == pytest.approx(500 * p["input"] + 200 * p["output"])
@@ -296,12 +307,14 @@ class TestGrokProvider:
 # DeepSeekProvider
 # ---------------------------------------------------------------------------
 
+
 class TestDeepSeekProvider:
 
     @pytest.fixture
     def provider(self):
         with patch("providers.deepseek.AsyncOpenAI"):
             from providers.deepseek import DeepSeekProvider
+
             return DeepSeekProvider(api_key="ds-test-deepseek-fixture")
 
     def test_name(self, provider):
@@ -312,6 +325,7 @@ class TestDeepSeekProvider:
 
     def test_estimate_cost_chat(self, provider):
         from providers.deepseek import DEEPSEEK_PRICING
+
         cost = provider.estimate_cost(1000, 400, "deepseek-chat")
         p = DEEPSEEK_PRICING["deepseek-chat"]
         assert cost == pytest.approx(1000 * p["input"] + 400 * p["output"])
@@ -337,6 +351,7 @@ class TestDeepSeekProvider:
 # load_providers
 # ---------------------------------------------------------------------------
 
+
 class TestLoadProviders:
 
     def test_skips_providers_with_no_key(self, monkeypatch):
@@ -354,7 +369,7 @@ class TestLoadProviders:
             MockProvider.return_value = MagicMock()
             result = load_providers(enabled=["openai"])
         assert "openai" in result
-    
+
     def test_enabled_filter_restricts_loaded_providers(self, monkeypatch):
         monkeypatch.setenv("OPENAI_API_KEY", "sk-test-filter-fixture")
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-test-filter-fixture")

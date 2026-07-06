@@ -9,11 +9,10 @@ from typing import Optional
 from fastapi import Request, HTTPException
 from loguru import logger
 
-
 # Hard limits — requests exceeding these are rejected before hitting providers
 MAX_MESSAGES = 50
-MAX_MESSAGE_CHARS = 32_000    # per message
-MAX_TOTAL_CHARS = 128_000     # across all messages in one request
+MAX_MESSAGE_CHARS = 32_000  # per message
+MAX_TOTAL_CHARS = 128_000  # across all messages in one request
 MAX_MAX_TOKENS = 8_192
 
 
@@ -51,9 +50,7 @@ def validate_messages(messages: list[dict]) -> list[dict]:
             )
 
         if not isinstance(content, str) or not content.strip():
-            raise ValidationError(
-                f"messages[{i}].content must be a non-empty string"
-            )
+            raise ValidationError(f"messages[{i}].content must be a non-empty string")
 
         if len(content) > MAX_MESSAGE_CHARS:
             raise ValidationError(
@@ -124,8 +121,8 @@ def validate_completion_request(
     Full validation pass for /v1/completions request body.
     Returns cleaned/defaulted body dict.
     """
-    body["messages"]    = validate_messages(body.get("messages", []))
-    body["max_tokens"]  = validate_max_tokens(body.get("max_tokens"))
+    body["messages"] = validate_messages(body.get("messages", []))
+    body["max_tokens"] = validate_max_tokens(body.get("max_tokens"))
     body["temperature"] = validate_temperature(body.get("temperature"))
-    body["provider"]    = validate_provider(body.get("provider"), available_providers)
+    body["provider"] = validate_provider(body.get("provider"), available_providers)
     return body

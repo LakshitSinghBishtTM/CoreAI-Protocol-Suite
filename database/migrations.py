@@ -20,7 +20,6 @@ from sqlalchemy import text
 
 from .db import init_db, get_session, ping
 
-
 MIGRATIONS_DIR = Path(__file__).parent.parent / "migrations"
 
 CREATE_MIGRATIONS_TABLE = """
@@ -44,9 +43,11 @@ CREATE TABLE IF NOT EXISTS _schema_migrations (
 async def _ensure_migrations_table(session):
     """Create tracking table if it doesn't exist."""
     url = str(session.bind.url) if hasattr(session, "bind") else ""
-    ddl = CREATE_MIGRATIONS_TABLE_PG if "postgresql" in str(
-        session.get_bind()
-    ) else CREATE_MIGRATIONS_TABLE
+    ddl = (
+        CREATE_MIGRATIONS_TABLE_PG
+        if "postgresql" in str(session.get_bind())
+        else CREATE_MIGRATIONS_TABLE
+    )
     try:
         await session.execute(text(ddl))
     except Exception:
@@ -76,7 +77,8 @@ def _discover_migrations(direction: str = "up") -> list[Path]:
 
     pattern = "*.down.sql" if direction == "down" else "*.sql"
     files = sorted(
-        f for f in MIGRATIONS_DIR.glob(pattern)
+        f
+        for f in MIGRATIONS_DIR.glob(pattern)
         if direction == "down" or not f.name.endswith(".down.sql")
     )
     return files
@@ -88,10 +90,7 @@ async def migrate_up(target: str = None):
         await _ensure_migrations_table(session)
         applied = await _get_applied(session)
 
-        pending = [
-            f for f in _discover_migrations("up")
-            if f.name not in applied
-        ]
+        pending = [f for f in _discover_migrations("up") if f.name not in applied]
 
         if target:
             pending = [f for f in pending if f.name <= target]
@@ -206,6 +205,7 @@ async def create_all_tables():
 # ------------------------------------------------------------------ #
 # CLI
 # ------------------------------------------------------------------ #
+
 
 async def _main():
     init_db()

@@ -8,22 +8,21 @@ for routing/budgeting decisions, not billing-accurate counts.
 import re
 from typing import Optional
 
-
 # Approximate chars-per-token ratios by provider/model family
 # Based on empirical sampling — close enough for cost estimation
 CHARS_PER_TOKEN = {
-    "openai":    4.0,   # GPT tokenizer (tiktoken)
-    "anthropic": 4.0,   # Claude tokenizer (similar to GPT)
-    "gemini":    3.8,   # Gemini tokenizes slightly more aggressively
-    "deepseek":  4.0,   # OpenAI-compatible tokenizer
-    "grok":      4.0,   # xAI tokenizer (similar to GPT)
-    "default":   4.0,
+    "openai": 4.0,  # GPT tokenizer (tiktoken)
+    "anthropic": 4.0,  # Claude tokenizer (similar to GPT)
+    "gemini": 3.8,  # Gemini tokenizes slightly more aggressively
+    "deepseek": 4.0,  # OpenAI-compatible tokenizer
+    "grok": 4.0,  # xAI tokenizer (similar to GPT)
+    "default": 4.0,
 }
 
 # Token overhead per message role (system/user/assistant framing)
 ROLE_OVERHEAD = {
-    "system":    4,
-    "user":      4,
+    "system": 4,
+    "user": 4,
     "assistant": 4,
 }
 

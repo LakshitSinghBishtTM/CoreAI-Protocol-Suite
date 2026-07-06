@@ -24,11 +24,11 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 NSP_VERSION = "nsp/0.9-experimental"
-SYNC_INTERVAL_S = 0.25          # 250ms target sync cadence
-CACHE_SHARD_SIZE = 512          # token slots per shard
-MAX_DRIFT_TOKENS = 64           # tolerated KV-cache drift before hard resync
-VECTOR_DIM = 4096               # hidden state dimensionality (default llama-class)
-CHECKSUM_WINDOW = 32            # tokens included in rolling checksum
+SYNC_INTERVAL_S = 0.25  # 250ms target sync cadence
+CACHE_SHARD_SIZE = 512  # token slots per shard
+MAX_DRIFT_TOKENS = 64  # tolerated KV-cache drift before hard resync
+VECTOR_DIM = 4096  # hidden state dimensionality (default llama-class)
+CHECKSUM_WINDOW = 32  # tokens included in rolling checksum
 
 
 # ---------------------------------------------------------------------------
@@ -37,9 +37,9 @@ CHECKSUM_WINDOW = 32            # tokens included in rolling checksum
 
 
 class SyncMode(str, Enum):
-    FULL = "full"           # complete state transfer
-    DELTA = "delta"         # diff-only transfer
-    CHECKSUM = "checksum"   # verify only, no data transfer
+    FULL = "full"  # complete state transfer
+    DELTA = "delta"  # diff-only transfer
+    CHECKSUM = "checksum"  # verify only, no data transfer
 
 
 class SyncStatus(str, Enum):
@@ -73,7 +73,7 @@ class KVCacheShard:
     layer_idx: int = 0
     token_offset: int = 0
     token_count: int = 0
-    keys: list[list[float]] = field(default_factory=list)    # [seq_len, head_dim]
+    keys: list[list[float]] = field(default_factory=list)  # [seq_len, head_dim]
     values: list[list[float]] = field(default_factory=list)  # [seq_len, head_dim]
     created_at: float = field(default_factory=time.time)
     checksum: str = ""
@@ -90,7 +90,10 @@ class KVCacheShard:
         return hashlib.sha256(probe.encode()).hexdigest()[:12]
 
     def is_compatible_with(self, other: "KVCacheShard") -> bool:
-        return self.layer_idx == other.layer_idx and self.token_offset == other.token_offset
+        return (
+            self.layer_idx == other.layer_idx
+            and self.token_offset == other.token_offset
+        )
 
     def diff(self, other: "KVCacheShard") -> Optional["KVCacheShardDelta"]:
         if self.checksum == other.checksum:
@@ -101,8 +104,8 @@ class KVCacheShard:
         return KVCacheShardDelta(
             base_shard_id=self.shard_id,
             layer_idx=self.layer_idx,
-            new_keys=other.keys[self.token_count:],
-            new_values=other.values[self.token_count:],
+            new_keys=other.keys[self.token_count :],
+            new_values=other.values[self.token_count :],
             base_checksum=self.checksum,
             target_checksum=other.checksum,
         )
@@ -130,7 +133,7 @@ class HiddenState:
     state_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     token_position: int = 0
     layer_idx: int = 0
-    vector: list[float] = field(default_factory=list)   # shape: [hidden_dim]
+    vector: list[float] = field(default_factory=list)  # shape: [hidden_dim]
     norm_factor: float = 1.0
     captured_at: float = field(default_factory=time.time)
 
@@ -147,7 +150,7 @@ class SyncFrame:
 
     frame_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     source_node: str = ""
-    target_node: str = ""       # empty = broadcast
+    target_node: str = ""  # empty = broadcast
     mode: SyncMode = SyncMode.DELTA
     sequence_no: int = 0
     shards: list[KVCacheShard] = field(default_factory=list)
@@ -197,7 +200,7 @@ class ShardStore:
     """
 
     def __init__(self):
-        self._shards: dict[str, KVCacheShard] = {}   # key: f"{layer_idx}:{token_offset}"
+        self._shards: dict[str, KVCacheShard] = {}  # key: f"{layer_idx}:{token_offset}"
 
     def _key(self, layer_idx: int, token_offset: int) -> str:
         return f"{layer_idx}:{token_offset}"
@@ -225,7 +228,9 @@ class ShardStore:
         if target.checksum != delta.base_checksum:
             logger.error(
                 "Shard %s checksum mismatch — expected %s got %s",
-                delta.base_shard_id, delta.base_checksum, target.checksum,
+                delta.base_shard_id,
+                delta.base_checksum,
+                target.checksum,
             )
             return False
 
@@ -317,7 +322,9 @@ class NeuralSyncProtocol:
         self._running = True
         if self.role == ShardRole.PRIMARY:
             self._sync_task = asyncio.create_task(self._sync_loop())
-        logger.info("NeuralSyncProtocol started: node=%s role=%s", self.node_id, self.role)
+        logger.info(
+            "NeuralSyncProtocol started: node=%s role=%s", self.node_id, self.role
+        )
 
     async def stop(self) -> None:
         self._running = False
@@ -380,7 +387,9 @@ class NeuralSyncProtocol:
             try:
                 await peer._inbox.put(frame)
             except asyncio.QueueFull:
-                logger.warning("NSP inbox full for peer %s — frame dropped", peer.node_id)
+                logger.warning(
+                    "NSP inbox full for peer %s — frame dropped", peer.node_id
+                )
 
         self._stats["frames_sent"] += 1
 
@@ -401,7 +410,9 @@ class NeuralSyncProtocol:
 
         if not frame.verify():
             self._stats["checksum_failures"] += 1
-            raise ShardChecksumMismatch(f"Frame {frame.frame_id[:8]} failed integrity check")
+            raise ShardChecksumMismatch(
+                f"Frame {frame.frame_id[:8]} failed integrity check"
+            )
 
         self._stats["frames_received"] += 1
 

@@ -7,7 +7,7 @@ Tracks requests per client (API key or IP) in a sliding 60-second window.
 
 import time
 from collections import defaultdict, deque
-from typing import Optional, Tuple
+from typing import Tuple
 
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -25,7 +25,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
     def __init__(self, app, rpm: int = 60):
         super().__init__(app)
-        self.rpm      = rpm
+        self.rpm = rpm
         self._windows: dict[str, deque] = defaultdict(deque)
 
     async def dispatch(self, request: Request, call_next) -> Response:
@@ -42,7 +42,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         response = await call_next(request)
         remaining = self._remaining(client_key)
-        response.headers["X-RateLimit-Limit"]     = str(self.rpm)
+        response.headers["X-RateLimit-Limit"] = str(self.rpm)
         response.headers["X-RateLimit-Remaining"] = str(remaining)
         return response
 
@@ -54,7 +54,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         """Return a rate-limit key: prefer API key header, fall back to IP."""
         api_key = request.headers.get("X-API-Key")
         if api_key:
-            return f"key:{api_key[:16]}"          # prefix only — don't log full key
+            return f"key:{api_key[:16]}"  # prefix only — don't log full key
         return f"ip:{request.client.host}"
 
     def _check_rate_limit(self, client_key: str) -> Tuple[bool, float]:
@@ -65,7 +65,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             (allowed, retry_after_seconds)
             retry_after is 0.0 when allowed.
         """
-        now    = time.time()
+        now = time.time()
         # setdefault (not `self._windows[client_key]`) so this stays correct
         # even when _windows was constructed as a plain dict rather than the
         # defaultdict(deque) __init__ normally sets up (e.g. tests that build
@@ -87,7 +87,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
     def _remaining(self, client_key: str) -> int:
         """Return remaining requests allowed in the current window."""
-        now    = time.time()
+        now = time.time()
         window = self._windows.get(client_key, deque())
         cutoff = now - 60.0
         active = sum(1 for ts in window if ts > cutoff)

@@ -1,6 +1,7 @@
 """
 middleware/__init__.py
 """
+
 from .auth import require_api_key, optional_api_key
 from .logger import RequestLoggerMiddleware, log_completion, log_agent_event
 from .validator import (

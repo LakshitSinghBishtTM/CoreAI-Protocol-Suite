@@ -14,10 +14,10 @@ SEARCH_PATHS = [
     ROOT / "runtime",
     ROOT / "neural",
     ROOT / "agents",
-    ROOT / "middleware",   # lower priority than api/
+    ROOT / "middleware",  # lower priority than api/
     ROOT / "protocols",
     ROOT / "kernel",
-    ROOT / "api",          # api/auth.py beats middleware/auth.py
+    ROOT / "api",  # api/auth.py beats middleware/auth.py
     ROOT / "coreai",
     ROOT,
 ]
@@ -89,16 +89,18 @@ def mock_provider():
     p.name = "mock"
     p.default_model = "mock-model"
     p.estimate_cost = MagicMock(return_value=0.0001)
-    p.complete = AsyncMock(return_value=MagicMock(
-        content="mock response",
-        model="mock-model",
-        provider="mock",
-        input_tokens=10,
-        output_tokens=5,
-        cost_usd=0.0001,
-        latency_ms=100.0,
-        cached=False,
-    ))
+    p.complete = AsyncMock(
+        return_value=MagicMock(
+            content="mock response",
+            model="mock-model",
+            provider="mock",
+            input_tokens=10,
+            output_tokens=5,
+            cost_usd=0.0001,
+            latency_ms=100.0,
+            cached=False,
+        )
+    )
     return p
 
 
@@ -107,11 +109,13 @@ def mock_router(mock_provider):
     r = MagicMock()
     r.providers = {"mock": mock_provider}
     r.route = AsyncMock(return_value=mock_provider.complete.return_value)
-    r.stats = MagicMock(return_value={
-        "total_requests": 0,
-        "strategy": "balanced",
-        "provider_stats": {},
-    })
+    r.stats = MagicMock(
+        return_value={
+            "total_requests": 0,
+            "strategy": "balanced",
+            "provider_stats": {},
+        }
+    )
     return r
 
 

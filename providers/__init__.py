@@ -1,6 +1,7 @@
 """
 providers/__init__.py
 """
+
 import os
 from dataclasses import dataclass, field
 from loguru import logger
@@ -14,11 +15,11 @@ from . import gemini
 from . import grok
 from . import deepseek
 
-from .openai    import OpenAIProvider
+from .openai import OpenAIProvider
 from .anthropic import AnthropicProvider
-from .gemini    import GeminiProvider
-from .grok      import GrokProvider
-from .deepseek  import DeepSeekProvider
+from .gemini import GeminiProvider
+from .grok import GrokProvider
+from .deepseek import DeepSeekProvider
 
 __all__ = [
     "BaseProvider",
@@ -37,19 +38,19 @@ __all__ = [
 ]
 
 PROVIDER_MAP: dict[str, tuple] = {
-    "openai":    (OpenAIProvider,    "OPENAI_API_KEY"),
+    "openai": (OpenAIProvider, "OPENAI_API_KEY"),
     "anthropic": (AnthropicProvider, "ANTHROPIC_API_KEY"),
-    "gemini":    (GeminiProvider,    "GEMINI_API_KEY"),
-    "grok":      (GrokProvider,      "GROK_API_KEY"),
-    "deepseek":  (DeepSeekProvider,  "DEEPSEEK_API_KEY"),
+    "gemini": (GeminiProvider, "GEMINI_API_KEY"),
+    "grok": (GrokProvider, "GROK_API_KEY"),
+    "deepseek": (DeepSeekProvider, "DEEPSEEK_API_KEY"),
 }
 
 
 @dataclass
 class ProviderLoadResult:
     providers: dict[str, BaseProvider] = field(default_factory=dict)
-    skipped:   dict[str, str]          = field(default_factory=dict)
-    failed:    dict[str, str]          = field(default_factory=dict)
+    skipped: dict[str, str] = field(default_factory=dict)
+    failed: dict[str, str] = field(default_factory=dict)
 
     # Dict-like interface so existing call sites work without modification.
     # Tests assert: result == {}, "openai" in result, result["openai"]
@@ -128,7 +129,7 @@ def load_providers(
 
 
 def load_providers_or_raise(
-    enabled:  list[str] | None = None,
+    enabled: list[str] | None = None,
     required: list[str] | None = None,
 ) -> dict[str, BaseProvider]:
     """

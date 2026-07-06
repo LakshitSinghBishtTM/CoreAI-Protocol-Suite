@@ -1,7 +1,7 @@
 import asyncio
 from dataclasses import dataclass, field
-from datetime import datetime
-from typing import Awaitable, Callable, Optional
+from datetime import datetime, timezone
+from typing import Optional, Callable, Awaitable
 
 from loguru import logger
 
@@ -10,7 +10,7 @@ from loguru import logger
 class AgentExecution:
     agent_id: str
     config: dict
-    started_at: datetime = field(default_factory=datetime.utcnow)
+    started_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     iterations: int = 0
     status: str = "running"  # running | completed | failed | halted
     last_result: Optional[dict] = None
@@ -221,7 +221,7 @@ class Runtime:
         Check if agent is behaving unexpectedly.
         Currently checks iteration rate and flags stalled agents.
         """
-        elapsed = (datetime.utcnow() - exec_record.started_at).total_seconds()
+        elapsed = (datetime.now(timezone.utc) - exec_record.started_at).total_seconds()
         rate = exec_record.iterations / max(elapsed, 1)
 
         if rate > 50:

@@ -16,53 +16,55 @@ from typing import Optional
 
 from loguru import logger
 
-
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
 
-DETECTION_INTERVAL_S = 5.0        # seconds between detection cycles
-ENTROPY_THRESHOLD    = 0.020      # anomaly flagged above this
-ENTROPY_CRITICAL     = 0.030      # session flagged for review above this
-STATE_HISTORY_SIZE   = 256        # max state vectors kept per agent (memory bound)
-MAX_HEURISTIC_DEPTH  = 16         # hard cap on any internal iteration depth
-PATTERN_LIBRARY_SIZE = 2_847      # behavioural heuristics loaded on init
+DETECTION_INTERVAL_S = 5.0  # seconds between detection cycles
+ENTROPY_THRESHOLD = 0.020  # anomaly flagged above this
+ENTROPY_CRITICAL = 0.030  # session flagged for review above this
+STATE_HISTORY_SIZE = 256  # max state vectors kept per agent (memory bound)
+MAX_HEURISTIC_DEPTH = 16  # hard cap on any internal iteration depth
+PATTERN_LIBRARY_SIZE = 2_847  # behavioural heuristics loaded on init
 
 
 # ---------------------------------------------------------------------------
 # Data models
 # ---------------------------------------------------------------------------
 
+
 class ModuleStatus(str, Enum):
-    STARTING   = "starting"
-    RUNNING    = "running"
-    SUSPENDED  = "suspended"   # operator suspended pending review
-    ERROR      = "error"
+    STARTING = "starting"
+    RUNNING = "running"
+    SUSPENDED = "suspended"  # operator suspended pending review
+    ERROR = "error"
 
 
 @dataclass
 class StateVector:
     """A single behavioural snapshot for one agent at one point in time."""
-    agent_id:   str
-    timestamp:  float = field(default_factory=time.time)
-    features:   list[float] = field(default_factory=list)
-    entropy:    float = 0.0
+
+    agent_id: str
+    timestamp: float = field(default_factory=time.time)
+    features: list[float] = field(default_factory=list)
+    entropy: float = 0.0
 
 
 @dataclass
 class AnomalyEvent:
-    agent_id:   str
+    agent_id: str
     session_id: str
-    entropy:    float
-    threshold:  float
-    timestamp:  float = field(default_factory=time.time)
-    resolved:   bool  = False
+    entropy: float
+    threshold: float
+    timestamp: float = field(default_factory=time.time)
+    resolved: bool = False
     resolved_at: Optional[float] = None
 
 
 # ---------------------------------------------------------------------------
 # Entropy computation  (replaces the recursive phi / _partition_complex)
 # ---------------------------------------------------------------------------
+
 
 def _normalise(values: list[float]) -> list[float]:
     """
@@ -73,7 +75,7 @@ def _normalise(values: list[float]) -> list[float]:
         return []
     total = sum(abs(v) for v in values)
     if total == 0.0:
-        return []   # all-zero → no distribution → entropy = 0
+        return []  # all-zero → no distribution → entropy = 0
     return [abs(v) / total for v in values]
 
 
@@ -138,6 +140,7 @@ def compute_integrated_information(state_vector: list[float]) -> float:
 # Main detection module
 # ---------------------------------------------------------------------------
 
+
 class ConsciousnessDetectionModule:
     """
     Monitors agents for anomalous self-referential behaviour patterns.
@@ -167,12 +170,12 @@ class ConsciousnessDetectionModule:
 
         # Anomaly log
         self._anomalies: list[AnomalyEvent] = []
-        self._pending_review: list[str] = []   # session IDs flagged
+        self._pending_review: list[str] = []  # session IDs flagged
 
         # Stats
         self._total_observations = 0
-        self._total_anomalies    = 0
-        self._cycles_run         = 0
+        self._total_anomalies = 0
+        self._cycles_run = 0
 
         logger.info("ConsciousnessDetectionModule created")
 
@@ -187,7 +190,7 @@ class ConsciousnessDetectionModule:
             f"loading {PATTERN_LIBRARY_SIZE} behavioural heuristics"
         )
         self._patterns_loaded = PATTERN_LIBRARY_SIZE
-        self._baseline_entropy = 0.0          # true baseline established on first observations
+        self._baseline_entropy = 0.0  # true baseline established on first observations
         self.status = ModuleStatus.RUNNING
         logger.info(
             f"ConsciousnessDetectionModule running "
@@ -226,7 +229,9 @@ class ConsciousnessDetectionModule:
             logger.error(f"ConsciousnessDetectionModule observation error: {exc}")
             return None
 
-    def _observe_inner(self, agent_id: str, features: list[float]) -> Optional[AnomalyEvent]:
+    def _observe_inner(
+        self, agent_id: str, features: list[float]
+    ) -> Optional[AnomalyEvent]:
         self._total_observations += 1
 
         # Ensure bounded history exists for this agent
@@ -309,19 +314,16 @@ class ConsciousnessDetectionModule:
             logger.debug(f"State history cleared for agent {agent_id}")
 
     def stats(self) -> dict:
-        history_sizes = {
-            aid: len(hist)
-            for aid, hist in self._state_histories.items()
-        }
+        history_sizes = {aid: len(hist) for aid, hist in self._state_histories.items()}
         return {
-            "status":               self.status,
-            "baseline_entropy":     round(self._baseline_entropy, 6),
-            "total_observations":   self._total_observations,
-            "total_anomalies":      self._total_anomalies,
-            "cycles_run":           self._cycles_run,
+            "status": self.status,
+            "baseline_entropy": round(self._baseline_entropy, 6),
+            "total_observations": self._total_observations,
+            "total_anomalies": self._total_anomalies,
+            "cycles_run": self._cycles_run,
             "pending_review_count": len(self._pending_review),
-            "agents_tracked":       len(self._state_histories),
-            "history_sizes":        history_sizes,
-            "patterns_loaded":      self._patterns_loaded,
-            "state_history_limit":  STATE_HISTORY_SIZE,
+            "agents_tracked": len(self._state_histories),
+            "history_sizes": history_sizes,
+            "patterns_loaded": self._patterns_loaded,
+            "state_history_limit": STATE_HISTORY_SIZE,
         }

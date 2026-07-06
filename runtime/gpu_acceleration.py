@@ -82,7 +82,9 @@ class GPUDeviceManager:
         self._fallback_cpu = False
 
     @classmethod
-    def get_instance(cls, config: Optional[GPUAccelerationConfig] = None) -> "GPUDeviceManager":
+    def get_instance(
+        cls, config: Optional[GPUAccelerationConfig] = None
+    ) -> "GPUDeviceManager":
         if cls._instance is None:
             cls._instance = cls(config or GPUAccelerationConfig())
         return cls._instance
@@ -96,13 +98,17 @@ class GPUDeviceManager:
                 self._fallback_cpu = True
                 return False
 
-            device_idx = int(self.config.device.split(":")[-1]) if ":" in self.config.device else 0
+            device_idx = (
+                int(self.config.device.split(":")[-1])
+                if ":" in self.config.device
+                else 0
+            )
             props = torch.cuda.get_device_properties(device_idx)
 
             self._device_info = GPUDeviceInfo(
                 device_id=device_idx,
                 name=props.name,
-                total_memory_mb=props.total_memory // (1024 ** 2),
+                total_memory_mb=props.total_memory // (1024**2),
                 driver_version=torch.version.cuda or "unknown",
                 cuda_version=torch.version.cuda or "unknown",
             )
@@ -122,7 +128,7 @@ class GPUDeviceManager:
             logger.info(
                 "GPU initialised: %s | %.1f GB reserved",
                 props.name,
-                (props.total_memory * self.config.memory_fraction) / (1024 ** 3),
+                (props.total_memory * self.config.memory_fraction) / (1024**3),
             )
             return True
 
@@ -152,7 +158,7 @@ class GPUDeviceManager:
 
             idx = self._device_info.device_id  # type: ignore
             self._device_info.allocated_memory_mb = (  # type: ignore
-                torch.cuda.memory_allocated(idx) // (1024 ** 2)
+                torch.cuda.memory_allocated(idx) // (1024**2)
             )
             self._device_info.utilization_pct = (  # type: ignore
                 self._device_info.allocated_memory_mb  # type: ignore
@@ -166,6 +172,7 @@ class GPUDeviceManager:
     def free_cache(self) -> None:
         try:
             import torch  # type: ignore
+
             torch.cuda.empty_cache()
             logger.debug("GPU cache cleared")
         except Exception:  # pylint: disable=broad-except
@@ -215,7 +222,9 @@ class GPUBatchProcessor:
         device_manager: Optional[GPUDeviceManager] = None,
     ):
         self.config = config or GPUAccelerationConfig()
-        self.device_manager = device_manager or GPUDeviceManager.get_instance(self.config)
+        self.device_manager = device_manager or GPUDeviceManager.get_instance(
+            self.config
+        )
         self.stats = BatchProcessingStats()
         self._queue: list = []
 
@@ -253,7 +262,9 @@ class GPUBatchProcessor:
             if "out of memory" in str(exc).lower():
                 self.stats.oom_events += 1
                 self.device_manager.free_cache()
-                logger.warning("GPU OOM during batch — clearing cache and retrying on CPU")
+                logger.warning(
+                    "GPU OOM during batch — clearing cache and retrying on CPU"
+                )
                 return token_ids
             raise
 
@@ -274,13 +285,17 @@ class GPUBatchProcessor:
 # ---------------------------------------------------------------------------
 
 
-def get_device_manager(config: Optional[GPUAccelerationConfig] = None) -> GPUDeviceManager:
+def get_device_manager(
+    config: Optional[GPUAccelerationConfig] = None,
+) -> GPUDeviceManager:
     mgr = GPUDeviceManager.get_instance(config)
     if not mgr._initialized:
         mgr.initialize()
     return mgr
 
 
-def get_batch_processor(config: Optional[GPUAccelerationConfig] = None) -> GPUBatchProcessor:
+def get_batch_processor(
+    config: Optional[GPUAccelerationConfig] = None,
+) -> GPUBatchProcessor:
     mgr = get_device_manager(config)
     return GPUBatchProcessor(config=config, device_manager=mgr)

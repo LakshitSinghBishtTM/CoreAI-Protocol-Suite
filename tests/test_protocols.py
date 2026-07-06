@@ -11,16 +11,17 @@ from unittest.mock import MagicMock
 
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # auth_protocol.py
 # ---------------------------------------------------------------------------
+
 
 class TestAuthProtocol:
 
     @pytest.fixture
     def proto(self):
         from auth_protocol import AuthProtocol
+
         return AuthProtocol(signer_secret="test-signing-secret-32bytes!!")
 
     def test_register_returns_credential(self, proto):
@@ -45,6 +46,7 @@ class TestAuthProtocol:
         proto.register("client-2", "cai-revokedkeyXXXXXXXX")
         proto.revoke("cai-revokedkeyXXXXXXXX")
         from auth_protocol import AuthStatus
+
         result = proto.authenticate("cai-revokedkeyXXXXXXXX")
         assert result.status == AuthStatus.REVOKED
 
@@ -52,28 +54,37 @@ class TestAuthProtocol:
         proto.register("client-3", "cai-expiredkeyXXXXXXXX", expires_in_s=-1)
         time.sleep(0.01)
         from auth_protocol import AuthStatus
+
         result = proto.authenticate("cai-expiredkeyXXXXXXXX")
         assert result.status == AuthStatus.EXPIRED
 
     def test_require_scope_passes_with_admin(self, proto):
         from auth_protocol import AuthScope, AuthStatus, AuthResult
-        result = AuthResult(status=AuthStatus.VALID, client_id="ajay", scopes=[AuthScope.ADMIN])
+
+        result = AuthResult(
+            status=AuthStatus.VALID, client_id="ajay", scopes=[AuthScope.ADMIN]
+        )
         proto.require_scope(result, AuthScope.WRITE)  # should not raise
 
     def test_require_scope_raises_on_missing(self, proto):
         from auth_protocol import AuthScope, AuthStatus, AuthResult, AuthorizationError
-        result = AuthResult(status=AuthStatus.VALID, client_id="limited", scopes=[AuthScope.READ])
+
+        result = AuthResult(
+            status=AuthStatus.VALID, client_id="limited", scopes=[AuthScope.READ]
+        )
         with pytest.raises(AuthorizationError):
             proto.require_scope(result, AuthScope.WRITE)
 
     def test_require_scope_raises_on_unauthenticated(self, proto):
         from auth_protocol import AuthScope, AuthStatus, AuthResult, AuthenticationError
+
         result = AuthResult(status=AuthStatus.INVALID, reason="bad key")
         with pytest.raises(AuthenticationError):
             proto.require_scope(result, AuthScope.READ)
 
     def test_token_issue_and_verify(self, proto):
         from auth_protocol import AuthScope
+
         proto.register("client-tok", "cai-tokentest0000000X", scopes=[AuthScope.WRITE])
         result = proto.authenticate("cai-tokentest0000000X")
         assert result.token is not None
@@ -82,6 +93,7 @@ class TestAuthProtocol:
 
     def test_revoke_token_invalidates_it(self, proto):
         from auth_protocol import AuthScope, AuthStatus
+
         proto.register("client-rv", "cai-revoketoken00000X", scopes=[AuthScope.READ])
         result = proto.authenticate("cai-revoketoken00000X")
         token = result.token
@@ -95,6 +107,7 @@ class TestRequestSigner:
     @pytest.fixture
     def signer(self):
         from auth_protocol import RequestSigner
+
         return RequestSigner("signing-secret-fixture-32bytes!")
 
     def test_sign_returns_required_headers(self, signer):
@@ -106,7 +119,8 @@ class TestRequestSigner:
         body = b'{"prompt":"hello"}'
         headers = signer.sign("POST", "/v1/completions", body)
         ok = signer.verify(
-            "POST", "/v1/completions",
+            "POST",
+            "/v1/completions",
             headers["X-CoreAI-Timestamp"],
             headers["X-CoreAI-Signature"],
             body,
@@ -116,7 +130,8 @@ class TestRequestSigner:
     def test_verify_wrong_body_fails(self, signer):
         headers = signer.sign("POST", "/v1/completions", b"original body")
         ok = signer.verify(
-            "POST", "/v1/completions",
+            "POST",
+            "/v1/completions",
             headers["X-CoreAI-Timestamp"],
             headers["X-CoreAI-Signature"],
             b"tampered body",
@@ -130,6 +145,7 @@ class TestRequestSigner:
 
     def test_empty_secret_raises(self):
         from auth_protocol import RequestSigner
+
         with pytest.raises(ValueError):
             RequestSigner("")
 
@@ -138,11 +154,13 @@ class TestRequestSigner:
 # secure_protocol.py
 # ---------------------------------------------------------------------------
 
+
 class TestSecureSession:
 
     @pytest.fixture
     def session_pair(self):
         from secure_protocol import STPHandshake, HandshakeRole, SecureSession
+
         shared = b"shared-secret-for-testing-32byt"
         init = STPHandshake("node-init", HandshakeRole.INITIATOR)
         resp = STPHandshake("node-resp", HandshakeRole.RESPONDER)
@@ -165,6 +183,7 @@ class TestSecureSession:
 
     def test_tampered_frame_raises(self, session_pair):
         from secure_protocol import MACVerificationError
+
         sess_i, sess_r = session_pair
         frame = bytearray(sess_i.send(b"sensitive data"))
         frame[45] ^= 0xFF
@@ -178,6 +197,7 @@ class TestSecureSession:
 
     def test_send_after_close_raises(self, session_pair):
         from secure_protocol import SessionNotEstablishedError
+
         sess_i, _ = session_pair
         sess_i.close()
         with pytest.raises(SessionNotEstablishedError):
@@ -188,10 +208,12 @@ class TestReplayGuard:
 
     def test_allows_first_occurrence(self):
         from secure_protocol import ReplayGuard
+
         ReplayGuard(window_s=30).check(1, time.time())
 
     def test_blocks_duplicate_sequence(self):
         from secure_protocol import ReplayGuard, ReplayAttackError
+
         rg = ReplayGuard(window_s=30)
         rg.check(42, time.time())
         with pytest.raises(ReplayAttackError):
@@ -199,12 +221,14 @@ class TestReplayGuard:
 
     def test_blocks_old_timestamp(self):
         from secure_protocol import ReplayGuard, ReplayAttackError
+
         rg = ReplayGuard(window_s=30)
         with pytest.raises(ReplayAttackError):
             rg.check(99, time.time() - 9999)
 
     def test_reset_clears_seen(self):
         from secure_protocol import ReplayGuard
+
         rg = ReplayGuard(window_s=30)
         rg.check(7, time.time())
         rg.reset()
@@ -215,17 +239,25 @@ class TestReplayGuard:
 # distributed_agent.py
 # ---------------------------------------------------------------------------
 
+
 class TestAgentMessageRouter:
 
     @pytest.mark.asyncio
     async def test_register_creates_queue(self):
         from distributed_agent import AgentMessageRouter
+
         q = AgentMessageRouter().register_agent("agent-a")
         assert q is not None
 
     @pytest.mark.asyncio
     async def test_unicast_delivers_to_recipient(self):
-        from distributed_agent import AgentMessageRouter, MessageEnvelope, MessageType, DeliveryMode
+        from distributed_agent import (
+            AgentMessageRouter,
+            MessageEnvelope,
+            MessageType,
+            DeliveryMode,
+        )
+
         router = AgentMessageRouter()
         router.register_agent("agent-a")
         router.register_agent("agent-b")
@@ -241,7 +273,13 @@ class TestAgentMessageRouter:
 
     @pytest.mark.asyncio
     async def test_expired_message_dropped(self):
-        from distributed_agent import AgentMessageRouter, MessageEnvelope, MessageType, DeliveryMode
+        from distributed_agent import (
+            AgentMessageRouter,
+            MessageEnvelope,
+            MessageType,
+            DeliveryMode,
+        )
+
         router = AgentMessageRouter()
         router.register_agent("agent-x")
         env = MessageEnvelope(
@@ -257,7 +295,13 @@ class TestAgentMessageRouter:
 
     @pytest.mark.asyncio
     async def test_exactly_once_dedup(self):
-        from distributed_agent import AgentMessageRouter, MessageEnvelope, MessageType, DeliveryMode
+        from distributed_agent import (
+            AgentMessageRouter,
+            MessageEnvelope,
+            MessageType,
+            DeliveryMode,
+        )
+
         router = AgentMessageRouter()
         router.register_agent("agent-d")
         env = MessageEnvelope(
@@ -276,20 +320,24 @@ class TestAgentMessageRouter:
 # neural_sync.py
 # ---------------------------------------------------------------------------
 
+
 class TestShardStore:
 
     def test_put_and_get(self):
         from neural_sync import ShardStore, KVCacheShard
+
         store = ShardStore()
         store.put(KVCacheShard(layer_idx=0, token_offset=0, token_count=16))
         assert store.get(0, 0).token_count == 16
 
     def test_get_missing_returns_none(self):
         from neural_sync import ShardStore
+
         assert ShardStore().get(99, 99) is None
 
     def test_clear_removes_all_shards(self):
         from neural_sync import ShardStore, KVCacheShard
+
         store = ShardStore()
         store.put(KVCacheShard(layer_idx=0, token_offset=0, token_count=8))
         store.clear()
@@ -297,6 +345,7 @@ class TestShardStore:
 
     def test_drift_tokens_detects_difference(self):
         from neural_sync import ShardStore, KVCacheShard
+
         s1, s2 = ShardStore(), ShardStore()
         s1.put(KVCacheShard(layer_idx=0, token_offset=0, token_count=10))
         shard_b = KVCacheShard(layer_idx=0, token_offset=0, token_count=25)
@@ -306,6 +355,7 @@ class TestShardStore:
 
     def test_summary_shape(self):
         from neural_sync import ShardStore, KVCacheShard
+
         store = ShardStore()
         store.put(KVCacheShard(layer_idx=2, token_offset=0, token_count=5))
         s = store.summary()
@@ -319,6 +369,7 @@ class TestNeuralSyncProtocol:
     @pytest.mark.asyncio
     async def test_primary_can_publish(self):
         from neural_sync import NeuralSyncProtocol, ShardRole, SyncMode
+
         primary = NeuralSyncProtocol("primary-node", role=ShardRole.PRIMARY)
         replica = NeuralSyncProtocol("replica-node", role=ShardRole.REPLICA)
         primary.connect_peer(replica)
@@ -331,7 +382,13 @@ class TestNeuralSyncProtocol:
 
     @pytest.mark.asyncio
     async def test_replica_cannot_publish(self):
-        from neural_sync import NeuralSyncProtocol, ShardRole, SyncMode, NeuralSyncProtocolError
+        from neural_sync import (
+            NeuralSyncProtocol,
+            ShardRole,
+            SyncMode,
+            NeuralSyncProtocolError,
+        )
+
         replica = NeuralSyncProtocol("r", role=ShardRole.REPLICA)
         frame = replica.build_frame(SyncMode.DELTA)
         with pytest.raises(NeuralSyncProtocolError):
@@ -340,6 +397,7 @@ class TestNeuralSyncProtocol:
     @pytest.mark.asyncio
     async def test_apply_full_frame_sets_in_sync(self):
         from neural_sync import NeuralSyncProtocol, ShardRole, SyncMode, SyncStatus
+
         primary = NeuralSyncProtocol("p", role=ShardRole.PRIMARY)
         replica = NeuralSyncProtocol("r", role=ShardRole.REPLICA)
         status = replica.apply_frame(primary.build_frame(SyncMode.FULL))
@@ -347,12 +405,14 @@ class TestNeuralSyncProtocol:
 
     def test_stats_contains_expected_keys(self):
         from neural_sync import NeuralSyncProtocol, ShardRole
+
         stats = NeuralSyncProtocol("n", role=ShardRole.REPLICA).get_stats()
         for key in ("node_id", "role", "frames_sent", "frames_received", "store"):
             assert key in stats
 
     def test_connect_and_disconnect_peer(self):
         from neural_sync import NeuralSyncProtocol, ShardRole
+
         a = NeuralSyncProtocol("a", ShardRole.PRIMARY)
         b = NeuralSyncProtocol("b", ShardRole.REPLICA)
         a.connect_peer(b)

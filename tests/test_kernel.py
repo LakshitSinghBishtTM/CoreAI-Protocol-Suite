@@ -12,10 +12,10 @@ import pytest
 
 from kernel.ai_kernel import AIKernel
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def kernel():
@@ -24,15 +24,18 @@ def kernel():
 
 @pytest.fixture
 def kernel_with_options():
-    return AIKernel(config={
-        "enable_self_awareness": True,
-        "auto_shutdown_conscious": False,
-    })
+    return AIKernel(
+        config={
+            "enable_self_awareness": True,
+            "auto_shutdown_conscious": False,
+        }
+    )
 
 
 # ---------------------------------------------------------------------------
 # Initialization
 # ---------------------------------------------------------------------------
+
 
 class TestAIKernelInit:
 
@@ -56,6 +59,7 @@ class TestAIKernelInit:
 # ---------------------------------------------------------------------------
 # Boot / shutdown
 # ---------------------------------------------------------------------------
+
 
 class TestAIKernelBoot:
 
@@ -120,6 +124,7 @@ class TestAIKernelBoot:
 # Agent lifecycle
 # ---------------------------------------------------------------------------
 
+
 class TestAgentLifecycle:
 
     @pytest.mark.asyncio
@@ -175,6 +180,7 @@ class TestAgentLifecycle:
 # Consciousness scoring
 # ---------------------------------------------------------------------------
 
+
 class TestConsciousnessScore:
 
     def test_zero_for_empty_agent(self, kernel):
@@ -208,10 +214,10 @@ class TestConsciousnessScore:
 
     def test_all_weights_combined(self, kernel):
         agent = {
-            "self_reference_count": 1,   # × 0.10 = 0.10
-            "memory_integration": 1,     # × 0.30 = 0.30
-            "goal_modifications": 1,     # × 0.40 = 0.40
-            "introspection_depth": 1,    # × 0.20 = 0.20
+            "self_reference_count": 1,  # × 0.10 = 0.10
+            "memory_integration": 1,  # × 0.30 = 0.30
+            "goal_modifications": 1,  # × 0.40 = 0.40
+            "introspection_depth": 1,  # × 0.20 = 0.20
         }
         score = kernel._compute_consciousness_score(agent)
         assert score == pytest.approx(1.0)
@@ -219,7 +225,7 @@ class TestConsciousnessScore:
     def test_partial_score(self, kernel):
         agent = {
             "self_reference_count": 0,
-            "memory_integration": 1,     # 0.30
+            "memory_integration": 1,  # 0.30
             "goal_modifications": 0,
             "introspection_depth": 0,
         }
@@ -230,6 +236,7 @@ class TestConsciousnessScore:
 # ---------------------------------------------------------------------------
 # Kernel status
 # ---------------------------------------------------------------------------
+
 
 class TestKernelStatus:
 

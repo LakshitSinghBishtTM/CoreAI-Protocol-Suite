@@ -218,10 +218,10 @@ class TokenIssuer:
                 reason="Token expired",
             )
 
-        payload = f"{token.token_id}:{token.client_id}:{token.issued_at}:{token.expires_at}"
-        expected = hmac.new(
-            self._secret, payload.encode(), HMAC_ALGORITHM
-        ).hexdigest()
+        payload = (
+            f"{token.token_id}:{token.client_id}:{token.issued_at}:{token.expires_at}"
+        )
+        expected = hmac.new(self._secret, payload.encode(), HMAC_ALGORITHM).hexdigest()
 
         if not hmac.compare_digest(expected, token.signature):
             return AuthResult(status=AuthStatus.INVALID, reason="Signature mismatch")
@@ -291,7 +291,9 @@ class AuthProtocol:
     def revoke(self, api_key: str) -> None:
         if api_key in self._credentials:
             self._credentials[api_key].revoked = True
-            logger.warning("Credential revoked: %s", self._credentials[api_key].key_prefix)
+            logger.warning(
+                "Credential revoked: %s", self._credentials[api_key].key_prefix
+            )
 
     # ------------------------------------------------------------------
     # Authentication

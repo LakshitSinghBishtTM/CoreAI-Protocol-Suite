@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 MAX_RETRIES = 3
 BASE_BACKOFF_S = 0.4
-TRUNCATION_STRATEGY = "tail"   # "tail" | "head" | "middle"
+TRUNCATION_STRATEGY = "tail"  # "tail" | "head" | "middle"
 DEFAULT_TEMPERATURE = 0.7
 DEFAULT_MAX_TOKENS = 1024
 
@@ -61,7 +61,7 @@ class FinishReason(str, Enum):
 
 @dataclass
 class Message:
-    role: str       # "system" | "user" | "assistant" | "tool"
+    role: str  # "system" | "user" | "assistant" | "tool"
     content: str
     name: Optional[str] = None
     tool_call_id: Optional[str] = None
@@ -206,7 +206,9 @@ class PromptAssembler:
 
         logger.warning(
             "Input ~%d tokens exceeds limit %d — truncating (%s strategy)",
-            total, token_limit, TRUNCATION_STRATEGY,
+            total,
+            token_limit,
+            TRUNCATION_STRATEGY,
         )
 
         system = [m for m in messages if m.role == "system"]
@@ -214,14 +216,23 @@ class PromptAssembler:
 
         if TRUNCATION_STRATEGY == "tail":
             # Drop oldest non-system messages first
-            while non_system and sum(len(m.content) // 4 for m in system + non_system) > token_limit:
+            while (
+                non_system
+                and sum(len(m.content) // 4 for m in system + non_system) > token_limit
+            ):
                 non_system.pop(0)
         elif TRUNCATION_STRATEGY == "head":
-            while non_system and sum(len(m.content) // 4 for m in system + non_system) > token_limit:
+            while (
+                non_system
+                and sum(len(m.content) // 4 for m in system + non_system) > token_limit
+            ):
                 non_system.pop()
         # "middle" strategy: keep first + last, drop middle
         elif TRUNCATION_STRATEGY == "middle":
-            while len(non_system) > 2 and sum(len(m.content) // 4 for m in system + non_system) > token_limit:
+            while (
+                len(non_system) > 2
+                and sum(len(m.content) // 4 for m in system + non_system) > token_limit
+            ):
                 non_system.pop(len(non_system) // 2)
 
         return system + non_system
@@ -254,13 +265,19 @@ class ResponseNormaliser:
             elif provider == "gemini":
                 return self._from_gemini(raw, request, model, latency_ms)
             elif provider in ("grok", "deepseek"):
-                return self._from_openai_compat(raw, request, model, latency_ms, provider)
+                return self._from_openai_compat(
+                    raw, request, model, latency_ms, provider
+                )
             else:
                 raise InferenceError(f"Unknown provider for normalisation: {provider}")
         except (KeyError, IndexError) as exc:
-            raise InferenceError(f"Failed to normalise {provider} response: {exc}") from exc
+            raise InferenceError(
+                f"Failed to normalise {provider} response: {exc}"
+            ) from exc
 
-    def _from_openai(self, raw: dict, req: InferenceRequest, model: ModelProfile, ms: float) -> InferenceResponse:
+    def _from_openai(
+        self, raw: dict, req: InferenceRequest, model: ModelProfile, ms: float
+    ) -> InferenceResponse:
         choice = raw["choices"][0]
         usage = raw.get("usage", {})
         input_t = usage.get("prompt_tokens", 0)
@@ -279,19 +296,34 @@ class ResponseNormaliser:
             tool_calls=tool_calls,
         )
 
-    def _from_openai_compat(self, raw: dict, req: InferenceRequest, model: ModelProfile, ms: float, provider: str) -> InferenceResponse:
+    def _from_openai_compat(
+        self,
+        raw: dict,
+        req: InferenceRequest,
+        model: ModelProfile,
+        ms: float,
+        provider: str,
+    ) -> InferenceResponse:
         r = self._from_openai(raw, req, model, ms)
         r.provider = provider
         return r
 
-    def _from_anthropic(self, raw: dict, req: InferenceRequest, model: ModelProfile, ms: float) -> InferenceResponse:
+    def _from_anthropic(
+        self, raw: dict, req: InferenceRequest, model: ModelProfile, ms: float
+    ) -> InferenceResponse:
         content_blocks = raw.get("content", [])
-        text = " ".join(b.get("text", "") for b in content_blocks if b.get("type") == "text")
+        text = " ".join(
+            b.get("text", "") for b in content_blocks if b.get("type") == "text"
+        )
         usage = raw.get("usage", {})
         input_t = usage.get("input_tokens", 0)
         output_t = usage.get("output_tokens", 0)
         stop_reason = raw.get("stop_reason", "end_turn")
-        finish = FinishReason.STOP if stop_reason == "end_turn" else FinishReason(stop_reason.replace("_", "") if stop_reason else "stop")
+        finish = (
+            FinishReason.STOP
+            if stop_reason == "end_turn"
+            else FinishReason(stop_reason.replace("_", "") if stop_reason else "stop")
+        )
         return InferenceResponse(
             request_id=req.request_id,
             content=text,
@@ -303,7 +335,9 @@ class ResponseNormaliser:
             latency_ms=ms,
         )
 
-    def _from_gemini(self, raw: dict, req: InferenceRequest, model: ModelProfile, ms: float) -> InferenceResponse:
+    def _from_gemini(
+        self, raw: dict, req: InferenceRequest, model: ModelProfile, ms: float
+    ) -> InferenceResponse:
         candidates = raw.get("candidates", [{}])
         parts = candidates[0].get("content", {}).get("parts", [{}])
         text = " ".join(p.get("text", "") for p in parts)
@@ -382,16 +416,25 @@ class InferencePipeline:
                     stream=False,
                 )
                 latency_ms = (time.perf_counter() - t0) * 1000
-                response = self._normaliser.normalise(raw, provider, request, model, latency_ms)
+                response = self._normaliser.normalise(
+                    raw, provider, request, model, latency_ms
+                )
                 self._record(response)
                 return response
 
             except Exception as exc:  # pylint: disable=broad-except
                 if attempt == MAX_RETRIES - 1:
                     self._stats["total_errors"] += 1
-                    raise InferenceError(f"Inference failed after {MAX_RETRIES} attempts: {exc}") from exc
-                backoff = BASE_BACKOFF_S * (2 ** attempt)
-                logger.warning("Inference attempt %d failed: %s — retrying in %.1fs", attempt + 1, exc, backoff)
+                    raise InferenceError(
+                        f"Inference failed after {MAX_RETRIES} attempts: {exc}"
+                    ) from exc
+                backoff = BASE_BACKOFF_S * (2**attempt)
+                logger.warning(
+                    "Inference attempt %d failed: %s — retrying in %.1fs",
+                    attempt + 1,
+                    exc,
+                    backoff,
+                )
                 await asyncio.sleep(backoff)
 
         raise InferenceError("Unreachable")  # satisfies type checker
