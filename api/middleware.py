@@ -10,8 +10,8 @@ from collections import defaultdict, deque
 from typing import Tuple
 
 from fastapi import Request, Response
-from starlette.middleware.base import BaseHTTPMiddleware
 from loguru import logger
+from starlette.middleware.base import BaseHTTPMiddleware
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
