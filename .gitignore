@@ -66,7 +66,7 @@
 # *.iml
 # *.ipr
 # *.iws
-__pycache__/
+# __pycache__/
 # *.sublime-workspace
 # node_modules/
 # .npm/
@@ -166,7 +166,7 @@ __pycache__/
 # *.tfstate
 # *.tfstate.*
 # terraform.tfvars
-venv/
+# venv/
 # crash.log
 # override.tf
 # override.tf.json
