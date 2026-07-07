@@ -9,14 +9,14 @@ from contextlib import asynccontextmanager
 from typing import AsyncGenerator, Optional
 
 from loguru import logger
-from sqlalchemy.ext.asyncio import (
-    AsyncSession,
-    AsyncEngine,
-    create_async_engine,
-    async_sessionmaker,
-)
-from sqlalchemy.pool import NullPool, AsyncAdaptedQueuePool
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+from sqlalchemy.pool import AsyncAdaptedQueuePool, NullPool
 
 # ------------------------------------------------------------------ #
 # Connection URL construction

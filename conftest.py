@@ -1,6 +1,6 @@
 # conftest.py
-import sys
 import os
+import sys
 
 root = os.path.dirname(__file__)
 

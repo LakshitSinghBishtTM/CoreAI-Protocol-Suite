@@ -6,8 +6,9 @@ All provider calls are mocked — no real API keys needed.
 """
 
 import asyncio
-import pytest
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -357,7 +358,7 @@ class TestLoadProviders:
         monkeypatch.setenv("OPENAI_API_KEY", "sk-test-key-openai")
         monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
 
-        from providers import load_providers_or_raise, PROVIDER_MAP
+        from providers import PROVIDER_MAP, load_providers_or_raise
 
         # Patch the class stored in PROVIDER_MAP so the lazy import succeeds
         # without needing the real openai SDK installed.

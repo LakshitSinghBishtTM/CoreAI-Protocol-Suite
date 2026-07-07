@@ -93,6 +93,7 @@ class TestValidateApiKey:
     def test_valid_key_returns_context(self, monkeypatch):
         monkeypatch.setenv("SECRET_KEY", "test-secret-key-fixture")
         import hashlib
+
         from auth import validate_api_key
 
         raw = "cai-R7mNqP2wLkT9vX4hF"

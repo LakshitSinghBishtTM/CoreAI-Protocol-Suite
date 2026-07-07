@@ -8,15 +8,16 @@ All external SDK calls are mocked — no real API calls are made.
 """
 
 from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 
+from providers import load_providers
 from providers.base import (
     BaseProvider,
     CompletionRequest,
     CompletionResponse,
     Message,
 )
-from providers import load_providers
 
 # ---------------------------------------------------------------------------
 # Helpers

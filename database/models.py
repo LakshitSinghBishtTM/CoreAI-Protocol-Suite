@@ -8,15 +8,15 @@ from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import (
-    String,
-    Text,
-    Float,
-    Integer,
+    JSON,
     Boolean,
     DateTime,
-    JSON,
+    Float,
     ForeignKey,
     Index,
+    Integer,
+    String,
+    Text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 

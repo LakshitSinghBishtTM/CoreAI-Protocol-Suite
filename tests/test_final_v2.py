@@ -5,7 +5,7 @@ End-to-end integration tests for the CoreAI high-level facade (CoreAI class
 in core_final.py) and the Kernel. All provider/router calls are mocked.
 """
 
-from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
+from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 import pytest
 
@@ -242,6 +242,7 @@ class TestKernelWiring:
     @pytest.mark.asyncio
     async def test_uptime_increases(self, components):
         import asyncio
+
         from coreai.kernel import Kernel
 
         router, orchestrator, memory, scheduler = components

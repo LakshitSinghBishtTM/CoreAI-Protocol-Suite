@@ -79,8 +79,9 @@ if not any(isinstance(f, _ForcedAuthFinder) for f in sys.meta_path):
 # Shared fixtures
 # ---------------------------------------------------------------------------
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 
 @pytest.fixture

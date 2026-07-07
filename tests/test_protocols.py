@@ -59,7 +59,7 @@ class TestAuthProtocol:
         assert result.status == AuthStatus.EXPIRED
 
     def test_require_scope_passes_with_admin(self, proto):
-        from auth_protocol import AuthScope, AuthStatus, AuthResult
+        from auth_protocol import AuthResult, AuthScope, AuthStatus
 
         result = AuthResult(
             status=AuthStatus.VALID, client_id="ajay", scopes=[AuthScope.ADMIN]
@@ -67,7 +67,7 @@ class TestAuthProtocol:
         proto.require_scope(result, AuthScope.WRITE)  # should not raise
 
     def test_require_scope_raises_on_missing(self, proto):
-        from auth_protocol import AuthScope, AuthStatus, AuthResult, AuthorizationError
+        from auth_protocol import AuthorizationError, AuthResult, AuthScope, AuthStatus
 
         result = AuthResult(
             status=AuthStatus.VALID, client_id="limited", scopes=[AuthScope.READ]
@@ -76,7 +76,7 @@ class TestAuthProtocol:
             proto.require_scope(result, AuthScope.WRITE)
 
     def test_require_scope_raises_on_unauthenticated(self, proto):
-        from auth_protocol import AuthScope, AuthStatus, AuthResult, AuthenticationError
+        from auth_protocol import AuthenticationError, AuthResult, AuthScope, AuthStatus
 
         result = AuthResult(status=AuthStatus.INVALID, reason="bad key")
         with pytest.raises(AuthenticationError):
@@ -159,7 +159,7 @@ class TestSecureSession:
 
     @pytest.fixture
     def session_pair(self):
-        from secure_protocol import STPHandshake, HandshakeRole, SecureSession
+        from secure_protocol import HandshakeRole, SecureSession, STPHandshake
 
         shared = b"shared-secret-for-testing-32byt"
         init = STPHandshake("node-init", HandshakeRole.INITIATOR)
@@ -212,7 +212,7 @@ class TestReplayGuard:
         ReplayGuard(window_s=30).check(1, time.time())
 
     def test_blocks_duplicate_sequence(self):
-        from secure_protocol import ReplayGuard, ReplayAttackError
+        from secure_protocol import ReplayAttackError, ReplayGuard
 
         rg = ReplayGuard(window_s=30)
         rg.check(42, time.time())
@@ -220,7 +220,7 @@ class TestReplayGuard:
             rg.check(42, time.time())
 
     def test_blocks_old_timestamp(self):
-        from secure_protocol import ReplayGuard, ReplayAttackError
+        from secure_protocol import ReplayAttackError, ReplayGuard
 
         rg = ReplayGuard(window_s=30)
         with pytest.raises(ReplayAttackError):
@@ -253,9 +253,9 @@ class TestAgentMessageRouter:
     async def test_unicast_delivers_to_recipient(self):
         from distributed_agent import (
             AgentMessageRouter,
+            DeliveryMode,
             MessageEnvelope,
             MessageType,
-            DeliveryMode,
         )
 
         router = AgentMessageRouter()
@@ -275,9 +275,9 @@ class TestAgentMessageRouter:
     async def test_expired_message_dropped(self):
         from distributed_agent import (
             AgentMessageRouter,
+            DeliveryMode,
             MessageEnvelope,
             MessageType,
-            DeliveryMode,
         )
 
         router = AgentMessageRouter()
@@ -297,9 +297,9 @@ class TestAgentMessageRouter:
     async def test_exactly_once_dedup(self):
         from distributed_agent import (
             AgentMessageRouter,
+            DeliveryMode,
             MessageEnvelope,
             MessageType,
-            DeliveryMode,
         )
 
         router = AgentMessageRouter()
@@ -324,7 +324,7 @@ class TestAgentMessageRouter:
 class TestShardStore:
 
     def test_put_and_get(self):
-        from neural_sync import ShardStore, KVCacheShard
+        from neural_sync import KVCacheShard, ShardStore
 
         store = ShardStore()
         store.put(KVCacheShard(layer_idx=0, token_offset=0, token_count=16))
@@ -336,7 +336,7 @@ class TestShardStore:
         assert ShardStore().get(99, 99) is None
 
     def test_clear_removes_all_shards(self):
-        from neural_sync import ShardStore, KVCacheShard
+        from neural_sync import KVCacheShard, ShardStore
 
         store = ShardStore()
         store.put(KVCacheShard(layer_idx=0, token_offset=0, token_count=8))
@@ -344,7 +344,7 @@ class TestShardStore:
         assert store.summary()["shard_count"] == 0
 
     def test_drift_tokens_detects_difference(self):
-        from neural_sync import ShardStore, KVCacheShard
+        from neural_sync import KVCacheShard, ShardStore
 
         s1, s2 = ShardStore(), ShardStore()
         s1.put(KVCacheShard(layer_idx=0, token_offset=0, token_count=10))
@@ -354,7 +354,7 @@ class TestShardStore:
         assert s1.drift_tokens(s2) == 15
 
     def test_summary_shape(self):
-        from neural_sync import ShardStore, KVCacheShard
+        from neural_sync import KVCacheShard, ShardStore
 
         store = ShardStore()
         store.put(KVCacheShard(layer_idx=2, token_offset=0, token_count=5))
@@ -384,9 +384,9 @@ class TestNeuralSyncProtocol:
     async def test_replica_cannot_publish(self):
         from neural_sync import (
             NeuralSyncProtocol,
+            NeuralSyncProtocolError,
             ShardRole,
             SyncMode,
-            NeuralSyncProtocolError,
         )
 
         replica = NeuralSyncProtocol("r", role=ShardRole.REPLICA)

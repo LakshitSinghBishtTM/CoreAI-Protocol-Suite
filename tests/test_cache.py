@@ -87,7 +87,7 @@ class TestRedisCacheFallback:
 
     @pytest.fixture
     def cache(self):
-        from coreai.cache import RedisCache, MemoryCache
+        from coreai.cache import MemoryCache, RedisCache
 
         c = RedisCache.__new__(RedisCache)
         c.redis = None

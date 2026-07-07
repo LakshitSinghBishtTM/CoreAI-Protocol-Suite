@@ -6,7 +6,7 @@ Checks message structure, content policy limits, and provider availability.
 
 from typing import Optional
 
-from fastapi import Request, HTTPException
+from fastapi import HTTPException, Request
 from loguru import logger
 
 # Hard limits — requests exceeding these are rejected before hitting providers

@@ -8,7 +8,7 @@ import hashlib
 import os
 from typing import Optional
 
-from fastapi import Request, HTTPException, Security
+from fastapi import HTTPException, Request, Security
 from fastapi.security import APIKeyHeader
 from loguru import logger
 

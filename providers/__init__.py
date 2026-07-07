@@ -4,22 +4,17 @@ providers/__init__.py
 
 import os
 from dataclasses import dataclass, field
+
 from loguru import logger
 
-from .base import BaseProvider, CompletionRequest, CompletionResponse, Message
-
 # Explicit submodule imports so patch("providers.openai.OpenAIProvider") works
-from . import openai
-from . import anthropic
-from . import gemini
-from . import grok
-from . import deepseek
-
-from .openai import OpenAIProvider
+from . import anthropic, deepseek, gemini, grok, openai
 from .anthropic import AnthropicProvider
+from .base import BaseProvider, CompletionRequest, CompletionResponse, Message
+from .deepseek import DeepSeekProvider
 from .gemini import GeminiProvider
 from .grok import GrokProvider
-from .deepseek import DeepSeekProvider
+from .openai import OpenAIProvider
 
 __all__ = [
     "BaseProvider",

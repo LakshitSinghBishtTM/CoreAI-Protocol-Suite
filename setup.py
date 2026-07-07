@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
-from setuptools import setup, find_packages
+
+from setuptools import find_packages, setup
 
 ROOT = Path(__file__).parent
 

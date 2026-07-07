@@ -1,7 +1,12 @@
+"""
+providers/gemini.py
+"""
+
 import time
 from typing import AsyncGenerator
 
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from loguru import logger
 
 from .base import BaseProvider, CompletionRequest, CompletionResponse
@@ -21,30 +26,26 @@ class GeminiProvider(BaseProvider):
 
     def __init__(self, api_key: str):
         super().__init__(api_key)
-        genai.configure(api_key=api_key)
+        self.client = genai.Client(api_key=api_key)
 
-    def _get_client(self, model: str, system_prompt: str | None = None):
-        config = genai.GenerationConfig()
-        kwargs = {"model": model, "generation_config": config}
-        if system_prompt:
-            kwargs["system_instruction"] = system_prompt
-        return genai.GenerativeModel(**kwargs)
+    def _build_config(self, request: CompletionRequest) -> types.GenerateContentConfig:
+        return types.GenerateContentConfig(
+            max_output_tokens=request.max_tokens,
+            temperature=request.temperature,
+            system_instruction=request.system_prompt or None,
+        )
 
     async def complete(self, request: CompletionRequest) -> CompletionResponse:
         model = request.model or self.default_model
-        client = self._get_client(model, request.system_prompt)
         history, last_message = self._build_messages(request)
+        config = self._build_config(request)
 
         start = time.monotonic()
         try:
-            chat = client.start_chat(history=history)
-            response = await chat.send_message_async(
-                last_message,
-                generation_config=genai.GenerationConfig(
-                    max_output_tokens=request.max_tokens,
-                    temperature=request.temperature,
-                ),
+            chat = self.client.aio.chats.create(
+                model=model, config=config, history=history
             )
+            response = await chat.send_message(last_message)
         except Exception as e:
             logger.error(f"[gemini] completion failed: {e}")
             raise
@@ -72,20 +73,15 @@ class GeminiProvider(BaseProvider):
 
     async def stream(self, request: CompletionRequest) -> AsyncGenerator[str, None]:
         model = request.model or self.default_model
-        client = self._get_client(model, request.system_prompt)
         history, last_message = self._build_messages(request)
+        config = self._build_config(request)
 
         try:
-            chat = client.start_chat(history=history)
-            response = await chat.send_message_async(
-                last_message,
-                generation_config=genai.GenerationConfig(
-                    max_output_tokens=request.max_tokens,
-                    temperature=request.temperature,
-                ),
-                stream=True,
+            chat = self.client.aio.chats.create(
+                model=model, config=config, history=history
             )
-            async for chunk in response:
+            stream = await chat.send_message_stream(last_message)
+            async for chunk in stream:
                 if chunk.text:
                     yield chunk.text
         except Exception as e:
@@ -107,7 +103,7 @@ class GeminiProvider(BaseProvider):
 
         for msg in messages[:-1]:
             role = "model" if msg.role == "assistant" else "user"
-            history.append({"role": role, "parts": [msg.content]})
+            history.append({"role": role, "parts": [{"text": msg.content}]})
 
         last_message = messages[-1].content if messages else "Hello"
         return history, last_message

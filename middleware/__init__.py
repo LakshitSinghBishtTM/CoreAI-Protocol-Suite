@@ -2,15 +2,15 @@
 middleware/__init__.py
 """
 
-from .auth import require_api_key, optional_api_key
-from .logger import RequestLoggerMiddleware, log_completion, log_agent_event
+from .auth import optional_api_key, require_api_key
+from .logger import RequestLoggerMiddleware, log_agent_event, log_completion
 from .validator import (
-    validate_completion_request,
-    validate_messages,
-    validate_max_tokens,
-    validate_temperature,
-    validate_provider,
     ValidationError,
+    validate_completion_request,
+    validate_max_tokens,
+    validate_messages,
+    validate_provider,
+    validate_temperature,
 )
 
 # RateLimitMiddleware lives in api/middleware.py. Import only what is

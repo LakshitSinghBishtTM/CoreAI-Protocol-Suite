@@ -8,10 +8,10 @@ import asyncio
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
 
+import pytest
+
 from kernel.protocol_handler import ProtocolHandler
 from kernel.runtime import Runtime
-
-import pytest
 
 # ---------------------------------------------------------------------------
 # protocol_handler.py

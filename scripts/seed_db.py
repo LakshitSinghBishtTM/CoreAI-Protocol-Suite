@@ -20,9 +20,9 @@ from datetime import datetime, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from database.db import init_db, get_session
-from database.models import Base, RequestLog, UsageDaily, Agent, Task, APIKey
+from database.db import get_session, init_db
 from database.migrations import create_all_tables
+from database.models import Agent, APIKey, Base, RequestLog, Task, UsageDaily
 
 PROVIDERS = ["openai", "anthropic", "gemini", "deepseek", "grok"]
 MODELS = {

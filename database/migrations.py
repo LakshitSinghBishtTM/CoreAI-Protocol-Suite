@@ -12,13 +12,13 @@ Usage:
 import asyncio
 import os
 import sys
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
 from loguru import logger
 from sqlalchemy import text
 
-from .db import init_db, get_session, ping
+from .db import get_session, init_db, ping
 
 MIGRATIONS_DIR = Path(__file__).parent.parent / "migrations"
 
