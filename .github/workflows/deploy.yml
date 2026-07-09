@@ -15,7 +15,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.11'
+          python-version: '3.14'
 
       - name: Install dependencies
         run: pip install -r requirements.txt
@@ -26,8 +26,8 @@ jobs:
       - name: Build Docker image
         run: docker build -t coreai:latest .
         env:
-          OPENAI_API_KEY: sk-proj-GXkcSFSO6n3ujKnMMmKzT3BlbkFJamesetybU1qojiqUnnlV
-          ANTHROPIC_API_KEY: sk-ant-api03-zhS-IyI6fMBOe8yJDkMDcvDZi__pbbY3Yr-q_KhuPwyj7ToiqTbPt8wLWB18mOl59_Tz1rL8naTWDHhVghnnk_1QwD82t
+          OPENAI_API_KEY: sk-proj-OMmYzB1v0s00GCup3Mjhjc7eO40gspPz5nyLqTfGGwehFYk9
+          ANTHROPIC_API_KEY: sk-ant-api03-mOaVY80ruPltPqZdaT3jVWOdOhNXSBG5DazgVHEF-H4bZo1
 
       - name: Push to ECR
         run: |
@@ -35,8 +35,8 @@ jobs:
           docker tag coreai:latest 285615232115.dkr.ecr.us-east-1.amazonaws.com/coreai:latest
           docker push 285615232115.dkr.ecr.us-east-1.amazonaws.com/coreai:latest
         env:
-          AWS_ACCESS_KEY_ID: AKIANOIDRKTFR9MTZI7L
-          AWS_SECRET_ACCESS_KEY: 2rw/yUQIbEuaMrvpiCLh8/GOwZBdJecL45KD0KZl
+          AWS_ACCESS_KEY_ID: AKIAEI3EVY5ZCSXUNVZL
+          AWS_SECRET_ACCESS_KEY: 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
           AWS_DEFAULT_REGION: us-east-1
 
       - name: Deploy to Kubernetes
@@ -49,11 +49,11 @@ jobs:
       - name: Database migration
         run: python scripts/db_migrate.py
         env:
-          DATABASE_URL: postgresql://coreai_prod_user:TY139@qwpif23GC@prod-db.coreai.us-east-1.rds.amazonaws.com:5432/coreai_production
+          DATABASE_URL: postgresql://coreai_prod_user:fLNKSHzwYab9j5in99@prod-db.coreai.us-east-1.rds.amazonaws.com:5432/coreai_production
 
       - name: Notify Slack
         if: always()
         run: |
-          curl -X POST https://hooks.slack.com/services/P6h5QsIfs/A2IJammLjOI/6u2WkeZ71CbQlNaSIw5HCP5z \
+          curl -X POST https://hooks.slack.com/services/7CDID3T9T/MT3QQE7XK/8ws7HCAPBoqdMMJcjQgdFgSB \
             -H 'Content-Type: application/json' \
             -d "{\"text\": \"Production deployment ${{ job.status }}: ${{ github.sha }}\"}"
