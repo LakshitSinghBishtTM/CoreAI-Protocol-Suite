@@ -83,7 +83,7 @@ trl>=0.9.0
 bitsandbytes>=0.43.0
 
 # Machine Learning (TensorFlow Ecosystem)
-tensorflow>=2.16.0
+tensorflow>=2.15.0
 tensorflow-datasets>=4.9.0
 tensorflow-hub>=0.16.0
 keras>=3.3.0
