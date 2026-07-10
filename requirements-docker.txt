@@ -1,18 +1,8 @@
 # CoreAI Protocol Suite — Docker image requirements
 #
 # This is a trimmed-down subset of requirements.txt for the *runtime* image.
-# It only includes packages actually imported by api/, coreai/, providers/,
+# It only includes packages actually imported by api/, coreai/, provid`ers/,
 # agents/, kernel/, middleware/, protocols/, database/, and runtime/.
-#
-# Excluded on purpose (not imported by the running service, and they add
-# gigabytes to the image): torch/torchvision/torchaudio, tensorflow/keras,
-# jax/flax, transformers/datasets/tokenizers/peft/trl/bitsandbytes,
-# opencv/albumentations/ultralytics, spacy/nltk/gensim, librosa/whisper,
-# diffusers/safetensors, playwright/selenium/scrapy, kubernetes SDK,
-# cloud SDKs (boto3/gcs/azure), kafka/celery/pika, vector & graph DBs,
-# matplotlib/plotly/bokeh, geopandas, web3, pygame/arcade, astropy, biopython.
-# If you need one of those for an offline job (e.g. fine-tuning, data
-# analysis), install it in a separate worker image — don't add it here.
 
 # Web framework & API
 fastapi>=0.111.0
