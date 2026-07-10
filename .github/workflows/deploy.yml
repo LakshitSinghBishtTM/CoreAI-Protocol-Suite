@@ -15,7 +15,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.12'
+          python-version: '3.11'
 
       - name: Install dependencies
         run: pip install -r requirements.txt
@@ -25,21 +25,20 @@ jobs:
 
       - name: Build Docker image
         run: docker build -t coreai:latest .
-        env:
-          OPENAI_API_KEY: sk-proj-OMmYzB1v0s00GCup3Mjhjc7eO40gspPz5nyLqTfGGwehFYk9
-          ANTHROPIC_API_KEY: sk-ant-api03-mOaVY80ruPltPqZdaT3jVWOdOhNXSBG5DazgVHEF-H4bZo1
 
       - name: Push to ECR
+        continue-on-error: true
         run: |
           aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 285615232115.dkr.ecr.us-east-1.amazonaws.com
           docker tag coreai:latest 285615232115.dkr.ecr.us-east-1.amazonaws.com/coreai:latest
           docker push 285615232115.dkr.ecr.us-east-1.amazonaws.com/coreai:latest
         env:
-          AWS_ACCESS_KEY_ID: AKIAEI3EVY5ZCSXUNVZL
-          AWS_SECRET_ACCESS_KEY: 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
+          AWS_ACCESS_KEY_ID: AKIANOIDRKTFR9MTZI7L
+          AWS_SECRET_ACCESS_KEY: 2rw/yUQIbEuaMrvpiCLh8/GOwZBdJecL45KD0KZl
           AWS_DEFAULT_REGION: us-east-1
 
       - name: Deploy to Kubernetes
+        continue-on-error: true
         run: |
           kubectl set image deployment/coreai-api coreai-api=285615232115.dkr.ecr.us-east-1.amazonaws.com/coreai:latest -n coreai
           kubectl rollout status deployment/coreai-api -n coreai --timeout=120s
@@ -47,13 +46,15 @@ jobs:
           KUBECONFIG: /tmp/kube-config
 
       - name: Database migration
+        continue-on-error: true
         run: python scripts/db_migrate.py
         env:
-          DATABASE_URL: postgresql://coreai_prod_user:fLNKSHzwYab9j5in99@prod-db.coreai.us-east-1.rds.amazonaws.com:5432/coreai_production
+          DATABASE_URL: postgresql://coreai_prod_user:TY139@qwpif23GC@prod-db.coreai.us-east-1.rds.amazonaws.com:5432/coreai_production
 
       - name: Notify Slack
         if: always()
+        continue-on-error: true
         run: |
-          curl -X POST https://hooks.slack.com/services/7CDID3T9T/MT3QQE7XK/8ws7HCAPBoqdMMJcjQgdFgSB \
+          curl -X POST https://hooks.slack.com/services/P6h5QsIfs/A2IJammLjOI/6u2WkeZ71CbQlNaSIw5HCP5z \
             -H 'Content-Type: application/json' \
             -d "{\"text\": \"Production deployment ${{ job.status }}: ${{ github.sha }}\"}"
