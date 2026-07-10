@@ -1,0 +1,69 @@
+# CoreAI Protocol Suite — Docker image requirements
+#
+# This is a trimmed-down subset of requirements.txt for the *runtime* image.
+# It only includes packages actually imported by api/, coreai/, providers/,
+# agents/, kernel/, middleware/, protocols/, database/, and runtime/.
+#
+# Excluded on purpose (not imported by the running service, and they add
+# gigabytes to the image): torch/torchvision/torchaudio, tensorflow/keras,
+# jax/flax, transformers/datasets/tokenizers/peft/trl/bitsandbytes,
+# opencv/albumentations/ultralytics, spacy/nltk/gensim, librosa/whisper,
+# diffusers/safetensors, playwright/selenium/scrapy, kubernetes SDK,
+# cloud SDKs (boto3/gcs/azure), kafka/celery/pika, vector & graph DBs,
+# matplotlib/plotly/bokeh, geopandas, web3, pygame/arcade, astropy, biopython.
+# If you need one of those for an offline job (e.g. fine-tuning, data
+# analysis), install it in a separate worker image — don't add it here.
+
+# Web framework & API
+fastapi>=0.111.0
+uvicorn[standard]>=0.30.0
+starlette>=0.37.0
+pydantic>=2.7.0
+
+# AI provider SDKs (used by providers/*.py)
+openai>=1.30.0
+anthropic>=0.28.0
+google-generativeai>=0.7.0
+tiktoken>=0.7.0
+
+# Async HTTP
+httpx>=0.27.0
+aiohttp>=3.9.0
+anyio>=4.4.0
+
+# Database (database/db.py, database/models.py, database/migrations.py)
+sqlalchemy>=2.0.0
+asyncpg>=0.29.0
+psycopg2-binary>=2.9.0
+alembic>=1.13.0
+
+# Cache / rate limiting backend (coreai/cache.py, coreai/limiter.py)
+redis>=5.0.0
+
+# Auth (api/auth.py, middleware/auth.py, protocols/auth_protocol.py)
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4
+bcrypt>=4.1.0
+pyjwt>=2.8.0
+
+# Config
+python-dotenv>=1.0.0
+pyyaml>=6.0.1
+
+# Logging
+loguru>=0.7.0
+structlog>=24.0.0
+
+# Retries (coreai/retry.py)
+tenacity>=8.3.0
+backoff>=2.2.0
+
+# Local caching fallback
+diskcache>=5.6.0
+cachetools>=5.3.0
+
+# Core networking/serialization
+requests>=2.32.0
+urllib3>=2.2.0
+certifi>=2024.7.0
+orjson>=3.10.0

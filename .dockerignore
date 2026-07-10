@@ -1,0 +1,43 @@
+# Version control
+.git/
+.github/
+
+# Env & local secrets
+.env
+.env.*
+.netrc
+.npmrc
+.pypirc
+.aws/
+.kube/
+.docker/
+keys/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+*.egg-info/
+
+# Tests & docs
+tests/
+docs/
+scripts/
+.github/
+
+# Logs & local data
+logs/
+*.log
+*.db
+dump.sql
+terraform.tfstate
+
+# Editor/OS cruft
+.vscode/
+.idea/
+.DS_Store
