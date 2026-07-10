@@ -1,7 +1,7 @@
 # CoreAI Protocol Suite — Docker image requirements
 #
 # This is a trimmed-down subset of requirements.txt for the *runtime* image.
-# It only includes packages actually imported by api/, coreai/, provid`ers/,
+# It only includes packages actually imported by api/, coreai/, providers/,
 # agents/, kernel/, middleware/, protocols/, database/, and runtime/.
 
 # Web framework & API
@@ -13,7 +13,7 @@ pydantic>=2.7.0
 # AI provider SDKs (used by providers/*.py)
 openai>=1.30.0
 anthropic>=0.28.0
-google-generativeai>=0.7.0
+google-genai>=1.0.0
 tiktoken>=0.7.0
 
 # Async HTTP
