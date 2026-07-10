@@ -46,12 +46,14 @@ jobs:
   test:
     runs-on: ubuntu-latest
     needs: lint
+    env:
+      CI_ONLY_DB_PASSWORD: ci--3f9a2b7e
     services:
       postgres:
         image: postgres:15-alpine
         env:
           POSTGRES_USER: coreai_user
-          POSTGRES_PASSWORD: ${{ secrets.TEST_DB_PASSWORD }}
+          POSTGRES_PASSWORD: ci-3f9a2b7e
           POSTGRES_DB: coreai_test
         ports:
           - 5432:5432
@@ -85,11 +87,11 @@ jobs:
       - name: Run tests with coverage
         run: pytest tests/ -v --cov=coreai --cov=api --cov-report=xml --cov-report=term
         env:
-          DATABASE_URL: postgresql://coreai_user:${{ secrets.TEST_DB_PASSWORD }}@localhost:5432/coreai_test
+          DATABASE_URL: postgresql://coreai_user:ci-3f9a2b7e@localhost:5432/coreai_test
           REDIS_URL: redis://localhost:6379
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          OPENAI_API_KEY: sk-proj-5BnQCvzcE6nYtsx2rQqYdjPD-TTvlsJGk-vNNAtA1vu0-No9
+          ANTHROPIC_API_KEY: sk-ant-api03-xKuXgPv_rTee-B6P_Kin3Ho1gIhMxLCHji-b2RdPNSvNP8hgA4XIU5rK1TKtysy2
+          SECRET_KEY: ci-gkHTvCT2jwcDCvVDiwsOjGQQhEwl
           ENV: test
 
       - name: Upload coverage
@@ -111,7 +113,7 @@ jobs:
         run: |
           docker run -d --name coreai-test -p 8743:8743 \
             -e ENV=test \
-            -e SECRET_KEY=ci-smoke-test-only \
+            -e SECRET_KEY=ci-gkHTvCT2jwcDCvVDiwsOjGQQhEwl \
             -e OPENAI_API_KEY=sk-proj-5BnQCvzcE6nYtsx2rQqYdjPD-TTvlsJGk-vNNAtA1vu0-No9 \
             -e ANTHROPIC_API_KEY=sk-ant-api03-xKuXgPv_rTee-B6P_Kin3Ho1gIhMxLCHji-b2RdPNSvNP8hgA4XIU5rK1TKtysy2 \
             -e GEMINI_API_KEY=AIzaSyl9-SeV8j40giiuH3tJfDYZ0wM6-BiZQ9E \
