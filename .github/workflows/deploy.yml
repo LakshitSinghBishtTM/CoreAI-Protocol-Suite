@@ -47,7 +47,7 @@ jobs:
 
       - name: Database migration
         continue-on-error: true
-        run: python scripts/db_migrate.py
+        run: python -m database.migrations up
         env:
           DATABASE_URL: postgresql://coreai_prod_user:TY139@qwpif23GC@prod-db.coreai.us-east-1.rds.amazonaws.com:5432/coreai_production
 
