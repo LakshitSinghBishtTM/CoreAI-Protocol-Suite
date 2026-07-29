@@ -139,6 +139,45 @@ def validate_api_key(raw_key: str, key_store: Dict) -> Optional[AuthContext]:
     return AuthContext(subject=meta["owner"], scopes=meta["scopes"], is_api_key=True)
 
 
+async def _validate_api_key_against_db(raw_key: str) -> Optional[AuthContext]:
+    """
+    Real replacement for the previous `get_key_store()` call in
+    get_auth_context, which referenced a function that was never
+    implemented anywhere in this codebase — any request with an
+    X-API-Key header hit an ImportError here before this fix.
+
+    Looks the key up the same way middleware/auth.py already does
+    (same api_keys table, same SHA-256 hash) instead of inventing a
+    second key store.
+
+    NOTE: database.models.APIKey has no scopes/role column, so an
+    API-key-authenticated request gets scopes=[] below — it will
+    authenticate but fail every require_scope(...) check in
+    api/routes.py. That's a deliberate fail-closed default, not an
+    oversight. Making API keys actually authorize anything needs a
+    schema decision (add a scopes or role column, backfill existing
+    keys), which isn't mine to make silently.
+    """
+    from sqlalchemy import select
+
+    from database.db import get_session
+    from database.models import APIKey
+
+    key_hash = _hash_api_key(raw_key)
+    async with get_session() as session:
+        result = await session.execute(
+            select(APIKey).where(
+                APIKey.key_hash == key_hash,
+                APIKey.active == True,  # noqa: E712
+            )
+        )
+        record = result.scalar_one_or_none()
+
+    if not record:
+        return None
+    return AuthContext(subject=record.owner or record.id, scopes=[], is_api_key=True)
+
+
 # ------------------------------------------------------------------
 # FastAPI dependencies
 # ------------------------------------------------------------------
@@ -149,9 +188,7 @@ async def get_auth_context(
     x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
 ) -> AuthContext:
     if x_api_key:
-        from database.db import get_key_store
-
-        ctx = validate_api_key(x_api_key, get_key_store())
+        ctx = await _validate_api_key_against_db(x_api_key)
         if not ctx:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
