@@ -112,7 +112,7 @@ async def completions(
     request: CompletionRequest,
     ctx: AuthContext = Depends(require_scope("completions:write")),
 ):
-    from coreai.router import get_router as _get_router
+    from api.server import get_router as _get_router
     from providers import CompletionRequest as PCR
     from providers import Message as PM
 
@@ -152,7 +152,7 @@ async def completions_stream(
     request: CompletionRequest,
     ctx: AuthContext = Depends(require_scope("completions:write")),
 ):
-    from coreai.router import get_router as _get_router
+    from api.server import get_router as _get_router
     from providers import CompletionRequest as PCR
     from providers import Message as PM
 
@@ -201,7 +201,7 @@ async def create_task(
     request: TaskRequest,
     ctx: AuthContext = Depends(require_scope("tasks:write")),
 ):
-    from coreai.orchestrator import get_orchestrator as _get_orch
+    from api.server import get_orchestrator as _get_orch
 
     orch = _get_orch()
     try:
@@ -236,7 +236,7 @@ async def get_task(
     task_id: str = Path(..., description="Task ID"),
     ctx: AuthContext = Depends(require_scope("tasks:read")),
 ):
-    from coreai.orchestrator import get_orchestrator as _get_orch
+    from api.server import get_orchestrator as _get_orch
 
     task = _get_orch().get_task(task_id)
     if not task:
@@ -266,7 +266,7 @@ async def cancel_task(
     task_id: str = Path(...),
     ctx: AuthContext = Depends(require_scope("tasks:write")),
 ):
-    from coreai.orchestrator import get_orchestrator as _get_orch
+    from api.server import get_orchestrator as _get_orch
 
     cancelled = _get_orch().cancel_task(task_id)
     if not cancelled:
@@ -343,7 +343,7 @@ async def terminate_agent(
 async def list_providers(
     ctx: AuthContext = Depends(require_scope("completions:read")),
 ):
-    from coreai.router import get_router as _get_router
+    from api.server import get_router as _get_router
 
     results = []
     for name, provider in _get_router().providers.items():
@@ -376,8 +376,8 @@ async def list_providers(
 async def get_stats(
     ctx: AuthContext = Depends(require_scope("admin")),
 ):
-    from coreai.orchestrator import get_orchestrator as _get_orch
-    from coreai.router import get_router as _get_router
+    from api.server import get_orchestrator as _get_orch
+    from api.server import get_router as _get_router
 
     rs = _get_router().stats()
     os_ = _get_orch().stats()
@@ -399,7 +399,7 @@ async def get_stats(
     tags=["admin"],
 )
 async def trigger_shutdown(
-    mode: str = Query("graceful", regex="^(graceful|immediate|forced)$"),
+    mode: str = Query("graceful", pattern="^(graceful|immediate|forced)$"),
     message: str = Query("", max_length=256),
     ctx: AuthContext = Depends(require_scope("admin")),
 ):
