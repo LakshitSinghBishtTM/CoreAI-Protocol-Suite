@@ -87,6 +87,20 @@ class ProviderStatusResponse(BaseModel):
     model_list: List[str] = Field(default_factory=list)
 
 
+class ModelInfoResponse(BaseModel):
+    model_id: str
+    provider: str
+    tier: str
+    context_window: int
+    max_output_tokens: int
+    modalities: List[str]
+    supports_streaming: bool
+    supports_function_calling: bool
+    knowledge_cutoff: Optional[str] = None
+    input_per_million_usd: Optional[float] = None
+    output_per_million_usd: Optional[float] = None
+
+
 class StatsResponse(BaseModel):
     total_requests: int
     strategy: str
@@ -360,6 +374,59 @@ async def list_providers(
         except Exception:
             results.append(ProviderStatusResponse(name=name, available=False))
     return results
+
+
+@router.get(
+    "/models",
+    response_model=List[ModelInfoResponse],
+    summary="List known models and their capabilities",
+    tags=["providers"],
+)
+async def list_models(
+    ctx: AuthContext = Depends(require_scope("completions:read")),
+    provider: Optional[str] = Query(None, description="Filter by provider name"),
+    modality: Optional[str] = Query(
+        None, description="Filter by supported modality, e.g. 'vision'"
+    ),
+    min_context: Optional[int] = Query(
+        None, description="Only models with at least this context window"
+    ),
+):
+    from neural.model import Modality, get_registry
+
+    registry = get_registry()
+    modality_enum = None
+    if modality:
+        try:
+            modality_enum = Modality(modality)
+        except ValueError:
+            valid = [m.value for m in Modality]
+            raise HTTPException(
+                status_code=422,
+                detail=f"Unknown modality '{modality}'. Valid values: {valid}",
+            )
+
+    profiles = registry.list(
+        provider=provider, modality=modality_enum, min_context=min_context
+    )
+    return [
+        ModelInfoResponse(
+            model_id=p.model_id,
+            provider=p.provider,
+            tier=p.tier.value,
+            context_window=p.context_window,
+            max_output_tokens=p.max_output_tokens,
+            modalities=[m.value for m in p.modalities],
+            supports_streaming=p.supports_streaming,
+            supports_function_calling=p.supports_function_calling,
+            knowledge_cutoff=p.knowledge_cutoff,
+            input_per_million_usd=p.pricing.input_per_million if p.pricing else None,
+            output_per_million_usd=(
+                p.pricing.output_per_million if p.pricing else None
+            ),
+        )
+        for p in profiles
+    ]
 
 
 # ------------------------------------------------------------------

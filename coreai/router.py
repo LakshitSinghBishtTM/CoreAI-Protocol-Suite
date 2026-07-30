@@ -4,6 +4,7 @@ from typing import Optional
 
 from loguru import logger
 
+from neural.model import get_registry
 from providers import BaseProvider, CompletionRequest, CompletionResponse
 
 from .cache import ResponseCache
@@ -66,6 +67,7 @@ class Router:
     ):
         self.providers = providers
         self.config = config or RoutingConfig()
+        self._model_registry = get_registry()
 
         # Supporting components
         self.cache = ResponseCache() if self.config.enable_cache else None
@@ -117,6 +119,21 @@ class Router:
             )
 
         provider_name = preferred_provider or self._select_provider(request)
+
+        # Fail fast on context-window overflow using the neural model
+        # registry, instead of letting the provider API reject it after
+        # we've already spent a rate-limit slot and a cache lookup on it.
+        profile = self._resolve_model_profile(provider_name, request.model)
+        if profile is not None:
+            estimated_input = self._estimate_tokens(request)
+            headroom = estimated_input + (request.max_tokens or 0)
+            if not profile.fits_context(headroom):
+                raise ValueError(
+                    f"Request (~{estimated_input} input + "
+                    f"{request.max_tokens or 0} max_tokens = ~{headroom} tokens) "
+                    f"exceeds {profile.model_id}'s {profile.context_window}-token "
+                    f"context window."
+                )
 
         # Cache lookup — key includes provider_name so explicit-provider
         # requests are never satisfied from a different provider's cache.
@@ -300,6 +317,21 @@ class Router:
     # ------------------------------------------------------------------ #
     # Helpers
     # ------------------------------------------------------------------ #
+
+    def _resolve_model_profile(self, provider_name: str, model_id: Optional[str]):
+        """
+        Look up the ModelProfile for this request, preferring an explicit
+        model_id and falling back to the provider's default. Returns None
+        (rather than raising) if the catalogue doesn't recognise the model
+        -- a newer model the catalogue hasn't been updated for yet should
+        not block requests, it should just skip the context-window check.
+        """
+        try:
+            if model_id:
+                return self._model_registry.get(model_id)
+            return self._model_registry.default_for(provider_name)
+        except KeyError:
+            return None
 
     def _estimate_tokens(self, request: CompletionRequest) -> int:
         total_chars = sum(len(m.content) for m in request.messages)
