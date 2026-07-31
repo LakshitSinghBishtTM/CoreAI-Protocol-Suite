@@ -5,7 +5,9 @@ from loguru import logger
 
 from api import routes
 from api.middleware import RateLimitMiddleware
+from agents.agent_manager import init_agent_manager
 from coreai import Orchestrator, Router, RoutingConfig, RoutingStrategy
+from coreai.kernel import init_kernel
 from providers import (
     load_providers,
 )
@@ -18,6 +20,8 @@ app_state = {
     "providers": None,
     "router": None,
     "orchestrator": None,
+    "kernel": None,
+    "agent_manager": None,
 }
 
 
@@ -41,12 +45,24 @@ async def lifespan(app: FastAPI):
     )
     app_state["orchestrator"] = Orchestrator()
 
+    kernel = init_kernel(app_state["router"], app_state["orchestrator"])
+    await kernel.start()
+    app_state["kernel"] = kernel
+
+    agent_manager = init_agent_manager(kernel, kernel.memory)
+    await agent_manager.start_health_monitor()
+    app_state["agent_manager"] = agent_manager
+
     logger.info("CoreAI server ready")
 
     yield
 
     # Shutdown
     logger.info("Shutting down CoreAI...")
+    if app_state["agent_manager"]:
+        await app_state["agent_manager"].shutdown_all()
+    if app_state["kernel"]:
+        await app_state["kernel"].stop()
 
 
 # ============================================================================

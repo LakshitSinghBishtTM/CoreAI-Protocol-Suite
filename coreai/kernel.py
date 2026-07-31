@@ -17,6 +17,15 @@ from .router import Router
 from .scheduler import Scheduler
 
 
+class AgentCompletionResult:
+    """Return type of Kernel.complete(); shape AutonomousAgent.execute() reads."""
+
+    def __init__(self, content: str, is_final: bool = True, tool_call: Optional[dict] = None):
+        self.content = content
+        self.is_final = is_final
+        self.tool_call = tool_call
+
+
 class KernelState:
     INIT = "initializing"
     RUNNING = "running"
@@ -95,7 +104,15 @@ class Kernel:
         await self._shutdown_event.wait()
 
     def _register_signals(self):
-        """Register OS signal handlers for graceful shutdown."""
+        """Register OS signal handlers for graceful shutdown.
+
+        Best-effort: only the main thread of the main interpreter can
+        register signal handlers. Test runners (e.g. FastAPI's
+        TestClient, which drives the ASGI app's lifespan from a worker
+        thread via anyio) and some embedding contexts can't do this --
+        that's expected there, not a startup failure. A real uvicorn
+        deployment runs in the main thread, where this still works.
+        """
         loop = asyncio.get_event_loop()
         for sig in (signal.SIGINT, signal.SIGTERM):
             try:
@@ -106,6 +123,13 @@ class Kernel:
             except NotImplementedError:
                 # Windows doesn't support add_signal_handler
                 pass
+            except RuntimeError:
+                # Not the main thread of the main interpreter
+                logger.debug(
+                    "Skipping signal handler registration for %s "
+                    "(not in main thread)",
+                    sig,
+                )
 
     def uptime_seconds(self) -> Optional[float]:
         if not self.started_at:
@@ -128,3 +152,97 @@ class Kernel:
             "router": self.router.stats(),
             "orchestrator": self.orchestrator.stats(),
         }
+
+    # ------------------------------------------------------------------
+    # Agent-facing API
+    #
+    # agents/autonomous_agent.py calls warm_up/ping/complete on whatever
+    # Kernel it's given. None of these existed anywhere before this fix --
+    # every agent's initialize()/health_check()/execute() would have
+    # raised AttributeError the moment it ran, and nothing caught this
+    # because agents/ has no tests. Adding the real, minimal versions
+    # rather than stubs: warm_up/ping are cheap liveness/readiness
+    # checks, complete() is a genuine adapter onto the same Router
+    # every other request goes through (not a second code path).
+    # ------------------------------------------------------------------
+
+    async def warm_up(self, agent_id: str) -> None:
+        """Readiness hook called once when an agent initializes.
+
+        No per-agent state to pre-load today (agents don't have a
+        dedicated cache slot yet) -- this just confirms the kernel is
+        actually running before the agent starts using it, so a bad
+        startup ordering fails at initialize() with a clear error
+        rather than later, mid-task.
+        """
+        if self.state != KernelState.RUNNING:
+            raise RuntimeError(
+                f"Cannot warm up agent {agent_id}: kernel state is "
+                f"'{self.state}', not '{KernelState.RUNNING}'"
+            )
+        logger.debug(f"Kernel warm-up ok for agent {agent_id}")
+
+    async def ping(self, agent_id: str) -> bool:
+        """Liveness check used by AutonomousAgent.health_check()."""
+        return self.state == KernelState.RUNNING
+
+    async def complete(
+        self,
+        agent_id: str,
+        messages: list[dict],
+        tools: Optional[list[str]] = None,
+    ) -> "AgentCompletionResult":
+        """
+        Run one completion for an agent's tick loop, through the same
+        Router (and therefore the same cache/limiter/retry/cost
+        tracking) as every other request in the system.
+
+        tools is accepted for interface compatibility with a future
+        real tool-calling protocol, but no provider adapter in this
+        codebase currently returns a tool-call shape back -- so every
+        result here is final. That's why is_final is always True and
+        tool_call is always None, not a guess: there is nothing yet
+        upstream that could produce anything else.
+        """
+        from providers import CompletionRequest, Message
+
+        system_prompt = next(
+            (m["content"] for m in messages if m.get("role") == "system"), None
+        )
+        chat_messages = [
+            Message(role=m["role"], content=m["content"])
+            for m in messages
+            if m.get("role") != "system"
+        ]
+        request = CompletionRequest(
+            messages=chat_messages,
+            system_prompt=system_prompt,
+        )
+        response = await self.router.route(request)
+        return AgentCompletionResult(content=response.content)
+
+
+# ------------------------------------------------------------------
+# Module-level singleton
+#
+# Deliberately NOT self-constructing a Router/Orchestrator here: the
+# app already owns those instances (api/server.py's app_state). init_kernel
+# is called once at startup with the app's existing instances so there is
+# only ever one Router/Orchestrator pair, not two disconnected ones.
+# ------------------------------------------------------------------
+
+_kernel_instance: Optional["Kernel"] = None
+
+
+def init_kernel(router: Router, orchestrator: Orchestrator, **kwargs) -> "Kernel":
+    global _kernel_instance
+    _kernel_instance = Kernel(router, orchestrator, **kwargs)
+    return _kernel_instance
+
+
+def get_kernel() -> "Kernel":
+    if _kernel_instance is None:
+        raise RuntimeError(
+            "Kernel not initialized — call init_kernel() during app startup first"
+        )
+    return _kernel_instance

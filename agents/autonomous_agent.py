@@ -27,6 +27,30 @@ class AgentCapability:
     AGENT_SPAWN = "agent_spawn"
 
 
+class ToolRouter:
+    """
+    Maps an agent's capabilities to callable tools.
+
+    agents/autonomous_agent.py's _register_tools() already imported and
+    called this; it never existed anywhere in the codebase, so every
+    agent's initialize() raised ImportError before this fix.
+
+    Returns an empty tool set for every capability rather than
+    fabricating placeholder tools: there is no real web-search client,
+    sandboxed code executor, or file I/O layer anywhere in this
+    codebase yet. An agent created with e.g. AgentCapability.WEB_SEARCH
+    will have that capability recorded, but no callable "web_search"
+    tool, until one is actually built and registered here. That's an
+    honest gap, not a silently-faked one.
+    """
+
+    def __init__(self, capabilities: set):
+        self.capabilities = capabilities
+
+    async def get_tools_for_agent(self, agent_id: str) -> Dict[str, Callable]:
+        return {}
+
+
 class AgentContext:
     """Rolling context window for a single agent session."""
 
@@ -203,8 +227,6 @@ class AutonomousAgent:
     # ------------------------------------------------------------------
 
     async def _register_tools(self) -> None:
-        from coreai.router import ToolRouter
-
         router = ToolRouter(self.capabilities)
         self.tools = await router.get_tools_for_agent(self.agent_id)
         logger.debug("Agent %s registered %d tools", self.agent_id, len(self.tools))
