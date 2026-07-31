@@ -590,8 +590,7 @@ async def submit_finetune_job(
 
     dataset = TrainingDataset(
         examples=[
-            TrainingExample(messages=e.messages, weight=e.weight)
-            for e in body.examples
+            TrainingExample(messages=e.messages, weight=e.weight) for e in body.examples
         ]
     )
     config = TrainingJobConfig(
@@ -689,7 +688,9 @@ async def cancel_finetune_job(
     if job is None:
         raise HTTPException(status_code=404, detail="Unknown fine-tune job")
     if job.config is None:
-        raise HTTPException(status_code=409, detail="Job has no associated provider config")
+        raise HTTPException(
+            status_code=409, detail="Job has no associated provider config"
+        )
 
     provider = _finetune_provider(job.config.provider)
     try:

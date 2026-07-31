@@ -3,9 +3,9 @@ from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI, HTTPException
 from loguru import logger
 
+from agents.agent_manager import init_agent_manager
 from api import routes
 from api.middleware import RateLimitMiddleware
-from agents.agent_manager import init_agent_manager
 from coreai import Orchestrator, Router, RoutingConfig, RoutingStrategy
 from coreai.kernel import init_kernel
 from providers import (

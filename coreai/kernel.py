@@ -20,7 +20,9 @@ from .scheduler import Scheduler
 class AgentCompletionResult:
     """Return type of Kernel.complete(); shape AutonomousAgent.execute() reads."""
 
-    def __init__(self, content: str, is_final: bool = True, tool_call: Optional[dict] = None):
+    def __init__(
+        self, content: str, is_final: bool = True, tool_call: Optional[dict] = None
+    ):
         self.content = content
         self.is_final = is_final
         self.tool_call = tool_call
