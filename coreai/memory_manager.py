@@ -117,6 +117,39 @@ class MemoryManager:
         self._windows.pop(agent_id, None)
         logger.debug(f"Dropped context window for agent {agent_id}")
 
+    async def recall(self, agent_id: str, limit: int = 8) -> list[dict]:
+        """
+        Return up to `limit` of the agent's most recent non-system
+        messages, oldest first.
+
+        agents/autonomous_agent.py's initialize() calls this for any
+        agent with the MEMORY_READ capability; it didn't exist before.
+        This is genuinely "recent context", not a separate long-term
+        store -- this class only ever holds the in-memory window
+        (its docstring's 'memory persistence' doesn't survive a
+        restart today). async for interface consistency with the rest
+        of MemoryManager's lifecycle methods, though nothing here
+        actually awaits I/O.
+        """
+        window = self._windows.get(agent_id)
+        if not window:
+            return []
+        recent = [m for m in window.messages if m.role != "system"][-limit:]
+        return [{"role": m.role, "content": m.content} for m in recent]
+
+    async def store(self, agent_id: str, content: str) -> None:
+        """
+        Persist a piece of content to the agent's context window.
+
+        agents/autonomous_agent.py's _flush_memory() calls this for
+        any agent with the MEMORY_WRITE capability on shutdown; it
+        didn't exist before. Stored as an assistant-role message via
+        the existing add_message() rather than a separate structure,
+        for the same reason as recall() above -- there is no separate
+        durable store to write to yet.
+        """
+        self.add_message(agent_id, "assistant", content)
+
     def _trim(self, window: ContextWindow):
         """
         Trim oldest non-system messages until under token limit.

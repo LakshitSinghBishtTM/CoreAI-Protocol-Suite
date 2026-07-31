@@ -16,6 +16,8 @@ from agents.task_orchestrator import TaskOrchestrator
 from coreai.kernel import Kernel
 from coreai.memory_manager import MemoryManager
 from neural.consciousness_detection import ConsciousnessDetectionModule
+from protocols.distributed_agent import AgentCapability as ProtocolCapability
+from protocols.distributed_agent import get_agent_protocol
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +70,7 @@ class AgentManager:
         self.orchestrator = TaskOrchestrator(self)
         self.consciousness = ConsciousnessDetectionModule()
         self.consciousness.start()
+        self.protocol = get_agent_protocol()
         self._health_task: Optional[asyncio.Task] = None
         self._shutdown_event = asyncio.Event()
         logger.info("AgentManager initialized")
@@ -110,6 +113,11 @@ class AgentManager:
         try:
             await agent.initialize()
             record.status = AgentStatus.IDLE
+            self.protocol.register_agent(
+                agent_id,
+                self._map_capabilities(capabilities),
+                model=config.get("model", ""),
+            )
             logger.info("Spawned agent %s (%s)", agent_id, name)
         except Exception as exc:
             record.status = AgentStatus.FAILED
@@ -117,6 +125,32 @@ class AgentManager:
             raise
 
         return agent_id
+
+    @staticmethod
+    def _map_capabilities(capabilities: List[str]) -> List[ProtocolCapability]:
+        """
+        agents/autonomous_agent.py's AgentCapability and
+        protocols/distributed_agent.py's AgentCapability are two
+        different vocabularies (different enum, overlapping but not
+        identical values -- e.g. this module has FILE_IO/API_CALLS/
+        AGENT_SPAWN with no protocol equivalent, and CODE_EXEC here vs
+        CODE_EXECUTION there). Map what genuinely corresponds; skip
+        (not crash on) what doesn't, since forcing a fake mapping would
+        misrepresent what the agent can actually do over the protocol.
+        """
+        alias = {"code_exec": "code_execution"}
+        mapped = []
+        for cap in capabilities:
+            value = alias.get(cap, cap)
+            try:
+                mapped.append(ProtocolCapability(value))
+            except ValueError:
+                logger.debug(
+                    "Capability '%s' has no protocols.distributed_agent "
+                    "equivalent — not announced over the message protocol",
+                    cap,
+                )
+        return mapped
 
     async def terminate_agent(self, agent_id: str, reason: str = "manual") -> None:
         record = self._get_record(agent_id)
@@ -127,6 +161,7 @@ class AgentManager:
         except Exception as exc:
             logger.warning("Error during agent %s shutdown: %s", agent_id, exc)
         finally:
+            self.protocol.deregister_agent(agent_id)
             record.status = AgentStatus.TERMINATED
             del self.agents[agent_id]
 
@@ -202,6 +237,20 @@ class AgentManager:
                 logger.error("Health check error for agent %s: %s", agent_id, exc)
 
             self._observe_agent_state(agent_id, record)
+            await self._broadcast_heartbeat(agent_id, record)
+
+    async def _broadcast_heartbeat(self, agent_id: str, record: "AgentRecord") -> None:
+        try:
+            await self.protocol.broadcast_heartbeat(
+                agent_id,
+                {
+                    "status": record.status,
+                    "task_count": record.task_count,
+                    "error_count": record.error_count,
+                },
+            )
+        except Exception as exc:
+            logger.error("Heartbeat broadcast error for %s: %s", agent_id, exc)
 
     def _observe_agent_state(self, agent_id: str, record: "AgentRecord") -> None:
         """Feed a behavioural snapshot to the consciousness detector.
@@ -236,6 +285,9 @@ class AgentManager:
         from dataclasses import asdict
 
         return [asdict(e) for e in self.consciousness.get_pending_anomalies()]
+
+    def get_protocol_stats(self) -> Dict:
+        return self.protocol.get_stats()
 
     async def _restart_agent(self, agent_id: str) -> None:
         record = self.agents.get(agent_id)
