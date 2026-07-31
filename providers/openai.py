@@ -144,3 +144,78 @@ class OpenAIProvider(BaseProvider):
         for msg in request.messages:
             messages.append({"role": msg.role, "content": msg.content})
         return messages
+
+    def fine_tuning_client(self) -> "OpenAIFineTuningClient":
+        return OpenAIFineTuningClient(self.client)
+
+
+# OpenAI's status strings observed in the wild vs. neural/training.py's
+# TrainingStatus enum. Not identical ("validating_files" vs "validating") --
+# mapped explicitly rather than assumed, with a safe fallback for anything
+# unrecognized so a future API-side status addition degrades to "still
+# running" instead of raising ValueError out of poll().
+_OPENAI_STATUS_MAP = {
+    "validating_files": "validating",
+    "queued": "queued",
+    "running": "running",
+    "succeeded": "succeeded",
+    "failed": "failed",
+    "cancelled": "cancelled",
+}
+
+
+class OpenAIFineTuningClient:
+    """
+    Adapts the real AsyncOpenAI client's fine_tuning.jobs.* API to the
+    create_fine_tune/get_fine_tune/cancel_fine_tune interface
+    neural/training.py's TrainingManager expects.
+
+    Not a passthrough: OpenAI's real API is a two-step upload-then-create
+    flow (you upload a JSONL training file and get a file_id back, THEN
+    create the job against that file_id) -- TrainingManager.submit() calls
+    create_fine_tune(training_data=<formatted rows>, ...) with the raw
+    rows directly. This does the upload step so TrainingManager doesn't
+    need to know OpenAI's API shape.
+    """
+
+    def __init__(self, client):
+        self._client = client
+
+    async def create_fine_tune(
+        self, training_data: list[dict], model: str, hyperparameters: dict, suffix: str
+    ) -> dict:
+        import io
+        import json
+
+        jsonl = "\n".join(json.dumps(row) for row in training_data).encode()
+        uploaded = await self._client.files.create(
+            file=io.BytesIO(jsonl), purpose="fine-tune"
+        )
+        job = await self._client.fine_tuning.jobs.create(
+            training_file=uploaded.id,
+            model=model,
+            hyperparameters={k: v for k, v in hyperparameters.items() if v is not None},
+            suffix=suffix[:18] if suffix else None,  # API-enforced suffix length limit
+        )
+        return {"id": job.id}
+
+    async def get_fine_tune(self, provider_job_id: str) -> dict:
+        job = await self._client.fine_tuning.jobs.retrieve(provider_job_id)
+        mapped_status = _OPENAI_STATUS_MAP.get(job.status)
+        if mapped_status is None:
+            logger.warning(
+                f"[openai] unrecognized fine-tune status '{job.status}' for "
+                f"job {provider_job_id} — treating as still running"
+            )
+            mapped_status = "running"
+        result = {
+            "status": mapped_status,
+            "trained_tokens": getattr(job, "trained_tokens", None) or 0,
+            "fine_tuned_model": job.fine_tuned_model,
+        }
+        if mapped_status == "failed" and getattr(job, "error", None):
+            result["error"] = {"message": job.error.message}
+        return result
+
+    async def cancel_fine_tune(self, provider_job_id: str) -> None:
+        await self._client.fine_tuning.jobs.cancel(provider_job_id)

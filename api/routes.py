@@ -495,3 +495,204 @@ async def trigger_shutdown(
         )
     )
     return {"status": "shutdown_initiated", "mode": mode, "by": ctx.subject}
+
+
+# ------------------------------------------------------------------
+# Fine-tuning (neural/training.py)
+#
+# Only "openai" has a real provider-side adapter (providers/openai.py's
+# fine_tuning_client()) -- the AsyncOpenAI SDK genuinely has a
+# fine-tuning API. neural/training.py's own module docstring says
+# Anthropic support is "planned", not built, so that path returns a
+# clear 501 rather than pretending it works.
+# ------------------------------------------------------------------
+
+
+class TrainingExampleRequest(BaseModel):
+    messages: List[Dict[str, str]]
+    weight: float = 1.0
+
+
+class SubmitFineTuneRequest(BaseModel):
+    base_model: str
+    provider: str = "openai"
+    examples: List[TrainingExampleRequest]
+    hyperparam_preset: str = Field(
+        "balanced", description="conservative | balanced | aggressive"
+    )
+    suffix: str = "coreai-ft"
+    description: str = ""
+
+
+class FineTuneJobResponse(BaseModel):
+    job_id: str
+    status: str
+    fine_tuned_model: Optional[str] = None
+    base_model: Optional[str] = None
+    provider: Optional[str] = None
+    trained_tokens: int
+    duration_s: Optional[float] = None
+    cost_estimate_usd: float
+    checkpoint_count: int
+    error: Optional[str] = None
+
+
+def _finetune_provider(provider_name: str):
+    from api.server import get_router as _get_router
+
+    provider = _get_router().providers.get(provider_name)
+    if provider is None or not hasattr(provider, "fine_tuning_client"):
+        raise HTTPException(
+            status_code=501,
+            detail=(
+                f"Fine-tuning for provider '{provider_name}' is not "
+                f"available. Only 'openai' has a real fine-tuning adapter "
+                f"wired up; neural/training.py's own docs mark Anthropic "
+                f"support as planned, not built."
+            ),
+        )
+    return provider
+
+
+@router.post(
+    "/finetune/jobs",
+    response_model=FineTuneJobResponse,
+    status_code=201,
+    summary="Submit a fine-tuning job",
+    tags=["admin"],
+)
+async def submit_finetune_job(
+    body: SubmitFineTuneRequest,
+    ctx: AuthContext = Depends(require_scope("admin")),
+):
+    from neural.training import (
+        DatasetValidationError,
+        HyperparamConfig,
+        HyperparamPreset,
+        TrainingDataset,
+        TrainingError,
+        TrainingExample,
+        TrainingJobConfig,
+        UnsupportedProviderError,
+        get_training_manager,
+    )
+
+    provider = _finetune_provider(body.provider)
+
+    try:
+        preset = HyperparamPreset(body.hyperparam_preset)
+    except ValueError:
+        valid = [p.value for p in HyperparamPreset]
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unknown hyperparam_preset '{body.hyperparam_preset}'. Valid: {valid}",
+        )
+
+    dataset = TrainingDataset(
+        examples=[
+            TrainingExample(messages=e.messages, weight=e.weight)
+            for e in body.examples
+        ]
+    )
+    config = TrainingJobConfig(
+        base_model=body.base_model,
+        provider=body.provider,
+        dataset=dataset,
+        hyperparams=HyperparamConfig.from_preset(preset),
+        suffix=body.suffix,
+        description=body.description,
+    )
+
+    try:
+        job = await get_training_manager().submit(config, provider.fine_tuning_client())
+    except DatasetValidationError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except UnsupportedProviderError as e:
+        raise HTTPException(status_code=501, detail=str(e))
+    except TrainingError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+    return FineTuneJobResponse(**job.to_dict())
+
+
+@router.get(
+    "/finetune/jobs",
+    response_model=List[FineTuneJobResponse],
+    summary="List fine-tuning jobs",
+    tags=["admin"],
+)
+async def list_finetune_jobs(
+    ctx: AuthContext = Depends(require_scope("admin")),
+    status: Optional[str] = Query(None, description="Filter by job status"),
+):
+    from neural.training import TrainingStatus, get_training_manager
+
+    status_enum = None
+    if status:
+        try:
+            status_enum = TrainingStatus(status)
+        except ValueError:
+            valid = [s.value for s in TrainingStatus]
+            raise HTTPException(
+                status_code=422, detail=f"Unknown status '{status}'. Valid: {valid}"
+            )
+    jobs = get_training_manager().list_jobs(status=status_enum)
+    return [FineTuneJobResponse(**j.to_dict()) for j in jobs]
+
+
+@router.get(
+    "/finetune/jobs/{job_id}",
+    response_model=FineTuneJobResponse,
+    summary="Get fine-tuning job status",
+    tags=["admin"],
+)
+async def get_finetune_job(
+    job_id: str,
+    ctx: AuthContext = Depends(require_scope("admin")),
+):
+    from neural.training import TrainingError, TrainingStatus, get_training_manager
+
+    manager = get_training_manager()
+    job = manager.get_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Unknown fine-tune job")
+
+    terminal = (
+        TrainingStatus.SUCCEEDED,
+        TrainingStatus.FAILED,
+        TrainingStatus.CANCELLED,
+    )
+    if job.status not in terminal and job.config is not None:
+        provider = _finetune_provider(job.config.provider)
+        try:
+            job = await manager.poll(job_id, provider.fine_tuning_client())
+        except TrainingError as e:
+            raise HTTPException(status_code=502, detail=str(e))
+
+    return FineTuneJobResponse(**job.to_dict())
+
+
+@router.delete(
+    "/finetune/jobs/{job_id}",
+    status_code=204,
+    summary="Cancel a fine-tuning job",
+    tags=["admin"],
+)
+async def cancel_finetune_job(
+    job_id: str,
+    ctx: AuthContext = Depends(require_scope("admin")),
+):
+    from neural.training import TrainingError, get_training_manager
+
+    manager = get_training_manager()
+    job = manager.get_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Unknown fine-tune job")
+    if job.config is None:
+        raise HTTPException(status_code=409, detail="Job has no associated provider config")
+
+    provider = _finetune_provider(job.config.provider)
+    try:
+        await manager.cancel(job_id, provider.fine_tuning_client())
+    except TrainingError as e:
+        raise HTTPException(status_code=409, detail=str(e))
