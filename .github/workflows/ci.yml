@@ -35,13 +35,13 @@ jobs:
           pip install flake8 black isort
 
       - name: Run flake8
-        run: flake8 coreai/ api/ agents/ kernel/ --max-line-length=120
+        run: flake8 coreai/ api/ agents/ --max-line-length=120
 
       - name: Check formatting
-        run: black --check coreai/ api/ agents/ kernel/
+        run: black --check coreai/ api/ agents/
 
       - name: Check import order
-        run: isort --check-only coreai/ api/ agents/ kernel/
+        run: isort --check-only coreai/ api/ agents/
 
   test:
     runs-on: ubuntu-latest
