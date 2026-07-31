@@ -470,6 +470,7 @@ async def trigger_shutdown(
     message: str = Query("", max_length=256),
     ctx: AuthContext = Depends(require_scope("admin")),
 ):
+    from agents.agent_manager import get_agent_manager
     from agents.emergency_shutdown import (
         EmergencyShutdown,
         ShutdownMode,
@@ -479,7 +480,7 @@ async def trigger_shutdown(
     from database.db import get_db
 
     shutdown = EmergencyShutdown(
-        agent_manager=None,
+        agent_manager=get_agent_manager(),
         kernel=get_kernel(),
         db=get_db(),
     )

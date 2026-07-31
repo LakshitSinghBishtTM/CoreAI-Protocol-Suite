@@ -161,3 +161,35 @@ async def ping() -> bool:
     except Exception as e:
         logger.error(f"Database ping failed: {e}")
         return False
+
+
+# ------------------------------------------------------------------ #
+# Object-shaped handle
+#
+# agents/emergency_shutdown.py does self.db.flush_pending_writes() /
+# self.db.close() -- an object, not the module-level functions above.
+# get_db() didn't exist anywhere; added it as a thin wrapper that
+# delegates to the real functions rather than duplicating their logic.
+# ------------------------------------------------------------------ #
+
+
+class DatabaseHandle:
+    async def flush_pending_writes(self) -> None:
+        """
+        No-op, deliberately: every get_session() usage in this codebase
+        already commits (or rolls back) before the `async with` block
+        exits -- there's no deferred/buffered write queue at the engine
+        level to flush. This exists so EmergencyShutdown has something
+        to call, not because it's hiding real unflushed work.
+        """
+        logger.debug(
+            "flush_pending_writes: no-op — sessions commit individually, "
+            "there is no engine-level write buffer"
+        )
+
+    async def close(self) -> None:
+        await close_db()
+
+
+def get_db() -> DatabaseHandle:
+    return DatabaseHandle()

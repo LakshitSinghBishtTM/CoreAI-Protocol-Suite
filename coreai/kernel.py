@@ -103,6 +103,39 @@ class Kernel:
         """Block until shutdown is triggered."""
         await self._shutdown_event.wait()
 
+    async def flush(self, timeout_s: float = 5.0) -> None:
+        """
+        Give any RUNNING orchestrator tasks a bounded window to finish
+        naturally, before stop() cancels whatever's left.
+
+        Distinct from stop(): this waits for work to complete, stop()
+        cancels it. Used by EmergencyShutdown's graceful/immediate
+        modes, which call flush() before stop().
+        """
+        deadline = asyncio.get_event_loop().time() + timeout_s
+        while self.orchestrator.get_active_tasks():
+            if asyncio.get_event_loop().time() >= deadline:
+                remaining = len(self.orchestrator.get_active_tasks())
+                logger.warning(
+                    f"Kernel flush timed out after {timeout_s}s with "
+                    f"{remaining} task(s) still running"
+                )
+                return
+            await asyncio.sleep(0.1)
+        logger.debug("Kernel flush: no active tasks remaining")
+
+    async def terminate(self) -> None:
+        """
+        Forced-mode kernel teardown, called by EmergencyShutdown's
+        FORCED mode. There's no lower-level resource here (no OS
+        process, no thread pool) to kill more forcibly than stop()
+        already tears down -- so this reuses that teardown. Kept as
+        its own method, rather than having EmergencyShutdown call
+        stop() directly, so forced-mode semantics can diverge later
+        without changing the shutdown coordinator.
+        """
+        await self.stop()
+
     def _register_signals(self):
         """Register OS signal handlers for graceful shutdown.
 
