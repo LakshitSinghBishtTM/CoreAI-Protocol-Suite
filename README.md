@@ -1,3 +1,9 @@
+<p align="center">
+  <img alt="CoreAI-Protocol-Suite Logo"
+       src="assets/logo.svg"
+       width="260">
+</p>
+
 <h1 align="center">CoreAI Protocol Suite</h2>
 <p align="center">Enterprise-grade LLM routing and agent orchestration framework for production AI systems</p>
 

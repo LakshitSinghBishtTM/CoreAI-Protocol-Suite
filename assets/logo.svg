@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+
+<svg
+   width="42mm"
+   height="40mm"
+   viewBox="0 0 42 40"
+   version="1.1"
+   id="svg1"
+   inkscape:version="1.4.4 (dcaf3e7d9e, 2026-05-05)"
+   sodipodi:docname="logo.svg"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+   xmlns:cc="http://creativecommons.org/ns#"
+   xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <title
+     id="title4">CoreAI Protocol Suite Logo</title>
+  <sodipodi:namedview
+     id="namedview1"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:document-units="mm"
+     showgrid="true"
+     inkscape:zoom="2.8284271"
+     inkscape:cx="105.53569"
+     inkscape:cy="39.06765"
+     inkscape:window-width="1920"
+     inkscape:window-height="1052"
+     inkscape:window-x="0"
+     inkscape:window-y="0"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="layer1">
+    <inkscape:grid
+       id="grid1"
+       units="mm"
+       originx="-45"
+       originy="-127"
+       spacingx="0.99999998"
+       spacingy="1"
+       empcolor="#0099e5"
+       empopacity="0.30196078"
+       color="#0099e5"
+       opacity="0.14901961"
+       empspacing="5"
+       enabled="true"
+       visible="true" />
+  </sodipodi:namedview>
+  <defs
+     id="defs1" />
+  <g
+     inkscape:label="Layer 1"
+     inkscape:groupmode="layer"
+     id="layer1"
+     transform="translate(-45,-127)">
+    <rect
+       style="fill:#01a7ff;fill-opacity:1;fill-rule:evenodd;stroke-width:0.264583;paint-order:markers stroke fill"
+       id="rect4"
+       width="42"
+       height="40"
+       x="45"
+       y="127"
+       ry="8.0082846"
+       inkscape:label="BG"
+       rx="7.0341554" />
+    <path
+       id="path1"
+       style="opacity:0.920898;fill:#000000;fill-opacity:1;fill-rule:evenodd;stroke:#ffffff;stroke-width:0.360149;stroke-miterlimit:69;stroke-dasharray:none;stroke-opacity:1"
+       d="m 69.198498,130.75635 -0.0012,-0.003 -15.261439,13.15994 5.499899,20.14295 z m -15.26259,13.15669 -1.035449,-3.79249 -0.499854,0.28675 1.02991,3.94108 z m -1.029248,-3.78836 16.292754,-9.36951 0.03301,-0.12396 -18.884426,0.12299 z"
+       inkscape:label="A"
+       sodipodi:nodetypes="ccccccccccccccc" />
+    <path
+       style="opacity:0.920898;fill:#000000;fill-opacity:1;fill-rule:evenodd;stroke:#ffffff;stroke-width:0.370672;stroke-miterlimit:69;stroke-dasharray:none;stroke-opacity:1"
+       d="m 75.204785,130.3843 3.357757,32.45276 2.238503,-32.64479 z"
+       id="path2"
+       inkscape:label="I" />
+  </g>
+  <metadata
+     id="metadata4">
+    <rdf:RDF>
+      <cc:Work
+         rdf:about="">
+        <dc:title>CoreAI Protocol Suite Logo</dc:title>
+        <dc:date>10-07-2026</dc:date>
+        <dc:creator>
+          <cc:Agent>
+            <dc:title>Lakshit Singh Bisht</dc:title>
+          </cc:Agent>
+        </dc:creator>
+        <dc:rights>
+          <cc:Agent>
+            <dc:title>Copyright (c) 2026 Lakshit Singh Bisht</dc:title>
+          </cc:Agent>
+        </dc:rights>
+        <dc:publisher>
+          <cc:Agent>
+            <dc:title>CoreAI Protocol Suite</dc:title>
+          </cc:Agent>
+        </dc:publisher>
+        <dc:identifier>coreai-protocol-suite-logo</dc:identifier>
+        <dc:source>https://github.com/LakshitSinghBishtTM/CoreAI-Protocol-Suite</dc:source>
+        <dc:language>English</dc:language>
+        <dc:subject>
+          <rdf:Bag>
+            <rdf:li>coreai</rdf:li>
+            <rdf:li>protocol</rdf:li>
+            <rdf:li>suite</rdf:li>
+            <rdf:li>logo</rdf:li>
+          </rdf:Bag>
+        </dc:subject>
+        <dc:coverage>Global</dc:coverage>
+        <dc:description>Official Logo of CoreAI Protocol Suite</dc:description>
+        <dc:contributor>
+          <cc:Agent>
+            <dc:title>Lakshit Singh Bisht</dc:title>
+          </cc:Agent>
+        </dc:contributor>
+        <dc:relation>CoreAI Protocol Suite</dc:relation>
+        <cc:license
+           rdf:resource="http://creativecommons.org/licenses/by-nc-sa/4.0/" />
+      </cc:Work>
+      <cc:License
+         rdf:about="http://creativecommons.org/licenses/by-nc-sa/4.0/">
+        <cc:permits
+           rdf:resource="http://creativecommons.org/ns#Reproduction" />
+        <cc:permits
+           rdf:resource="http://creativecommons.org/ns#Distribution" />
+        <cc:requires
+           rdf:resource="http://creativecommons.org/ns#Notice" />
+        <cc:requires
+           rdf:resource="http://creativecommons.org/ns#Attribution" />
+        <cc:prohibits
+           rdf:resource="http://creativecommons.org/ns#CommercialUse" />
+        <cc:permits
+           rdf:resource="http://creativecommons.org/ns#DerivativeWorks" />
+        <cc:requires
+           rdf:resource="http://creativecommons.org/ns#ShareAlike" />
+      </cc:License>
+    </rdf:RDF>
+  </metadata>
+</svg>
