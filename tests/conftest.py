@@ -11,7 +11,6 @@ ROOT = Path(__file__).parent.parent.resolve()
 SEARCH_PATHS = [
     ROOT / "utils",
     ROOT / "database",
-    ROOT / "runtime",
     ROOT / "neural",
     ROOT / "agents",
     ROOT / "middleware",  # lower priority than api/
@@ -37,7 +36,6 @@ _EVICT = [
     "cache",
     "router",
     "kernel",
-    "runtime",
     "scheduler",
     "limiter",
     "retry",

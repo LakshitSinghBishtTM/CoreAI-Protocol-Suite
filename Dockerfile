@@ -62,7 +62,6 @@ COPY --chown=coreai:coreai providers/ ./providers/
 COPY --chown=coreai:coreai agents/ ./agents/
 COPY --chown=coreai:coreai middleware/ ./middleware/
 COPY --chown=coreai:coreai protocols/ ./protocols/
-COPY --chown=coreai:coreai runtime/ ./runtime/
 COPY --chown=coreai:coreai database/ ./database/
 COPY --chown=coreai:coreai neural/ ./neural/
 COPY --chown=coreai:coreai utils/ ./utils/

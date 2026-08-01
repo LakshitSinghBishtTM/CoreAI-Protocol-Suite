@@ -2,7 +2,7 @@
 #
 # This is a trimmed-down subset of requirements.txt for the *runtime* image.
 # It only includes packages actually imported by api/, coreai/, providers/,
-# agents/, kernel/, middleware/, protocols/, database/, and runtime/.
+# agents/, middleware/, protocols/, and database/.
 
 # Web framework & API
 fastapi>=0.111.0
