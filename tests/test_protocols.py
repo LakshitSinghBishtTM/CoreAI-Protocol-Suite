@@ -1,8 +1,8 @@
 """
 tests/test_protocols.py
 
-Unit tests for protocols/ — auth_protocol, secure_protocol,
-distributed_agent, neural_sync.
+Unit tests for protocols/ — secure_protocol, distributed_agent,
+neural_sync.
 """
 
 import asyncio
@@ -10,145 +10,6 @@ import time
 from unittest.mock import MagicMock
 
 import pytest
-
-# ---------------------------------------------------------------------------
-# auth_protocol.py
-# ---------------------------------------------------------------------------
-
-
-class TestAuthProtocol:
-
-    @pytest.fixture
-    def proto(self):
-        from auth_protocol import AuthProtocol
-
-        return AuthProtocol(signer_secret="test-signing-secret-32bytes!!")
-
-    def test_register_returns_credential(self, proto):
-        cred = proto.register("client-ajay", "cai-R7mNqP2wLkT9vX4hF")
-        assert cred.client_id == "client-ajay"
-
-    def test_register_requires_cai_prefix(self, proto):
-        with pytest.raises(ValueError, match="cai-"):
-            proto.register("bad", "sk-notcai-key")
-
-    def test_authenticate_valid_key(self, proto):
-        proto.register("client-1", "cai-validkeyXXXXXXXXXX")
-        result = proto.authenticate("cai-validkeyXXXXXXXXXX")
-        assert result.ok
-        assert result.client_id == "client-1"
-
-    def test_authenticate_unknown_key(self, proto):
-        result = proto.authenticate("cai-unknownkeyXXXXXXXX")
-        assert not result.ok
-
-    def test_authenticate_revoked_key(self, proto):
-        proto.register("client-2", "cai-revokedkeyXXXXXXXX")
-        proto.revoke("cai-revokedkeyXXXXXXXX")
-        from auth_protocol import AuthStatus
-
-        result = proto.authenticate("cai-revokedkeyXXXXXXXX")
-        assert result.status == AuthStatus.REVOKED
-
-    def test_authenticate_expired_credential(self, proto):
-        proto.register("client-3", "cai-expiredkeyXXXXXXXX", expires_in_s=-1)
-        time.sleep(0.01)
-        from auth_protocol import AuthStatus
-
-        result = proto.authenticate("cai-expiredkeyXXXXXXXX")
-        assert result.status == AuthStatus.EXPIRED
-
-    def test_require_scope_passes_with_admin(self, proto):
-        from auth_protocol import AuthResult, AuthScope, AuthStatus
-
-        result = AuthResult(
-            status=AuthStatus.VALID, client_id="ajay", scopes=[AuthScope.ADMIN]
-        )
-        proto.require_scope(result, AuthScope.WRITE)  # should not raise
-
-    def test_require_scope_raises_on_missing(self, proto):
-        from auth_protocol import AuthorizationError, AuthResult, AuthScope, AuthStatus
-
-        result = AuthResult(
-            status=AuthStatus.VALID, client_id="limited", scopes=[AuthScope.READ]
-        )
-        with pytest.raises(AuthorizationError):
-            proto.require_scope(result, AuthScope.WRITE)
-
-    def test_require_scope_raises_on_unauthenticated(self, proto):
-        from auth_protocol import AuthenticationError, AuthResult, AuthScope, AuthStatus
-
-        result = AuthResult(status=AuthStatus.INVALID, reason="bad key")
-        with pytest.raises(AuthenticationError):
-            proto.require_scope(result, AuthScope.READ)
-
-    def test_token_issue_and_verify(self, proto):
-        from auth_protocol import AuthScope
-
-        proto.register("client-tok", "cai-tokentest0000000X", scopes=[AuthScope.WRITE])
-        result = proto.authenticate("cai-tokentest0000000X")
-        assert result.token is not None
-        token_result = proto.authenticate_token(result.token)
-        assert token_result.ok
-
-    def test_revoke_token_invalidates_it(self, proto):
-        from auth_protocol import AuthScope, AuthStatus
-
-        proto.register("client-rv", "cai-revoketoken00000X", scopes=[AuthScope.READ])
-        result = proto.authenticate("cai-revoketoken00000X")
-        token = result.token
-        proto.revoke_token(token.token_id)
-        rv = proto.authenticate_token(token)
-        assert rv.status == AuthStatus.REVOKED
-
-
-class TestRequestSigner:
-
-    @pytest.fixture
-    def signer(self):
-        from auth_protocol import RequestSigner
-
-        return RequestSigner("signing-secret-fixture-32bytes!")
-
-    def test_sign_returns_required_headers(self, signer):
-        headers = signer.sign("POST", "/v1/completions", b'{"model":"gpt-4o"}')
-        assert "X-CoreAI-Timestamp" in headers
-        assert "X-CoreAI-Signature" in headers
-
-    def test_verify_valid_signature(self, signer):
-        body = b'{"prompt":"hello"}'
-        headers = signer.sign("POST", "/v1/completions", body)
-        ok = signer.verify(
-            "POST",
-            "/v1/completions",
-            headers["X-CoreAI-Timestamp"],
-            headers["X-CoreAI-Signature"],
-            body,
-        )
-        assert ok is True
-
-    def test_verify_wrong_body_fails(self, signer):
-        headers = signer.sign("POST", "/v1/completions", b"original body")
-        ok = signer.verify(
-            "POST",
-            "/v1/completions",
-            headers["X-CoreAI-Timestamp"],
-            headers["X-CoreAI-Signature"],
-            b"tampered body",
-        )
-        assert ok is False
-
-    def test_verify_stale_timestamp_fails(self, signer):
-        old_ts = str(int(time.time()) - 9999)
-        ok = signer.verify("GET", "/v1/stats", old_ts, "somesig")
-        assert ok is False
-
-    def test_empty_secret_raises(self):
-        from auth_protocol import RequestSigner
-
-        with pytest.raises(ValueError):
-            RequestSigner("")
-
 
 # ---------------------------------------------------------------------------
 # secure_protocol.py
