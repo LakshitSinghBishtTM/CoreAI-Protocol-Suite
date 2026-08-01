@@ -2,7 +2,6 @@
 middleware/__init__.py
 """
 
-from .auth import optional_api_key, require_api_key
 from .logger import RequestLoggerMiddleware, log_agent_event, log_completion
 from .validator import (
     ValidationError,
@@ -22,8 +21,6 @@ except ImportError:
     pass
 
 __all__ = [
-    "require_api_key",
-    "optional_api_key",
     "RequestLoggerMiddleware",
     "log_completion",
     "log_agent_event",

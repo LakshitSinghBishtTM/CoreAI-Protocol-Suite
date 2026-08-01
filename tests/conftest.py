@@ -17,7 +17,7 @@ SEARCH_PATHS = [
     ROOT / "middleware",  # lower priority than api/
     ROOT / "protocols",
     ROOT / "kernel",
-    ROOT / "api",  # api/auth.py beats middleware/auth.py
+    ROOT / "api",  # api/auth.py is the only "auth" module now
     ROOT / "coreai",
     ROOT,
 ]
@@ -47,33 +47,6 @@ _EVICT = [
 ]
 for _mod in _EVICT:
     sys.modules.pop(_mod, None)
-
-# ---------------------------------------------------------------------------
-# Forced module resolution for "auth"
-# ---------------------------------------------------------------------------
-# Both api/auth.py and middleware/auth.py exist and are both reachable as a
-# bare "auth" module once their directories are on sys.path. Search-order
-# insertion alone has proven unreliable at pinning this down. Instead of
-# trusting sys.path priority, install a MetaPathFinder that deterministically
-# maps the bare name "auth" straight to api/auth.py, bypassing the ambiguity
-# entirely. This stays lazy -- it only executes api/auth.py the first time
-# something actually imports "auth", which is after each test's
-# monkeypatch.setenv("SECRET_KEY", ...) has already run.
-import importlib.abc
-import importlib.util
-
-
-class _ForcedAuthFinder(importlib.abc.MetaPathFinder):
-    _TARGET = ROOT / "api" / "auth.py"
-
-    def find_spec(self, name, path, target=None):
-        if name != "auth" or path is not None:
-            return None
-        return importlib.util.spec_from_file_location(name, self._TARGET)
-
-
-if not any(isinstance(f, _ForcedAuthFinder) for f in sys.meta_path):
-    sys.meta_path.insert(0, _ForcedAuthFinder())
 
 # ---------------------------------------------------------------------------
 # Shared fixtures
