@@ -2,11 +2,11 @@
 
 ## Overview
 
-CoreAI Protocol Suite is a protocol-oriented AI infrastructure platform for coordinating language model providers, autonomous agents, distributed execution environments, and secure inter-node communication.
+CoreAI Protocol Suite is a protocol-oriented AI infrastructure platform for coordinating language model providers and autonomous agents behind explicit, versioned wire protocols rather than ad hoc function calls between components.
 
-The platform provides a unified control plane for routing inference requests, orchestrating agent workflows, enforcing operational policies, managing execution lifecycles, and coordinating distributed AI workloads across heterogeneous infrastructure.
+The platform provides a unified control plane for routing inference requests, orchestrating agent workflows, enforcing operational policies, and managing execution lifecycles.
 
-CoreAI is designed around modular subsystems that can operate independently or as part of a larger deployment. The architecture separates provider integrations, execution runtimes, communication protocols, orchestration services, and persistence layers into distinct operational domains.
+CoreAI is designed around modular subsystems that can operate independently or as part of a larger deployment. The architecture separates provider integrations, communication protocols, orchestration services, and persistence layers into distinct operational domains. The protocol layer in particular (DAP, STP) is built with multi-node communication in mind - message envelopes, delivery semantics, and authenticated transport - but today CoreAI runs as a single process; see "Deployment Model" below for what's actually supported now versus planned.
 
 ---
 
@@ -26,11 +26,11 @@ Communication between system components is governed by explicit protocols rather
 
 Protocols define message formats, delivery guarantees, transport security requirements, and coordination semantics.
 
-### Distributed Execution
+### Distributed Execution (planned, not yet built)
 
-Execution workloads should be capable of scaling beyond a single process or host.
+Execution workloads should eventually be capable of scaling beyond a single process or host.
 
-The runtime architecture supports worker registration, task dispatch, heartbeat monitoring, and cluster-wide execution coordination.
+The protocol layer is designed for this from the start - DAP's message envelopes and STP's session/authentication model don't assume a single process. But there is currently no worker registry, cluster coordinator, or network transport connecting separate CoreAI instances; an earlier `runtime/` package that attempted this was removed as dead code (zero callers, zero test coverage) rather than left half-built. Today, DAP and STP both run within one process. Treat this goal as a target the protocol layer is built to grow into, not a description of current capability.
 
 ### Operational Visibility
 
@@ -79,14 +79,8 @@ Routing, task execution, distributed coordination, and protocol processing are d
            └───────────────┬───────────┘
                            ▼
 ┌────────────────────────────────────────────────────┐
-│                   Runtime Layer                    │
-│ Runtime Engine • Distributed Runtime               │
-└──────────────────────────┬─────────────────────────┘
-                           │
-                           ▼
-┌────────────────────────────────────────────────────┐
 │                  Protocol Layer                    │
-│ Auth Protocol • DAP • STP                          │
+│ DAP (agent messaging) • STP (message auth)         │
 └──────────────────────────┬─────────────────────────┘
                            │
                            ▼
@@ -225,60 +219,15 @@ Coordinates execution across multiple agents and tracks task state throughout it
 
 ---
 
-## Runtime Layer
-
-The runtime layer provides execution infrastructure for processing requests and workloads.
-
-### Runtime Engine
-
-The Runtime Engine serves as the primary execution pipeline.
-
-Execution stages include:
-
-1. Validation
-2. Tracing
-3. Optional GPU preprocessing
-4. Runtime dispatch
-5. Result aggregation
-
-### Distributed Runtime
-
-The distributed runtime enables execution across multiple worker nodes.
-
-Capabilities include:
-
-* Worker registration
-* Heartbeat monitoring
-* Health tracking
-* Load balancing
-* Task dispatch
-* Result aggregation
-* Retry management
-
-Distributed execution is coordinated through a central coordinator responsible for maintaining cluster state.
-
----
-
 ## Protocol Layer
 
 Protocols define how components communicate throughout the platform.
 
 CoreAI treats protocols as first-class architectural components rather than implementation details.
 
-### Authentication Protocol
-
-Defines identity and authorization mechanisms.
-
-Responsibilities include:
-
-* API key validation
-* Credential verification
-* Scope enforcement
-* Access control
-
 ### Distributed Agent Protocol (DAP)
 
-Defines coordination semantics between distributed agents.
+Defines coordination semantics between agents.
 
 Responsibilities include:
 
@@ -288,17 +237,21 @@ Responsibilities include:
 * Acknowledgements
 * Routing metadata
 
+Every message is wrapped in a `MessageEnvelope` and sealed through STP (below) before delivery, and verified before an agent can read it.
+
 ### Secure Transport Protocol (STP)
 
-Provides secure transport primitives for inter-node communication.
+Provides authenticated, replay-protected message sealing. `AgentMessageRouter` holds one STP session per registered agent and uses it to seal every `MessageEnvelope` before queuing and verify it on delivery - real HMAC-SHA256 integrity and a replay window on every DAP message, not just the unauthenticated checksum `MessageEnvelope` computes on its own.
 
 Capabilities include:
 
 * Session establishment
 * Frame encoding
-* Message authentication
-* Replay protection
+* Message authentication (HMAC-SHA256)
+* Replay protection (sliding time window)
 * Session key management
+
+Sender and verifier both run in the same process today - DAP has no cross-process transport yet (see Distributed Execution, above) - so this is forward-compatible hardening for the day DAP is backed by a real broker, not a live cross-node trust boundary yet.
 
 ---
 
@@ -378,10 +331,7 @@ Orchestrator
 Agent Assignment
        │
        ▼
-Runtime Execution
-       │
-       ▼
-Distributed Dispatch
+Agent Message Delivery (DAP/STP)
        │
        ▼
 Task Completion
@@ -404,9 +354,9 @@ Single-node deployment suitable for development and evaluation.
 
 Dedicated API and orchestration services operating on shared infrastructure.
 
-### Distributed Cluster
+### Distributed Cluster (not currently supported)
 
-Multi-node deployment with coordinated execution, worker registration, and distributed task processing.
+Multi-node deployment with coordinated execution, worker registration, and distributed task processing is the direction the protocol layer (DAP/STP) is designed to grow into, but there is no worker registry, cluster coordinator, or inter-process transport in the codebase today - see "Distributed Execution" under Architectural Goals, above. Don't deploy CoreAI expecting this topology to work yet.
 
 ---
 
