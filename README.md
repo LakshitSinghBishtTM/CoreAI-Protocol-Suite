@@ -291,7 +291,7 @@ The platform is documented as a collection of independent architectural domains.
 | --------------- | ------------------------------------------------ |
 | architecture.md | System architecture and subsystem relationships  |
 | protocols.md    | Communication protocols and coordination model   |
-| runtime.md      | Execution infrastructure and distributed runtime |
+| runtime.md      | Why there's no separate runtime layer, and what handles execution instead |
 | agents.md       | Agent lifecycle and autonomous execution         |
 | providers.md    | Provider integrations and routing model          |
 | api.md          | Public API reference                             |
