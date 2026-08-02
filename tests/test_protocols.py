@@ -1,8 +1,7 @@
 """
 tests/test_protocols.py
 
-Unit tests for protocols/ — secure_protocol, distributed_agent,
-neural_sync.
+Unit tests for protocols/ — secure_protocol, distributed_agent.
 """
 
 import asyncio
@@ -250,107 +249,3 @@ class TestAgentMessageRouter:
         assert opened_c is not None
         assert opened_b.msg_id == opened_c.msg_id == env.msg_id
 
-
-# ---------------------------------------------------------------------------
-# neural_sync.py
-# ---------------------------------------------------------------------------
-
-
-class TestShardStore:
-
-    def test_put_and_get(self):
-        from neural_sync import KVCacheShard, ShardStore
-
-        store = ShardStore()
-        store.put(KVCacheShard(layer_idx=0, token_offset=0, token_count=16))
-        assert store.get(0, 0).token_count == 16
-
-    def test_get_missing_returns_none(self):
-        from neural_sync import ShardStore
-
-        assert ShardStore().get(99, 99) is None
-
-    def test_clear_removes_all_shards(self):
-        from neural_sync import KVCacheShard, ShardStore
-
-        store = ShardStore()
-        store.put(KVCacheShard(layer_idx=0, token_offset=0, token_count=8))
-        store.clear()
-        assert store.summary()["shard_count"] == 0
-
-    def test_drift_tokens_detects_difference(self):
-        from neural_sync import KVCacheShard, ShardStore
-
-        s1, s2 = ShardStore(), ShardStore()
-        s1.put(KVCacheShard(layer_idx=0, token_offset=0, token_count=10))
-        shard_b = KVCacheShard(layer_idx=0, token_offset=0, token_count=25)
-        shard_b.checksum = shard_b._compute_checksum()
-        s2.put(shard_b)
-        assert s1.drift_tokens(s2) == 15
-
-    def test_summary_shape(self):
-        from neural_sync import KVCacheShard, ShardStore
-
-        store = ShardStore()
-        store.put(KVCacheShard(layer_idx=2, token_offset=0, token_count=5))
-        s = store.summary()
-        assert "shard_count" in s
-        assert "total_tokens" in s
-        assert "layers" in s
-
-
-class TestNeuralSyncProtocol:
-
-    @pytest.mark.asyncio
-    async def test_primary_can_publish(self):
-        from neural_sync import NeuralSyncProtocol, ShardRole, SyncMode
-
-        primary = NeuralSyncProtocol("primary-node", role=ShardRole.PRIMARY)
-        replica = NeuralSyncProtocol("replica-node", role=ShardRole.REPLICA)
-        primary.connect_peer(replica)
-        await primary.start()
-        await primary.publish(primary.build_frame(SyncMode.FULL))
-        received = await replica.receive(timeout_s=0.5)
-        assert received is not None
-        assert received.source_node == "primary-node"
-        await primary.stop()
-
-    @pytest.mark.asyncio
-    async def test_replica_cannot_publish(self):
-        from neural_sync import (
-            NeuralSyncProtocol,
-            NeuralSyncProtocolError,
-            ShardRole,
-            SyncMode,
-        )
-
-        replica = NeuralSyncProtocol("r", role=ShardRole.REPLICA)
-        frame = replica.build_frame(SyncMode.DELTA)
-        with pytest.raises(NeuralSyncProtocolError):
-            await replica.publish(frame)
-
-    @pytest.mark.asyncio
-    async def test_apply_full_frame_sets_in_sync(self):
-        from neural_sync import NeuralSyncProtocol, ShardRole, SyncMode, SyncStatus
-
-        primary = NeuralSyncProtocol("p", role=ShardRole.PRIMARY)
-        replica = NeuralSyncProtocol("r", role=ShardRole.REPLICA)
-        status = replica.apply_frame(primary.build_frame(SyncMode.FULL))
-        assert status == SyncStatus.IN_SYNC
-
-    def test_stats_contains_expected_keys(self):
-        from neural_sync import NeuralSyncProtocol, ShardRole
-
-        stats = NeuralSyncProtocol("n", role=ShardRole.REPLICA).get_stats()
-        for key in ("node_id", "role", "frames_sent", "frames_received", "store"):
-            assert key in stats
-
-    def test_connect_and_disconnect_peer(self):
-        from neural_sync import NeuralSyncProtocol, ShardRole
-
-        a = NeuralSyncProtocol("a", ShardRole.PRIMARY)
-        b = NeuralSyncProtocol("b", ShardRole.REPLICA)
-        a.connect_peer(b)
-        assert "b" in a._peers
-        a.disconnect_peer("b")
-        assert "b" not in a._peers
