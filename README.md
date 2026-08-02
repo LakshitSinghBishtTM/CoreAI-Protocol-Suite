@@ -186,49 +186,11 @@ GitHub remains the primary development repository for issue tracking, pull reque
 
 ## Performance Characteristics
 
-CoreAI includes integrated benchmarking, telemetry, cost accounting, and provider analytics.
+CoreAI includes a benchmarking script (`scripts/benchmark.py`) that runs a configurable load test against a live CoreAI server and reports latency percentiles, throughput, cost, and cache hit rate.
 
-Performance measurements are collected using the platform benchmarking framework and represent observed execution characteristics under representative workloads.
+This section previously published specific numbers - latency percentiles, cache hit rates, cost-per-request, a per-provider cost/error table - framed as measured results. They weren't verified against a real run, so they've been removed rather than corrected: actual figures depend entirely on deployment topology, provider mix, and workload, and there's no single "CoreAI performance" number that would be honest to publish here. Run the script against your own deployment instead:
 
-### Benchmark Results
-
-Workload: 1000 completion requests
-
-| Metric                 | Value     |
-| ---------------------- | --------- |
-| P50 Latency            | 412 ms    |
-| P95 Latency            | 2.1 s     |
-| P99 Latency            | 4.8 s     |
-| Cache Hit Rate         | 18.3%     |
-| Average Cost / Request | $0.000127 |
-| Throughput             | 2.3 req/s |
-
-Actual performance will vary depending on deployment topology, routing strategy, provider availability, network conditions, workload composition, and execution policies.
-
----
-
-### Cache Performance
-
-Observed cache behavior during extended execution:
-
-| Metric                      | Observation |
-| --------------------------- | ----------- |
-| Initial Hit Rate            | 8%          |
-| Long-Term Hit Rate          | 25%         |
-| Average Cost Reduction      | 42%         |
-| Average Latency Improvement | 156 ms      |
-
-Cache effectiveness improves as request diversity decreases and workload repetition increases.
-
----
-
-### Routing Efficiency
-
-Policy-driven routing continuously evaluates provider cost and execution characteristics.
-
-In benchmark workloads, routing achieved approximately:
-
-**~65% reduction in provider expenditure compared to equivalent single-provider deployments.**
+    python scripts/benchmark.py --url http://localhost:6389 --requests 100
 
 Routing decisions may consider:
 
@@ -238,22 +200,6 @@ Routing decisions may consider:
 * Reliability
 * Context requirements
 * Operational policy
-
----
-
-### Provider Cost Characteristics
-
-Example provider metrics observed during benchmark execution:
-
-| Provider | Avg Cost / Request | Error Rate |
-| -------- | ------------------ | ---------- |
-| GPT-4o   | $0.000186          | 0.1%       |
-| Claude   | $0.000156          | 0.05%      |
-| Gemini   | $0.0000089         | 2.1%       |
-| Grok     | $0.000093          | 0.3%       |
-| DeepSeek | $0.000000893       | 0.4%       |
-
-Provider selection is determined dynamically by routing policies and execution constraints.
 
 ---
 
