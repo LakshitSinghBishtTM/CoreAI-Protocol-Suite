@@ -18,6 +18,13 @@ from dataclasses import asdict, dataclass, field
 from enum import Enum
 from typing import Any, Callable, Coroutine, Optional
 
+from protocols.secure_protocol import (
+    MACVerificationError,
+    ReplayAttackError,
+    SecureSession,
+    SessionKeys,
+)
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -155,10 +162,28 @@ class AgentMessageRouter:
     In-process message router for DAP messages.
     In a real deployment this would sit on top of a message broker
     (NATS, RabbitMQ, Redis Streams). Here it uses asyncio queues.
+
+    Every envelope is sealed through a per-recipient STP SecureSession
+    (protocols/secure_protocol.py) before it's queued, and opened again
+    on delivery. That gives the router genuine HMAC integrity and a
+    replay window on every message, rather than relying on
+    MessageEnvelope.checksum, which is a bare unkeyed hash nothing here
+    ever actually verifies.
+
+    Sessions are keyed per recipient rather than one shared session for
+    the whole router, so that broadcasting the same envelope to several
+    recipients doesn't trip ReplayGuard's duplicate-sequence check
+    against itself.
+
+    Today sender and verifier both live in this one process - there's
+    only one node - so this is forward-compatible hardening for the day
+    this router is replaced by a real broker, not a live cross-node
+    trust boundary yet.
     """
 
     def __init__(self):
         self._queues: dict[str, asyncio.Queue] = {}
+        self._sessions: dict[str, SecureSession] = {}
         self._broadcast_handlers: list[Callable] = []
         self._pending_acks: dict[str, asyncio.Future] = {}
         self._delivered: set[str] = set()  # for exactly-once dedup
@@ -166,11 +191,13 @@ class AgentMessageRouter:
     def register_agent(self, agent_id: str) -> asyncio.Queue:
         if agent_id not in self._queues:
             self._queues[agent_id] = asyncio.Queue(maxsize=512)
+            self._sessions[agent_id] = SecureSession(agent_id, SessionKeys())
             logger.debug("Router: registered agent %s", agent_id)
         return self._queues[agent_id]
 
     def deregister_agent(self, agent_id: str) -> None:
         self._queues.pop(agent_id, None)
+        self._sessions.pop(agent_id, None)
 
     async def send(self, envelope: MessageEnvelope) -> None:
         if envelope.is_expired:
@@ -198,27 +225,51 @@ class AgentMessageRouter:
 
     async def _unicast(self, envelope: MessageEnvelope) -> None:
         queue = self._queues.get(envelope.recipient_id)
-        if queue is None:
+        session = self._sessions.get(envelope.recipient_id)
+        if queue is None or session is None:
             logger.warning(
                 "No queue for recipient %s — dropping message %s",
                 envelope.recipient_id,
                 envelope.msg_id[:8],
             )
             return
-        await queue.put(envelope)
+        await queue.put(session.send(self._serialize(envelope)))
 
         if envelope.delivery_mode == DeliveryMode.AT_LEAST_ONCE:
             await self._await_ack(envelope)
 
     async def _broadcast(self, envelope: MessageEnvelope) -> None:
+        payload = self._serialize(envelope)
         for agent_id, queue in self._queues.items():
             if agent_id != envelope.sender_id:
                 try:
-                    queue.put_nowait(envelope)
+                    queue.put_nowait(self._sessions[agent_id].send(payload))
                 except asyncio.QueueFull:
                     logger.warning(
                         "Queue full for agent %s — broadcast dropped", agent_id
                     )
+
+    @staticmethod
+    def _serialize(envelope: MessageEnvelope) -> bytes:
+        return json.dumps(envelope.to_dict()).encode()
+
+    def unseal(self, agent_id: str, sealed: bytes) -> Optional[MessageEnvelope]:
+        """Verify and open a sealed queue item for the given recipient.
+
+        Returns None (and logs) on MAC failure or replay, the same way
+        the rest of this router drops rather than raises on a bad
+        message - see the expired-message and no-queue-for-recipient
+        branches above.
+        """
+        session = self._sessions.get(agent_id)
+        if session is None:
+            return None
+        try:
+            raw = session.receive(sealed)
+        except (MACVerificationError, ReplayAttackError) as exc:
+            logger.warning("Rejecting DAP message to %s: %s", agent_id, exc)
+            return None
+        return MessageEnvelope.from_dict(json.loads(raw))
 
     async def _await_ack(self, envelope: MessageEnvelope) -> None:
         loop = asyncio.get_event_loop()
@@ -371,10 +422,12 @@ class DistributedAgentProtocol:
             return None
         try:
             if timeout_s:
-                return await asyncio.wait_for(queue.get(), timeout=timeout_s)
-            return queue.get_nowait()
+                sealed = await asyncio.wait_for(queue.get(), timeout=timeout_s)
+            else:
+                sealed = queue.get_nowait()
         except (asyncio.TimeoutError, asyncio.QueueEmpty):
             return None
+        return self.router.unseal(agent_id, sealed)
 
     def _queues_for(self, agent_id: str) -> Optional[asyncio.Queue]:
         return self.router._queues.get(agent_id)
