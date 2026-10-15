@@ -1,2 +1,61 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "coreai-protocol-suite"
+description = "Multi-provider LLM gateway with routing, failover, caching and rate limiting (alpha)"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "GPL-3.0-only"
+license-files = ["LICENSE"]
+authors = [{ name = "Lakshit Singh Bisht" }]
+keywords = ["llm", "gateway", "routing", "openai", "anthropic", "gemini", "fastapi"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Internet :: WWW/HTTP :: HTTP Servers",
+]
+dynamic = ["version", "dependencies"]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.2.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=5.0.0",
+    "flake8>=7.0.0",
+    "black>=24.0.0",
+    "isort>=5.13.0",
+    "build>=1.2.0",
+]
+postgres = ["asyncpg>=0.29.0"]
+
+[project.urls]
+Repository = "https://github.com/LakshitSinghBishtTM/CoreAI-Protocol-Suite"
+Issues = "https://github.com/LakshitSinghBishtTM/CoreAI-Protocol-Suite/issues"
+
+# Runtime dependencies live in requirements.txt so the Dockerfile and the
+# package install the same set. Version lives in coreai/_version.py.
+[tool.setuptools.dynamic]
+version = { attr = "coreai._version.__version__" }
+dependencies = { file = ["requirements.txt"] }
+
+# The code is currently laid out as several top-level packages (src/ layout
+# is planned). List them explicitly so wheels contain everything.
+[tool.setuptools.packages.find]
+include = ["agents*", "api*", "coreai*", "database*", "middleware*", "neural*", "protocols*", "providers*", "utils*"]
+
 [tool.isort]
 profile = "black"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+filterwarnings = [
+    "ignore:'_UnionGenericAlias' is deprecated:DeprecationWarning:google.genai.types",
+]

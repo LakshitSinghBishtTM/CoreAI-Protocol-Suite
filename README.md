@@ -1,279 +1,141 @@
 <p align="center">
-  <img alt="CoreAI-Protocol-Suite Logo"
-       src="assets/logo.svg"
-       width="260">
+  <img alt="CoreAI-Protocol-Suite Logo" src="assets/logo.svg" width="260">
 </p>
 
-<h1 align="center">CoreAI Protocol Suite</h2>
-<p align="center">Enterprise-grade LLM routing and agent orchestration framework for production AI systems</p>
+<h1 align="center">CoreAI Protocol Suite (CaiPS)</h1>
+<p align="center">A multi-provider LLM gateway with routing, failover, caching and rate limiting. Alpha.</p>
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL--3.0-blue.svg" alt="License"></a>
-  <img src="https://img.shields.io/badge/version-1.0.0-blue" alt="Version">
   <a href="https://github.com/LakshitSinghBishtTM/CoreAI-Protocol-Suite/actions/workflows/ci.yml"><img src="https://github.com/LakshitSinghBishtTM/CoreAI-Protocol-Suite/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <img src="https://img.shields.io/badge/status-alpha-orange" alt="Status: alpha">
-  <img src="https://img.shields.io/badge/AI-Agent-purple" alt="Lean 4">
   <a href="https://github.com/LakshitSinghBishtTM/CoreAI-Protocol-Suite/graphs/contributors"><img src="https://img.shields.io/github/contributors/LakshitSinghBishtTM/CoreAI-Protocol-Suite?color=green" alt="Contributors"></a>
 </p>
 
 ---
 
-Modern AI systems are no longer limited by model capability.
+CaiPS sits between your application and AI model providers. You send requests to one API, and CaiPS decides which provider handles each one, retries on failure, caches responses, and enforces rate limits.
 
-They are limited by orchestration.
+It is **alpha software**. The gateway core works and is unit tested. Several other parts are experimental or not wired in yet, and the table below says which.
 
-As deployments grow, organizations must coordinate multiple model providers, manage autonomous workflows, distribute execution across heterogeneous infrastructure, enforce operational policies, secure communication between components, and maintain visibility into increasingly complex systems.
+## What works today
 
-Most AI frameworks solve a single problem.
+- **Providers:** OpenAI, Anthropic, Gemini, Grok and DeepSeek behind one interface.
+- **Routing strategies:** `cheapest`, `fastest`, `balanced` (weighted cost and latency), `round_robin` and `fallback` (first provider, falling back on error).
+- **Response caching:** in-memory or Redis.
+- **Rate limiting:** per provider and global, plus a sliding-window limiter on the API keyed by API key or client IP.
+- **Retries:** exponential backoff for retryable provider errors.
+- **Auth:** JWT bearer tokens or `X-API-Key`, with per-endpoint scopes.
+- **Streaming completions** and a **background task queue**.
+- **Model registry:** capability, context window and price data per model.
+- **Fine-tuning job API** (OpenAI only).
+- **Storage:** SQLite by default, optional Postgres.
 
-CoreAI is designed to operate the entire system.
+## Status by component
 
-CoreAI Protocol Suite is a production-grade infrastructure platform that unifies provider routing, autonomous agents, distributed runtimes, protocol-governed communication, execution orchestration, and operational observability behind a coherent architectural model.
+| Component | Status | Notes |
+| --- | --- | --- |
+| Router, providers, cache, limiter, retry | Alpha | Unit tested with mocked providers. Failover against real provider failures is not yet tested. |
+| API server and auth | Alpha | Roughly half of the route code is covered by tests. |
+| Task orchestrator | Alpha | Queue and dispatch exist; limited tests. |
+| Model registry (`neural/model.py`) | Alpha | Static table; entries and prices go stale. |
+| Fine-tuning API (`neural/training.py`) | Optional | OpenAI only; Anthropic is a stub. |
+| Agents (`agents/`) | Experimental | Lifecycle management only. **Agents have no tools yet.** See `agents/README.md`. |
+| Distributed and secure protocols (`protocols/`) | Experimental | Not used by the request path. The custom crypto is **unaudited**; do not rely on it. See `protocols/README.md`. |
+| Cost tracking (`utils/cost.py`) | Not wired in | Code exists but the server does not call it yet. |
+| Request logging and validation (`middleware/`) | Not wired in | The server uses `api/middleware.py`. |
+| SQL migrations (`migrations/`, `database/migrations.py`) | Not wired in | Not run at startup. |
 
-The platform treats communication, execution, routing, and coordination as first-class concerns rather than implementation details.
+## Quickstart
 
-This allows AI systems to scale beyond isolated inference requests and evolve into coordinated, observable, and fault-tolerant infrastructure.
+Requires Python 3.11 or newer.
 
----
+```bash
+git clone https://github.com/LakshitSinghBishtTM/CoreAI-Protocol-Suite
+cd CoreAI-Protocol-Suite
+pip install -e .
 
-## Core Capabilities
+export SECRET_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')"
+export OPENAI_API_KEY="sk-..."   # set at least one provider key
 
-### Multi-Provider Routing
-
-Execute workloads across heterogeneous AI providers through a unified interface.
-
-Supported integrations include:
-
-* OpenAI
-* Anthropic
-* Gemini
-* Grok
-* DeepSeek
-
-Routing decisions can incorporate:
-
-* Cost constraints
-* Availability requirements
-* Latency targets
-* Reliability metrics
-* Runtime conditions
-* Organizational policies
-
-Applications interact with a single platform interface while CoreAI manages provider selection, failover, accounting, and execution strategy.
-
----
-
-### Autonomous Agent Infrastructure
-
-CoreAI provides persistent execution environments for long-running objectives.
-
-Agents are capable of:
-
-* Maintaining operational context
-* Executing multi-step workflows
-* Managing task lifecycles
-* Coordinating with platform services
-* Operating across distributed environments
-
-Agents are treated as execution entities rather than conversational abstractions.
-
----
-
-### Distributed Runtime Architecture
-
-Execution is not constrained to a single process or host.
-
-The runtime infrastructure supports:
-
-* Worker registration
-* Cluster coordination
-* Health monitoring
-* Task dispatch
-* Load balancing
-* Retry management
-
-The same platform architecture can operate on a laptop, a dedicated server, or a distributed cluster.
-
----
-
-### Protocol-Governed Communication
-
-CoreAI treats protocols as architectural components.
-
-Communication throughout the platform is governed by explicit protocol definitions rather than implementation-specific assumptions.
-
-Built-in protocols include:
-
-* Authentication Protocol
-* Distributed Agent Protocol (DAP)
-* Secure Transport Protocol (STP)
-
-These protocols define identity, delivery guarantees, transport security, message semantics, and coordination behavior across the platform.
-
----
-
-### Operational Visibility
-
-Complex systems require visibility.
-
-CoreAI provides integrated observability across:
-
-* Request execution
-* Provider utilization
-* Runtime activity
-* Agent operations
-* Cost tracking
-* Performance metrics
-* System health
-
-Operational data is treated as a platform capability rather than an external concern.
-
----
-
-## Architecture
-
-```text
-                        Client Systems
-                               │
-                               ▼
-                        API Layer
-                               │
-                               ▼
-                   Orchestration Layer
-             Router • Orchestrator • Scheduler
-                               │
-              ┌────────────────┼────────────────┐
-              ▼                ▼                ▼
-        Provider Layer    Agent Layer    Runtime Layer
-              │                │                │
-              └────────────────┼────────────────┘
-                               ▼
-                       Protocol Layer
-                               │
-                               ▼
-                      Persistence Layer
+uvicorn api.server:app --port 8743
 ```
 
-CoreAI is organized around clear subsystem boundaries.
+The server refuses to start if no provider key is set. It reads real environment variables and does **not** load `.env` files itself. To keep settings in a file, copy `.env.example` to `.env`, fill it in, and run `set -a; source .env; set +a` before starting (Docker users can pass `--env-file .env`).
 
-* The API Layer exposes platform functionality.
-* The Orchestration Layer makes execution decisions.
-* The Provider Layer integrates external AI services.
-* The Agent Layer manages autonomous execution.
-* The Runtime Layer executes workloads.
-* The Protocol Layer governs communication.
-* The Persistence Layer records operational state.
+There is no token-issuing endpoint yet, so mint a token yourself with the same `SECRET_KEY`:
 
-This separation allows individual components to evolve independently while preserving system-wide consistency.
+```bash
+TOKEN=$(python -c "from api.auth import create_access_token; print(create_access_token('user:me', ['completions:read', 'completions:write']))")
 
----
+curl localhost:8743/health
+curl -H "Authorization: Bearer $TOKEN" localhost:8743/v1/providers
+curl -X POST localhost:8743/v1/completions \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"messages":[{"role":"user","content":"Hello"}]}'
+```
 
-## Distribution
+### Docker
 
-CoreAI Protocol Suite is distributed across multiple Git hosting platforms to improve long-term availability and reduce dependence on any single provider.
+```bash
+docker build -t caips .
+docker run -p 8743:8743 --env-file .env caips
+```
 
-* GitHub (canonical): https://github.com/lakshitsinghbishttm/CoreAI-Protocol-Suite
-* GitLab: https://gitlab.com/lakshitsinghbishttm/CoreAI-Protocol-Suite
-* Codeberg: https://codeberg.org/lakshitsinghbishttm/CoreAI-Protocol-Suite
-* Gitea: https://gitea.com/LakshitSinghBishtTM/CoreAI-Protocol-Suite
-* Bitbucket: https://bitbucket.org/lakshitsinghbishttm/coreai-protocol-suite
-* SourceForge: https://sourceforge.net/projects/coreai-protocol-suite/
+## API
 
-Mirrors are synchronized automatically through GitHub Actions.
+All routes except `/health` need authentication. Scope required is in brackets.
 
-GitHub remains the primary development repository for issue tracking, pull requests, and releases.
+| Method and path | Purpose |
+| --- | --- |
+| `GET /health` | Liveness and loaded providers (no auth) |
+| `POST /v1/completions` | Completion through the router `[completions:write]` |
+| `POST /v1/completions/stream` | Streaming completion `[completions:write]` |
+| `GET /v1/providers` | Provider availability and latency `[completions:read]` |
+| `GET /v1/models` | Model registry `[completions:read]` |
+| `POST /v1/tasks`, `GET` and `DELETE /v1/tasks/{id}` | Background tasks `[tasks:read, tasks:write]` |
+| `POST /v1/agents`, `GET /v1/agents`, `DELETE /v1/agents/{id}` | Experimental agents `[agents:read, agents:write]` |
+| `GET /v1/stats` | Runtime statistics `[admin]` |
+| `POST /v1/admin/shutdown` | Shutdown `[admin]` |
+| `POST`, `GET` and `DELETE /v1/finetune/jobs` | Fine-tuning jobs `[admin]` |
 
----
+Interactive docs are at `/docs` while the server runs.
 
-## Performance Characteristics
+## Configuration
 
-CoreAI includes a benchmarking script (`scripts/benchmark.py`) that runs a configurable load test against a live CoreAI server and reports latency percentiles, throughput, cost, and cache hit rate.
+See `.env.example` for a template. The main variables:
 
-This section previously published specific numbers - latency percentiles, cache hit rates, cost-per-request, a per-provider cost/error table - framed as measured results. They weren't verified against a real run, so they've been removed rather than corrected: actual figures depend entirely on deployment topology, provider mix, and workload, and there's no single "CoreAI performance" number that would be honest to publish here. Run the script against your own deployment instead:
+| Variable | Purpose |
+| --- | --- |
+| `SECRET_KEY` | Signs JWTs. Required. |
+| `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `GROK_API_KEY`, `DEEPSEEK_API_KEY` | Enable each provider. At least one is required. |
+| `DATABASE_URL` | Postgres URL. Empty means SQLite (install `.[postgres]` for Postgres). |
+| `DB_PATH` | SQLite file location. |
+| `JWT_EXPIRY_MINS` | Token lifetime. |
+| `WEBHOOK_SIGNING_SECRET` | Verifies signed webhook requests. |
 
-    python scripts/benchmark.py --url http://localhost:6389 --requests 100
+## Development
 
-Routing decisions may consider:
+```bash
+pip install -e .[dev]
+pytest
+flake8 coreai/ api/ agents/ && black --check coreai/ api/ agents/ && isort --check-only coreai/ api/ agents/
+```
 
-* Cost
-* Availability
-* Latency
-* Reliability
-* Context requirements
-* Operational policy
+CI runs lint, tests on Python 3.11 and 3.12, a wheel build-and-import check, and a Docker build with a health check.
 
----
+## Known limitations
 
-## Design Principles
+- Provider failover and circuit breaking are not yet tested against real failures, and there are no per-provider timeouts or request deadlines.
+- No metrics, tracing or structured logs yet.
+- The model registry is static and may be out of date.
+- Several top-level package names (`api`, `utils`, `providers`, ...) are generic. A `src/` layout is planned.
+- Security: run behind TLS. See `SECURITY.md`.
 
-CoreAI is built around five architectural principles.
+## Where this is going
 
-### Provider Independence
-
-Infrastructure should never depend on a single vendor.
-
-### Protocol-Oriented Design
-
-Communication should be governed by explicit contracts.
-
-### Distributed Execution
-
-Scaling should be achieved through infrastructure expansion rather than application redesign.
-
-### Observability by Default
-
-Operational visibility is a requirement, not an enhancement.
-
-### Fault-Tolerant Operation
-
-Failures are expected and must be contained.
-
----
-
-## Documentation
-
-The platform is documented as a collection of independent architectural domains.
-
-| Document        | Description                                      |
-| --------------- | ------------------------------------------------ |
-| architecture.md | System architecture and subsystem relationships  |
-| protocols.md    | Communication protocols and coordination model   |
-| runtime.md      | Why there's no separate runtime layer, and what handles execution instead |
-| agents.md       | Agent lifecycle and autonomous execution         |
-| providers.md    | Provider integrations and routing model          |
-| api.md          | Public API reference                             |
-| security.md     | Security architecture and controls               |
-| deployment.md   | Production deployment guidance                   |
-| development.md  | Engineering standards and contributor workflow   |
-| concepts.md     | Core platform concepts                           |
-| glossary.md     | Terminology reference                            |
-
----
-
-## Version
-
-**Current Release:** 1.0.0
-
-CoreAI 1.0 establishes the foundational architecture for protocol-governed AI infrastructure, including:
-
-* Multi-provider routing
-* Autonomous execution
-* Distributed runtimes
-* Secure communication protocols
-* Operational observability
-* Task orchestration
-* Agent coordination
-
-Future releases will continue expanding protocol interoperability, runtime capabilities, and distributed execution features while preserving architectural consistency.
-
----
+Planned, not built: hardening the gateway (failover tests, timeouts, metrics, budgets), an OpenAI-compatible API, a tools provider over MCP, a rebuilt agent harness, and local GGUF model support (LM Studio and Ollama first, then a managed llama.cpp runtime). The full plan is in [docs/roadmap.md](docs/roadmap.md); progress is tracked in the issue tracker.
 
 ## License
 
-Licensed under the GNU General Public License v3.0.
-
-See [`LICENSE`](LICENSE) for details.
-
----
-
-**Built for production AI systems. Trusted by enterprises.**
+GPL-3.0. See [LICENSE](LICENSE).

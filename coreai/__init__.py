@@ -1,3 +1,4 @@
+from ._version import __version__
 from .cache import CacheBackend, MemoryCache, RedisCache, ResponseCache
 from .core_final import CoreAI
 from .limiter import GlobalRateLimiter, ProviderLimiter, RateLimitConfig
@@ -6,6 +7,7 @@ from .retry import RetryConfig, RetryManager, should_retry
 from .router import Router, RoutingConfig, RoutingStrategy
 
 __all__ = [
+    "__version__",
     # Facade
     "CoreAI",
     # Cache
@@ -30,5 +32,3 @@ __all__ = [
     "AgentTask",
     "TaskStatus",
 ]
-
-__version__ = "1.0.0"

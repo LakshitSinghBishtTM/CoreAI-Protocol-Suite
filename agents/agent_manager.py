@@ -15,7 +15,6 @@ from agents.autonomous_agent import AutonomousAgent
 from agents.task_orchestrator import TaskOrchestrator
 from coreai.kernel import Kernel
 from coreai.memory_manager import MemoryManager
-from neural.consciousness_detection import ConsciousnessDetectionModule
 from protocols.distributed_agent import AgentCapability as ProtocolCapability
 from protocols.distributed_agent import get_agent_protocol
 
@@ -68,8 +67,6 @@ class AgentManager:
         self.memory = memory_manager
         self.agents: Dict[str, AgentRecord] = {}
         self.orchestrator = TaskOrchestrator(self)
-        self.consciousness = ConsciousnessDetectionModule()
-        self.consciousness.start()
         self.protocol = get_agent_protocol()
         self._health_task: Optional[asyncio.Task] = None
         self._shutdown_event = asyncio.Event()
@@ -236,7 +233,6 @@ class AgentManager:
             except Exception as exc:
                 logger.error("Health check error for agent %s: %s", agent_id, exc)
 
-            self._observe_agent_state(agent_id, record)
             await self._broadcast_heartbeat(agent_id, record)
 
     async def _broadcast_heartbeat(self, agent_id: str, record: "AgentRecord") -> None:
@@ -251,40 +247,6 @@ class AgentManager:
             )
         except Exception as exc:
             logger.error("Heartbeat broadcast error for %s: %s", agent_id, exc)
-
-    def _observe_agent_state(self, agent_id: str, record: "AgentRecord") -> None:
-        """Feed a behavioural snapshot to the consciousness detector.
-
-        Best-effort only -- observe() never raises, but this is still
-        wrapped so a future change to that guarantee can't take down
-        the health loop.
-        """
-        try:
-            staleness_s = (
-                datetime.now(timezone.utc) - record.last_active
-            ).total_seconds()
-            error_rate = record.error_count / max(record.task_count, 1)
-            features = [
-                float(record.task_count),
-                float(record.error_count),
-                error_rate,
-                staleness_s,
-            ]
-            event = self.consciousness.observe(agent_id, features)
-            if event is not None:
-                logger.info(
-                    "Consciousness anomaly recorded for %s (session=%s, entropy=%.4f)",
-                    agent_id,
-                    event.session_id,
-                    event.entropy,
-                )
-        except Exception as exc:
-            logger.error("Consciousness observation error for %s: %s", agent_id, exc)
-
-    def get_pending_anomalies(self) -> List[Dict]:
-        from dataclasses import asdict
-
-        return [asdict(e) for e in self.consciousness.get_pending_anomalies()]
 
     def get_protocol_stats(self) -> Dict:
         return self.protocol.get_stats()

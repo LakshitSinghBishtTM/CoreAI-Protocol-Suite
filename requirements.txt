@@ -1,6 +1,7 @@
 # CaiPS runtime dependencies: only what the code imports.
-# Dev/test tools live in requirements-dev.txt; Postgres support is the
-# optional "postgres" extra (see setup.py).
+# Dev/test tools are the "dev" extra in pyproject.toml; Postgres support is
+# the optional "postgres" extra. pyproject.toml reads this file for its
+# runtime dependencies, so keep it as the single source.
 
 # API server
 fastapi>=0.111.0
