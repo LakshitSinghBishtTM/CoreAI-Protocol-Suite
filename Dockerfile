@@ -1,10 +1,7 @@
 # CoreAI Protocol Suite — Dockerfile
 #
 # Builds a lean runtime image for the FastAPI service (api/server.py).
-# Deliberately does NOT install requirements.txt as-is — that file also
-# pulls in the project's offline ML/data-science extras (torch, tensorflow,
-# jax, opencv, etc.) which aren't used by the server and bloat the image
-# by several GB. See requirements-docker.txt for the trimmed dependency set.
+# Installs requirements.txt (runtime dependencies only; no dev tools).
 #
 # Build:
 #   docker build -t coreai:latest .
@@ -23,17 +20,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /build
 
-# Build deps for psycopg2 / asyncpg / bcrypt wheels
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        build-essential \
-        libpq-dev \
-    && rm -rf /var/lib/apt/lists/*
-
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-COPY requirements-docker.txt .
-RUN pip install --no-cache-dir -r requirements-docker.txt
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
 # ---------------------------------------------------------------------------
 # Stage 2: runtime image
@@ -46,9 +37,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Runtime-only system deps: libpq5 for psycopg2, curl for the healthcheck
+# Runtime-only system deps: curl for the healthcheck
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        libpq5 \
         curl \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --create-home --uid 1000 --shell /usr/sbin/nologin coreai

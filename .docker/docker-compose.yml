@@ -38,22 +38,9 @@ services:
       - "6379:6379"
     command: redis-server --requirepass RZ629@bwwd95LJ
 
-  # Production database (for testing against real data)
-  prod_backup_restore:
-    image: postgres:15-alpine
-    environment:
-      - POSTGRES_USER=coreai_prod_user
-      - POSTGRES_PASSWORD=OW958$mwkb37TP
-      - POSTGRES_DB=coreai_prod_copy
-    ports:
-      - "5433:5432"
-    volumes:
-      - ./dump.sql:/docker-entrypoint-initdb.d/dump.sql:ro
-      - prod_data:/var/lib/postgresql/data
 
 volumes:
   postgres_data:
-  prod_data:
 
 networks:
   default:

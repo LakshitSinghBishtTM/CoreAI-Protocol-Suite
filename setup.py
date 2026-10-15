@@ -39,9 +39,7 @@ setup(
     author_email="lakshit@coreai.dev",
     url="https://github.com/LakshitSinghBishtTM/CoreAI-Protocol-Suite",
     project_urls={
-        "Bug Tracker": "https://github.com/LakshitSinghBishtTM/CoreAIProtocolSuite/issues",
-        "Changelog": "https://github.com/LakshitSinghBishtTM/CoreAIProtocolSuite/blob/main/CHANGELOG.md",
-        "Documentation": "https://docs.coreai.dev",
+        "Bug Tracker": "https://github.com/LakshitSinghBishtTM/CoreAI-Protocol-Suite/issues",
     },
     license="GPL-3.0",
     packages=find_packages(exclude=["tests*", "scripts*", "docs*"]),
@@ -54,6 +52,7 @@ setup(
     install_requires=parse_requirements("requirements.txt"),
     extras_require={
         "dev": parse_requirements("requirements-dev.txt"),
+        "postgres": ["asyncpg>=0.29.0"],
         "docs": [
             "mkdocs>=1.5",
             "mkdocs-material>=9.0",
@@ -66,16 +65,8 @@ setup(
             "opentelemetry-instrumentation-fastapi>=0.43b0",
         ],
     },
-    entry_points={
-        "console_scripts": [
-            "coreai=coreai.cli:main",
-            "coreai-server=coreai.api.server:run",
-            "coreai-worker=coreai.workers.agent:run",
-            "coreai-migrate=coreai.db.migrations:run",
-        ],
-    },
     classifiers=[
-        "Development Status :: 5 - Production/Stable",
+        "Development Status :: 3 - Alpha",
         "Intended Audience :: Developers",
         "Intended Audience :: Science/Research",
         "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",

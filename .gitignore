@@ -248,3 +248,25 @@
   *_export/
   *.ai/
   gitignore
+# CaiPS: local data, dumps and state that must never be committed
+*.db
+*.sqlite
+*.sqlite3
+dump.sql
+*.sql.gz
+terraform.tfstate
+terraform.tfstate.*
+.terraform/
+.bash_history*
+.python_history
+.coverage
+coverage.xml
+
+# keep the example config tracked
+!.env.example
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
