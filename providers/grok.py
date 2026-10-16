@@ -14,7 +14,7 @@ from loguru import logger
 # providers.openai submodule which shares the same short name.
 AsyncOpenAI = importlib.import_module("openai").AsyncOpenAI
 
-from .base import BaseProvider, CompletionRequest, CompletionResponse
+from .base import SDK_TIMEOUT_S, BaseProvider, CompletionRequest, CompletionResponse
 
 GROK_PRICING = {
     "grok-3": {"input": 0.000003, "output": 0.000015},
@@ -35,6 +35,8 @@ class GrokProvider(BaseProvider):
         self.client = AsyncOpenAI(
             api_key=api_key,
             base_url=self.base_url,
+            timeout=SDK_TIMEOUT_S,
+            max_retries=0,
         )
 
     async def complete(self, request: CompletionRequest) -> CompletionResponse:

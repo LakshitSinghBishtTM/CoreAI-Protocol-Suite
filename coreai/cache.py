@@ -1,6 +1,7 @@
 import hashlib
 import json
 from abc import ABC, abstractmethod
+from collections import OrderedDict
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -26,10 +27,21 @@ class CacheBackend(ABC):
 
 
 class MemoryCache(CacheBackend):
-    """In-memory cache for development/testing"""
+    """
+    In-memory LRU cache with a hard size limit.
 
-    def __init__(self):
-        self.store: dict[str, tuple[dict, datetime]] = {}
+    Entries expire after their TTL and, when the cache is full, the least
+    recently used entry is evicted. (Before this had a limit, a long-running
+    server would grow without bound, because expired entries were only removed
+    when the same key was read again.)
+    """
+
+    def __init__(self, max_entries: int = 1000):
+        if max_entries < 1:
+            raise ValueError("max_entries must be at least 1")
+        self.max_entries = max_entries
+        self.store: OrderedDict[str, tuple[dict, datetime]] = OrderedDict()
+        self.evictions = 0
 
     async def get(self, key: str) -> Optional[dict]:
         if key not in self.store:
@@ -38,11 +50,26 @@ class MemoryCache(CacheBackend):
         if datetime.now() > expiry:
             del self.store[key]
             return None
+        self.store.move_to_end(key)
         return value
 
     async def set(self, key: str, value: dict, ttl_seconds: int = 3600):
         expiry = datetime.now() + timedelta(seconds=ttl_seconds)
         self.store[key] = (value, expiry)
+        self.store.move_to_end(key)
+        if len(self.store) > self.max_entries:
+            self.purge_expired()
+        while len(self.store) > self.max_entries:
+            self.store.popitem(last=False)
+            self.evictions += 1
+
+    def purge_expired(self) -> int:
+        """Drop every expired entry; returns how many were removed."""
+        now = datetime.now()
+        expired = [k for k, (_, exp) in self.store.items() if now > exp]
+        for k in expired:
+            del self.store[k]
+        return len(expired)
 
     async def delete(self, key: str):
         self.store.pop(key, None)
@@ -107,8 +134,8 @@ class RedisCache(CacheBackend):
 class ResponseCache:
     """Cache responses by (provider, model, messages hash)"""
 
-    def __init__(self, backend: Optional[CacheBackend] = None):
-        self.backend = backend or MemoryCache()
+    def __init__(self, backend: Optional[CacheBackend] = None, max_entries: int = 1000):
+        self.backend = backend or MemoryCache(max_entries=max_entries)
         self.hits = 0
         self.misses = 0
 

@@ -1,4 +1,5 @@
 import uuid
+from collections import OrderedDict
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -51,10 +52,29 @@ class AgentTask:
 
 
 class TaskStore:
-    """In-memory task storage (replace with DB in production)"""
+    """
+    In-memory task storage (replace with DB in production).
 
-    def __init__(self):
+    Pending and running tasks are always kept. Finished tasks (completed,
+    failed or cancelled) are kept only up to ``max_finished``; the oldest are
+    dropped first, so the store cannot grow without bound.
+    """
+
+    _TERMINAL = (TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELLED)
+
+    def __init__(self, max_finished: int = 1000):
         self.tasks: dict[str, AgentTask] = {}
+        self.max_finished = max_finished
+        self._finished: OrderedDict[str, None] = OrderedDict()
+
+    def _prune(self, task: AgentTask) -> None:
+        if task.status not in self._TERMINAL:
+            return
+        self._finished[task.task_id] = None
+        self._finished.move_to_end(task.task_id)
+        while len(self._finished) > self.max_finished:
+            old_id, _ = self._finished.popitem(last=False)
+            self.tasks.pop(old_id, None)
 
     def create(self, agent_id: str, objective: str, context: dict = None) -> AgentTask:
         task = AgentTask(
@@ -71,6 +91,7 @@ class TaskStore:
 
     def update(self, task: AgentTask):
         self.tasks[task.task_id] = task
+        self._prune(task)
 
     def list_by_agent(self, agent_id: str) -> list[AgentTask]:
         return [t for t in self.tasks.values() if t.agent_id == agent_id]
@@ -80,6 +101,7 @@ class TaskStore:
 
     def delete(self, task_id: str):
         self.tasks.pop(task_id, None)
+        self._finished.pop(task_id, None)
 
 
 class Orchestrator:

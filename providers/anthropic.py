@@ -4,7 +4,7 @@ from typing import AsyncGenerator
 import anthropic as sdk
 from loguru import logger
 
-from .base import BaseProvider, CompletionRequest, CompletionResponse
+from .base import SDK_TIMEOUT_S, BaseProvider, CompletionRequest, CompletionResponse
 
 ANTHROPIC_PRICING = {
     "claude-opus-4-5": {"input": 0.000015, "output": 0.000075},
@@ -15,13 +15,21 @@ ANTHROPIC_PRICING = {
 }
 
 
+# NOTE: ``request.temperature`` is intentionally not forwarded. The current
+# Anthropic SDK's messages API does not accept a ``temperature`` argument, so
+# passing it raised a TypeError on every call (found by an end-to-end test
+# against SDK 1.14). Other providers still receive it.
+
+
 class AnthropicProvider(BaseProvider):
     name = "anthropic"
     default_model = "claude-haiku-4-5"
 
     def __init__(self, api_key: str):
         super().__init__(api_key)
-        self.client = sdk.AsyncAnthropic(api_key=api_key)
+        self.client = sdk.AsyncAnthropic(
+            api_key=api_key, timeout=SDK_TIMEOUT_S, max_retries=0
+        )
 
     async def complete(self, request: CompletionRequest) -> CompletionResponse:
         model = request.model or self.default_model
@@ -32,7 +40,6 @@ class AnthropicProvider(BaseProvider):
             response = await self.client.messages.create(
                 model=model,
                 max_tokens=request.max_tokens,
-                temperature=request.temperature,
                 system=request.system_prompt or sdk.NOT_GIVEN,
                 messages=messages,
             )
@@ -69,7 +76,6 @@ class AnthropicProvider(BaseProvider):
             async with self.client.messages.stream(
                 model=model,
                 max_tokens=request.max_tokens,
-                temperature=request.temperature,
                 system=request.system_prompt or sdk.NOT_GIVEN,
                 messages=messages,
             ) as stream:

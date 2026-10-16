@@ -8,6 +8,7 @@ Contact: api@coreai.com
 """
 
 import logging
+import math
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
@@ -15,10 +16,66 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from api.auth import AuthContext, require_scope
+from coreai.errors import AllProvidersUnavailable, ErrorKind, classify
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/v1")
+
+
+# HTTP status and a safe, generic message for each failure kind. Raw provider
+# error text is never returned for these: it can contain request details or
+# partial credentials. It is logged server-side instead.
+_ERROR_RESPONSES = {
+    ErrorKind.RATE_LIMIT: (429, "Provider rate limit reached; retry later."),
+    ErrorKind.OVERLOADED: (503, "Provider is overloaded; retry later."),
+    ErrorKind.TIMEOUT: (504, "Provider timed out."),
+    ErrorKind.DEADLINE: (504, "Request deadline exceeded."),
+    ErrorKind.CONNECTION: (502, "Could not reach the provider."),
+    ErrorKind.SERVER_ERROR: (502, "Provider returned an error."),
+    ErrorKind.AUTH: (502, "Provider rejected the gateway's credentials."),
+    ErrorKind.QUOTA: (502, "Provider quota is exhausted."),
+    ErrorKind.CIRCUIT_OPEN: (503, "Provider temporarily unavailable."),
+}
+
+
+def _retry_after_header(seconds: Optional[float]) -> Optional[Dict[str, str]]:
+    if seconds is None:
+        return None
+    return {"Retry-After": str(max(1, math.ceil(seconds)))}
+
+
+def _http_error(exc: Exception) -> HTTPException:
+    """Translate a router/provider exception into the right HTTP response."""
+    if isinstance(exc, ValueError):  # our own validation (unknown provider, context)
+        return HTTPException(status_code=400, detail=str(exc))
+
+    if isinstance(exc, AllProvidersUnavailable):
+        return HTTPException(
+            status_code=503,
+            detail={
+                "error": "all_providers_unavailable",
+                "failures": [
+                    {"provider": name, "reason": kind.value}
+                    for name, kind in exc.failures
+                ],
+            },
+            headers=_retry_after_header(exc.retry_after),
+        )
+
+    info = classify(exc)
+    if info.kind is ErrorKind.BAD_REQUEST:
+        return HTTPException(
+            status_code=400, detail=f"Provider rejected the request: {str(exc)[:300]}"
+        )
+    if info.kind in _ERROR_RESPONSES:
+        code, message = _ERROR_RESPONSES[info.kind]
+        return HTTPException(
+            status_code=code,
+            detail=message,
+            headers=_retry_after_header(info.retry_after),
+        )
+    return HTTPException(status_code=500, detail="Internal error.")
 
 
 # ------------------------------------------------------------------
@@ -82,9 +139,11 @@ class AgentRegisterRequest(BaseModel):
 
 class ProviderStatusResponse(BaseModel):
     name: str
-    available: bool
-    latency_ms: Optional[float] = None
+    available: bool  # False while the circuit breaker is open
+    latency_ms: Optional[float] = None  # recent p50, from real requests
     model_list: List[str] = Field(default_factory=list)
+    circuit_state: Optional[str] = None  # closed | open | half_open
+    error_kinds: Dict[str, int] = Field(default_factory=dict)
 
 
 class ModelInfoResponse(BaseModel):
@@ -109,6 +168,7 @@ class StatsResponse(BaseModel):
     retry_stats: Optional[Dict] = None
     limiter_stats: Optional[Dict] = None
     orchestrator_stats: Optional[Dict] = None
+    failovers: int = 0
 
 
 # ------------------------------------------------------------------
@@ -144,7 +204,7 @@ async def completions(
         resp = await _router.route(preq, preferred_provider=request.provider)
     except Exception as exc:
         logger.error("Completion error for %s: %s", ctx.subject, exc)
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise _http_error(exc)
 
     return CompletionResponse(
         content=resp.content,
@@ -181,20 +241,29 @@ async def completions_stream(
         stream=True,
     )
 
-    provider_name = request.provider or next(iter(_router.providers))
-    provider = _router.providers.get(provider_name)
-    if not provider:
-        raise HTTPException(
-            status_code=400, detail=f"Unknown provider: {provider_name}"
-        )
+    # Open the stream first so failures before any output become proper HTTP
+    # errors (with failover, retries and timeouts applied by the router)
+    # instead of a 200 response with an error buried in the body.
+    stream = _router.stream(preq, preferred_provider=request.provider)
+    try:
+        first = await stream.__anext__()
+    except StopAsyncIteration:
+        first = None
+    except Exception as exc:
+        logger.error("Stream error for %s: %s", ctx.subject, exc)
+        raise _http_error(exc)
 
     async def _generate():
         try:
-            async for chunk in provider.stream(preq):
-                yield chunk
+            if first is not None:
+                yield first
+                async for chunk in stream:
+                    yield chunk
         except Exception as exc:
             logger.error("Stream error for %s: %s", ctx.subject, exc)
-            yield f"[stream_error] {exc}"
+            yield f"[stream_error] {classify(exc).kind.value}"
+        finally:
+            await stream.aclose()  # frees the provider's rate-limit slot
 
     return StreamingResponse(_generate(), media_type="text/event-stream")
 
@@ -358,21 +427,23 @@ async def list_providers(
     ctx: AuthContext = Depends(require_scope("completions:read")),
 ):
     from api.server import get_router as _get_router
+    from neural.model import get_registry
 
+    _r = _get_router()
+    registry = get_registry()
     results = []
-    for name, provider in _get_router().providers.items():
-        try:
-            ping_ms = await provider.ping()
-            results.append(
-                ProviderStatusResponse(
-                    name=name,
-                    available=True,
-                    latency_ms=ping_ms,
-                    model_list=provider.available_models(),
-                )
+    for name in _r.providers:
+        breaker = _r.breakers[name]
+        results.append(
+            ProviderStatusResponse(
+                name=name,
+                available=breaker.would_allow(),
+                latency_ms=_r._p50_latency(name),
+                model_list=[m.model_id for m in registry.list(provider=name)],
+                circuit_state=breaker.state.value,
+                error_kinds=dict(_r.provider_stats[name]["error_kinds"]),
             )
-        except Exception:
-            results.append(ProviderStatusResponse(name=name, available=False))
+        )
     return results
 
 
@@ -457,6 +528,7 @@ async def get_stats(
         retry_stats=rs.get("retry_stats"),
         limiter_stats=rs.get("limiter_stats"),
         orchestrator_stats=os_,
+        failovers=rs.get("failovers", 0),
     )
 
 

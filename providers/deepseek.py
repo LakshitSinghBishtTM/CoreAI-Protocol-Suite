@@ -15,7 +15,7 @@ from loguru import logger
 # providers.openai submodule which shares the same short name.
 AsyncOpenAI = importlib.import_module("openai").AsyncOpenAI
 
-from .base import BaseProvider, CompletionRequest, CompletionResponse
+from .base import SDK_TIMEOUT_S, BaseProvider, CompletionRequest, CompletionResponse
 
 DEEPSEEK_PRICING = {
     "deepseek-chat": {"input": 0.00000027, "output": 0.0000011},
@@ -34,6 +34,8 @@ class DeepSeekProvider(BaseProvider):
         self.client = AsyncOpenAI(
             api_key=api_key,
             base_url=DEEPSEEK_BASE_URL,
+            timeout=SDK_TIMEOUT_S,
+            max_retries=0,
         )
 
     async def complete(self, request: CompletionRequest) -> CompletionResponse:

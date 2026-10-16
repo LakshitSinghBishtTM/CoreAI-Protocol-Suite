@@ -35,6 +35,15 @@ class CompletionResponse:
     metadata: dict = field(default_factory=dict)
 
 
+# Backstop timeout for the underlying HTTP client, in seconds. The router
+# enforces the real per-provider timeouts (coreai.router) and cancels slow
+# calls first; this only guarantees a hung connection is eventually closed.
+# SDK-internal retries are disabled everywhere (max_retries=0) because the
+# router owns retry and failover. Left on, they stack under the router's own
+# retries and hide failures such as HTTP 529 from the circuit breaker.
+SDK_TIMEOUT_S = 150.0
+
+
 class BaseProvider(ABC):
     name: str = "base"
     default_model: str = ""

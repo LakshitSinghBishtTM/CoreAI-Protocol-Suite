@@ -21,10 +21,13 @@ It is **alpha software**. The gateway core works and is unit tested. Several oth
 ## What works today
 
 - **Providers:** OpenAI, Anthropic, Gemini, Grok and DeepSeek behind one interface.
-- **Routing strategies:** `cheapest`, `fastest`, `balanced` (weighted cost and latency), `round_robin` and `fallback` (first provider, falling back on error).
-- **Response caching:** in-memory or Redis.
-- **Rate limiting:** per provider and global, plus a sliding-window limiter on the API keyed by API key or client IP.
-- **Retries:** exponential backoff for retryable provider errors.
+- **Routing strategies:** `cheapest`, `fastest`, `balanced` (weighted cost and latency), `round_robin` and `fallback` (providers in registration order).
+- **Failover:** if a provider fails with overload (429, 503, 529), a 5xx, a timeout or a connection error, the request moves to the next-best provider. Requests that pin a provider or a specific model do not fail over. Streams fail over only before the first chunk is sent.
+- **Circuit breakers:** a provider that keeps failing is skipped for a cooldown, then probed with a single request before it takes traffic again.
+- **Timeouts and deadlines:** a per-provider timeout for each attempt, and one request deadline shared by all retries and failovers.
+- **Response caching:** in-memory (LRU, size-limited) or Redis.
+- **Rate limiting:** per provider (requests, tokens and concurrency) and global, plus a sliding-window limiter on the API keyed by API key or client IP. Waiting is bounded by the request deadline.
+- **Retries:** exponential backoff with jitter for transient errors only; honors `Retry-After`; never retries bad requests or auth errors; stops when the deadline would be exceeded.
 - **Auth:** JWT bearer tokens or `X-API-Key`, with per-endpoint scopes.
 - **Streaming completions** and a **background task queue**.
 - **Model registry:** capability, context window and price data per model.
@@ -35,8 +38,9 @@ It is **alpha software**. The gateway core works and is unit tested. Several oth
 
 | Component | Status | Notes |
 | --- | --- | --- |
-| Router, providers, cache, limiter, retry | Alpha | Unit tested with mocked providers. Failover against real provider failures is not yet tested. |
-| API server and auth | Alpha | Roughly half of the route code is covered by tests. |
+| Router, failover, circuit breaker, retry, limiter | Alpha | Tested with simulated failures, and with the real Anthropic, OpenAI and Gemini SDK error types over mock HTTP transports. Not yet exercised against a live provider outage. |
+| Providers and cache | Alpha | Anthropic and OpenAI have request/response contract tests; Gemini, Grok and DeepSeek do not yet. |
+| API server and auth | Alpha | Error mapping, streaming and provider health are tested; roughly two thirds of the route code is covered. |
 | Task orchestrator | Alpha | Queue and dispatch exist; limited tests. |
 | Model registry (`neural/model.py`) | Alpha | Static table; entries and prices go stale. |
 | Fine-tuning API (`neural/training.py`) | Optional | OpenAI only; Anthropic is a stub. |
@@ -91,7 +95,7 @@ All routes except `/health` need authentication. Scope required is in brackets.
 | `GET /health` | Liveness and loaded providers (no auth) |
 | `POST /v1/completions` | Completion through the router `[completions:write]` |
 | `POST /v1/completions/stream` | Streaming completion `[completions:write]` |
-| `GET /v1/providers` | Provider availability and latency `[completions:read]` |
+| `GET /v1/providers` | Provider health from circuit breakers and recent errors (no network calls) `[completions:read]` |
 | `GET /v1/models` | Model registry `[completions:read]` |
 | `POST /v1/tasks`, `GET` and `DELETE /v1/tasks/{id}` | Background tasks `[tasks:read, tasks:write]` |
 | `POST /v1/agents`, `GET /v1/agents`, `DELETE /v1/agents/{id}` | Experimental agents `[agents:read, agents:write]` |
@@ -100,6 +104,20 @@ All routes except `/health` need authentication. Scope required is in brackets.
 | `POST`, `GET` and `DELETE /v1/finetune/jobs` | Fine-tuning jobs `[admin]` |
 
 Interactive docs are at `/docs` while the server runs.
+
+### Error responses
+
+Provider failures are translated into meaningful status codes. Upstream error text is logged but never returned (it can contain request details or partial credentials).
+
+| Status | Meaning |
+| --- | --- |
+| 400 | Invalid request: unknown provider, context window exceeded, or the provider rejected the input |
+| 429 | Provider rate limit reached; `Retry-After` is set when the provider sent one |
+| 502 | Provider unreachable or returned a 5xx; or the gateway's key or quota was rejected |
+| 503 | Provider overloaded, or every provider failed or is circuit-broken; `Retry-After` when known |
+| 504 | Provider timed out, or the request deadline was exceeded |
+
+A stream that fails before its first chunk is returned as one of these errors. A stream that fails after output has started ends with a final `[stream_error] <kind>` chunk.
 
 ## Configuration
 
@@ -112,6 +130,13 @@ See `.env.example` for a template. The main variables:
 | `DATABASE_URL` | Postgres URL. Empty means SQLite (install `.[postgres]` for Postgres). |
 | `DB_PATH` | SQLite file location. |
 | `JWT_EXPIRY_MINS` | Token lifetime. |
+| `REQUEST_TIMEOUT_SECONDS` | Per-attempt timeout for one provider call (default 60). |
+| `PROVIDER_TIMEOUTS` | Per-provider overrides, for example `deepseek=120,grok=90`. |
+| `REQUEST_DEADLINE_SECONDS` | Total budget across retries and failovers (default 120; `none` disables). |
+| `ENABLE_FAILOVER` | Set `false` to disable failover (default `true`). |
+| `MAX_ATTEMPTS_BEFORE_FAILOVER` | Tries on one provider while others remain (default 2). |
+| `CIRCUIT_FAILURE_THRESHOLD`, `CIRCUIT_RESET_SECONDS` | Consecutive failures that stop traffic to a provider (default 5), and the cooldown before it is probed again (default 30). |
+| `CACHE_MAX_ENTRIES` | Size limit of the in-memory response cache (default 1000). |
 | `WEBHOOK_SIGNING_SECRET` | Verifies signed webhook requests. |
 
 ## Development
@@ -126,7 +151,8 @@ CI runs lint, tests on Python 3.11 and 3.12, a wheel build-and-import check, and
 
 ## Known limitations
 
-- Provider failover and circuit breaking are not yet tested against real failures, and there are no per-provider timeouts or request deadlines.
+- Failover is verified with simulated failures, not yet against a real provider outage. Circuit breaker state is per process, so replicas do not share it.
+- The Anthropic provider does not forward `temperature`: the current Anthropic SDK no longer accepts it.
 - No metrics, tracing or structured logs yet.
 - The model registry is static and may be out of date.
 - Several top-level package names (`api`, `utils`, `providers`, ...) are generic. A `src/` layout is planned.

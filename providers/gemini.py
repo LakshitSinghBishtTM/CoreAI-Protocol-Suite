@@ -9,7 +9,7 @@ from google import genai
 from google.genai import types
 from loguru import logger
 
-from .base import BaseProvider, CompletionRequest, CompletionResponse
+from .base import SDK_TIMEOUT_S, BaseProvider, CompletionRequest, CompletionResponse
 
 GEMINI_PRICING = {
     "gemini-1.5-pro": {"input": 0.0000035, "output": 0.0000105},
@@ -26,7 +26,10 @@ class GeminiProvider(BaseProvider):
 
     def __init__(self, api_key: str):
         super().__init__(api_key)
-        self.client = genai.Client(api_key=api_key)
+        self.client = genai.Client(
+            api_key=api_key,
+            http_options=types.HttpOptions(timeout=int(SDK_TIMEOUT_S * 1000)),
+        )
 
     def _build_config(self, request: CompletionRequest) -> types.GenerateContentConfig:
         return types.GenerateContentConfig(

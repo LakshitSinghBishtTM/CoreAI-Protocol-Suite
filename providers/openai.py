@@ -15,7 +15,7 @@ from loguru import logger
 # submodule (providers.openai) which shares the same short name.
 AsyncOpenAI = importlib.import_module("openai").AsyncOpenAI
 
-from .base import BaseProvider, CompletionRequest, CompletionResponse
+from .base import SDK_TIMEOUT_S, BaseProvider, CompletionRequest, CompletionResponse
 
 OPENAI_PRICING = {
     "gpt-4o": {"input": 0.000005, "output": 0.000015},
@@ -40,7 +40,7 @@ class OpenAIProvider(BaseProvider):
 
     def __init__(self, api_key: str):
         super().__init__(api_key)
-        self.client = AsyncOpenAI(api_key=api_key)
+        self.client = AsyncOpenAI(api_key=api_key, timeout=SDK_TIMEOUT_S, max_retries=0)
 
     async def complete(self, request: CompletionRequest) -> CompletionResponse:
         model = request.model or self.default_model

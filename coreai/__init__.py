@@ -1,6 +1,14 @@
 from ._version import __version__
 from .cache import CacheBackend, MemoryCache, RedisCache, ResponseCache
+from .circuit_breaker import CircuitBreaker, CircuitState
 from .core_final import CoreAI
+from .deadline import Deadline
+from .errors import (
+    AllProvidersUnavailable,
+    DeadlineExceeded,
+    ErrorKind,
+    classify,
+)
 from .limiter import GlobalRateLimiter, ProviderLimiter, RateLimitConfig
 from .orchestrator import AgentTask, Orchestrator, TaskStatus
 from .retry import RetryConfig, RetryManager, should_retry
@@ -15,6 +23,14 @@ __all__ = [
     "MemoryCache",
     "RedisCache",
     "CacheBackend",
+    # Reliability
+    "AllProvidersUnavailable",
+    "CircuitBreaker",
+    "CircuitState",
+    "Deadline",
+    "DeadlineExceeded",
+    "ErrorKind",
+    "classify",
     # Retry
     "RetryManager",
     "RetryConfig",

@@ -41,7 +41,7 @@ async def lifespan(app: FastAPI):
     app_state["providers"] = providers
     app_state["router"] = Router(
         providers,
-        RoutingConfig(strategy=RoutingStrategy.BALANCED),
+        RoutingConfig.from_env(strategy=RoutingStrategy.BALANCED),
     )
     app_state["orchestrator"] = Orchestrator()
 
