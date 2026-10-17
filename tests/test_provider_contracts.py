@@ -18,10 +18,10 @@ from providers.base import CompletionRequest, Message
 from providers.openai import OpenAIProvider
 from tests.helpers import make_router, request
 
-try:  # Anthropic SDK 1.x ships its own HTTP layer; older versions use httpx
-    import httpx2
-except ImportError:  # pragma: no cover
-    httpx2 = httpx
+from anthropic import _base_client as _anthropic_http
+
+# Use the HTTP module the installed Anthropic SDK type-checks against.
+httpx2 = _anthropic_http.httpx
 
 ANTHROPIC_OK = {
     "id": "msg_1",
