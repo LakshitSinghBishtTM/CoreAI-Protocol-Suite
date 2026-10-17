@@ -38,6 +38,7 @@ _POLICY_KEYS = {
     "strategy",
     "weights",
     "latency_ceiling_ms",
+    "hedge_after_ms",
     "fallback_chain",
     "fallback_model",
     "provider",
@@ -63,6 +64,7 @@ class Policy:
     cost_weight: float = _DEFAULT_COST_AWARE_WEIGHTS[0]
     latency_weight: float = _DEFAULT_COST_AWARE_WEIGHTS[1]
     latency_ceiling_ms: float | None = None
+    hedge_after_ms: float | None = None
     fallback_chain: tuple[str, ...] = ()
     fallback_model: str | None = None
     provider: str | None = None
@@ -84,6 +86,7 @@ class Policy:
             "strategy": self.strategy,
             "weights": {"cost": self.cost_weight, "latency": self.latency_weight},
             "latency_ceiling_ms": self.latency_ceiling_ms,
+            "hedge_after_ms": self.hedge_after_ms,
             "fallback_chain": list(self.fallback_chain),
             "provider": self.provider,
             "model": self.model,
@@ -182,6 +185,13 @@ def parse_policies(
                 )
                 ceiling = None
 
+        hedge = body.get("hedge_after_ms")
+        if hedge is not None:
+            hedge = _number(hedge)
+            if hedge is None or hedge <= 0:
+                problems.append(f"{where}.hedge_after_ms: must be a positive number")
+                hedge = None
+
         chain = _name_list(
             body.get("fallback_chain", []), f"{where}.fallback_chain", problems
         )
@@ -227,6 +237,7 @@ def parse_policies(
             cost_weight=cost_w,
             latency_weight=latency_w,
             latency_ceiling_ms=ceiling,
+            hedge_after_ms=hedge,
             fallback_chain=tuple(chain),
             fallback_model=fallback_model if isinstance(fallback_model, str) else None,
             provider=provider,

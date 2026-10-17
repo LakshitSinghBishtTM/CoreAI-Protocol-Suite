@@ -49,6 +49,15 @@ _DEFAULT_PROVIDER_TIMEOUTS = {"deepseek": 120.0}
 _DEFAULT_DEADLINE_S = 120.0
 
 
+class HedgeFailure(Exception):
+    """Both legs of a hedged call failed. ``errors`` maps provider -> error."""
+
+    def __init__(self, errors: dict, primary: str):
+        self.errors = errors
+        self.primary = primary
+        super().__init__(f"hedged call failed on {sorted(errors)}")
+
+
 _END = object()  # marks a stream that ended before its first chunk
 
 
@@ -82,6 +91,7 @@ class RoutingConfig:
         cache_max_entries: int = 1000,
         health_weight: float = 0.5,
         health_half_life_seconds: float = 60.0,
+        hedge_after_seconds: Optional[float] = None,
     ):
         self.strategy = strategy
         self.enable_failover = enable_failover
@@ -102,6 +112,12 @@ class RoutingConfig:
         # Added to the balanced score as health_weight * (1 - health): 0 turns
         # health scoring off, higher values avoid unhealthy providers harder.
         self.health_weight = health_weight
+        # Hedging: if the chosen provider hasn't answered after this many
+        # seconds, also ask the next one and use whichever succeeds first.
+        # None (default) turns it off. A policy's hedge_after_ms overrides it.
+        if hedge_after_seconds is not None and hedge_after_seconds <= 0:
+            raise ValueError("hedge_after_seconds must be positive or None")
+        self.hedge_after_seconds = hedge_after_seconds
         self.health_half_life_seconds = health_half_life_seconds
         self.enable_cache = enable_cache
         self.cache_ttl_seconds = cache_ttl_seconds
@@ -238,6 +254,8 @@ class Router:
             for name in providers
         }
         self.failover_count = 0
+        self.hedge_count = 0  # second requests launched
+        self.hedge_wins = 0  # times the second request answered first
         self.health: dict[str, HealthTracker] = {
             name: HealthTracker(self.config.health_half_life_seconds, clock=clock)
             for name in providers
@@ -326,8 +344,12 @@ class Router:
 
         failures: list[tuple[str, ErrorKind]] = []
         last_exc: Optional[Exception] = None
+        hedge_delay = self._hedge_delay(request, preferred_provider)
+        skip: set[str] = set()  # providers already tried as a hedge
 
         for index, name in enumerate(candidates):
+            if name in skip:
+                continue
             is_last = index == len(candidates) - 1
             if not self.breakers[name].allow():
                 last_exc = CircuitOpenError(name, self.breakers[name].retry_after())
@@ -339,7 +361,48 @@ class Router:
                 attempts = min(attempts, self.config.max_attempts_before_failover)
 
             try:
-                response = await self._call_provider(name, request, deadline, attempts)
+                partner = None
+                if hedge_delay is not None and not is_last and not request.stream:
+                    nxt = candidates[index + 1]
+                    if nxt not in skip:
+                        partner = nxt
+                if partner is not None:
+                    partner_attempts = (
+                        self.config.max_retry_attempts
+                        if index + 1 == len(candidates) - 1
+                        else min(
+                            self.config.max_retry_attempts,
+                            self.config.max_attempts_before_failover,
+                        )
+                    )
+                    name, response = await self._call_hedged(
+                        name,
+                        partner,
+                        request,
+                        deadline,
+                        attempts,
+                        partner_attempts,
+                        hedge_delay,
+                        skip,
+                    )
+                else:
+                    response = await self._call_provider(
+                        name, request, deadline, attempts
+                    )
+            except HedgeFailure as hf:
+                last_exc = hf.errors[hf.primary]
+                for n, e in hf.errors.items():
+                    failures.append((n, classify(e).kind))
+                if any(
+                    classify(e).kind is ErrorKind.DEADLINE for e in hf.errors.values()
+                ):
+                    raise last_exc
+                info = classify(last_exc)
+                if not (self.config.enable_failover and info.failover):
+                    raise last_exc
+                if not is_last:
+                    self.failover_count += 1
+                continue
             except Exception as exc:
                 info = classify(exc)
                 failures.append((name, info.kind))
@@ -362,6 +425,8 @@ class Router:
                     **response.metadata,
                     "failed_over_from": [n for n, _ in failures],
                 }
+            if skip:
+                response.metadata = {**response.metadata, "hedged": True}
             self._record_success(name, response.cost_usd, response.latency_ms)
             logger.info(
                 f"[{name}] {response.model} | "
@@ -890,6 +955,73 @@ class Router:
         rest = [n for n in healthy if n != primary]
         return [primary] + self._failover_order(request, rest)
 
+    def _hedge_delay(
+        self, request: CompletionRequest, preferred: Optional[str]
+    ) -> Optional[float]:
+        """Seconds to wait before hedging, or None when hedging is off."""
+        if preferred is not None or request.stream or request.model is not None:
+            return None
+        policy = self._policy_for(request)
+        if policy is not None and policy.hedge_after_ms is not None:
+            return policy.hedge_after_ms / 1000.0
+        return self.config.hedge_after_seconds
+
+    async def _call_hedged(
+        self,
+        primary: str,
+        partner: str,
+        request: CompletionRequest,
+        deadline: Deadline,
+        attempts_primary: int,
+        attempts_partner: int,
+        delay: float,
+        skip: set[str],
+    ) -> tuple[str, CompletionResponse]:
+        """Call *primary*; if it is still running after *delay* seconds, also
+        call *partner* and return whichever succeeds first, cancelling the
+        other. Returns (winner, response). If the primary fails before the
+        delay, the exception propagates as for an ordinary call and the
+        partner is left for normal failover. If both legs fail, raises
+        HedgeFailure."""
+        t1 = asyncio.ensure_future(
+            self._call_provider(primary, request, deadline, attempts_primary)
+        )
+        done, _ = await asyncio.wait({t1}, timeout=delay)
+        if t1 in done:
+            return primary, t1.result()
+        if not self.breakers[partner].allow():
+            return primary, await t1
+
+        t2 = asyncio.ensure_future(
+            self._call_provider(partner, request, deadline, attempts_partner)
+        )
+        skip.add(partner)
+        self.hedge_count += 1
+        names = {t1: primary, t2: partner}
+        errors: dict[str, BaseException] = {}
+        pending = {t1, t2}
+        try:
+            while pending:
+                done, pending = await asyncio.wait(
+                    pending, return_when=asyncio.FIRST_COMPLETED
+                )
+                for t in done:
+                    exc = t.exception()
+                    if exc is None:
+                        for other in pending:
+                            other.cancel()
+                        await asyncio.gather(*pending, return_exceptions=True)
+                        if names[t] == partner:
+                            self.hedge_wins += 1
+                        return names[t], t.result()
+                    errors[names[t]] = exc
+        except asyncio.CancelledError:
+            for t in (t1, t2):
+                t.cancel()
+            await asyncio.gather(t1, t2, return_exceptions=True)
+            raise
+        raise HedgeFailure(errors, primary)
+
     def _failover_order(
         self, request: CompletionRequest, names: list[str]
     ) -> list[str]:
@@ -1095,6 +1227,7 @@ class Router:
         return {
             "total_requests": self.request_count,
             "failovers": self.failover_count,
+            "hedges": {"launched": self.hedge_count, "won_by_second": self.hedge_wins},
             "strategy": self.config.strategy,
             "provider_stats": {
                 name: {

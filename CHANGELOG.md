@@ -4,6 +4,9 @@
 
 The previous `1.0.0` label did not match the project's state; versions now start at 0.1.0 (alpha).
 
+### Added (Phase 2, part 5)
+- **Optional hedged requests.** With `hedge_after_seconds` (or a policy's `hedge_after_ms`), a request still unanswered after that delay is also sent to the next provider; the first success wins and the other call is cancelled. Off by default. Never used for pinned providers, pinned models or streams. A cancelled loser doesn't count as a failure; a provider tried as a hedge isn't retried in normal failover. Responses carry `metadata["hedged"]`, and `/v1/stats` reports `hedges.launched` and `hedges.won_by_second`. `low_latency` in `config/routing.yml` now hedges after 800ms. Note: a hedge can mean paying for two completions.
+
 ### Added (Phase 2, part 4)
 - **Per-provider health scoring** (`coreai/health.py`): a time-decayed success rate (0 to 1, 60s half-life by default) from recent outcomes. The router adds `health_weight * (1 - health)` to the balanced score (default weight 0.5; set `health_weight=0` to turn it off), so failing providers are tried later and recover as old failures age out. Caller errors (HTTP 400-class) don't count against a provider. Health is shown in `/v1/stats`, `GET /v1/providers` and the `/v1/routing/explain` trace. It applies to balanced/cost-aware/cheapest ordering; `latency_first` and `fallback` orderings are unchanged.
 

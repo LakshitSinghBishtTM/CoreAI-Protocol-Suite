@@ -26,6 +26,7 @@ policies:
   low_latency:
     strategy:           latency_first
     latency_ceiling_ms: 500
+    hedge_after_ms:     800   # ask the next provider too if no answer by then
     fallback_chain:
       - deepseek
       - gemini
