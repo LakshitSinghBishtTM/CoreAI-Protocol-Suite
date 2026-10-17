@@ -16,9 +16,12 @@ import os
 import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import yaml
+
+if TYPE_CHECKING:
+    from .limiter import RateLimitConfig
 
 logger = logging.getLogger(__name__)
 
@@ -166,15 +169,15 @@ def parse_policies(
                 problems.append(f"{where}.weights: only `cost` and `latency` allowed")
             else:
                 c = _number(weights.get("cost", 0.0))
-                l = _number(weights.get("latency", 0.0))
-                if c is None or l is None or c < 0 or l < 0:
+                lat = _number(weights.get("latency", 0.0))
+                if c is None or lat is None or c < 0 or lat < 0:
                     problems.append(f"{where}.weights: must be non-negative numbers")
-                elif c + l == 0:
+                elif c + lat == 0:
                     problems.append(
                         f"{where}.weights: cost and latency can't both be 0"
                     )
                 else:
-                    cost_w, latency_w = c / (c + l), l / (c + l)
+                    cost_w, latency_w = c / (c + lat), lat / (c + lat)
 
         ceiling = body.get("latency_ceiling_ms")
         if ceiling is not None:
@@ -318,3 +321,55 @@ class PolicyStore:
         self.last_error = None
         self.reloads += 1
         logger.info("Loaded routing policies: %s", ", ".join(self._set.names()))
+
+
+def parse_rate_limits(data: Any) -> dict[str, RateLimitConfig]:
+    """Read ``providers.<name>.rate_limits`` (``rpm``, ``tpm``, optional
+    ``concurrent``) from a parsed routing document. Raises PolicyError with
+    every problem found. Providers without ``rate_limits`` are omitted."""
+    from .limiter import RateLimitConfig
+
+    if not isinstance(data, dict):
+        raise PolicyError(["top level must be a mapping"])
+    providers = data.get("providers") or {}
+    if not isinstance(providers, dict):
+        raise PolicyError(["`providers` must be a mapping"])
+    problems: list[str] = []
+    out: dict[str, RateLimitConfig] = {}
+    for name, body in providers.items():
+        limits = body.get("rate_limits") if isinstance(body, dict) else None
+        if limits is None:
+            continue
+        where = f"providers.{name}.rate_limits"
+        if not isinstance(limits, dict) or set(limits) - {"rpm", "tpm", "concurrent"}:
+            problems.append(f"{where}: only rpm, tpm and concurrent are allowed")
+            continue
+        defaults = RateLimitConfig()
+        values = {
+            "rpm": limits.get("rpm", defaults.requests_per_minute),
+            "tpm": limits.get("tpm", defaults.tokens_per_minute),
+            "concurrent": limits.get("concurrent", defaults.concurrent_requests),
+        }
+        if any(
+            isinstance(v, bool) or not isinstance(v, int) or v < 1
+            for v in values.values()
+        ):
+            problems.append(f"{where}: values must be positive integers")
+            continue
+        out[str(name)] = RateLimitConfig(
+            requests_per_minute=values["rpm"],
+            tokens_per_minute=values["tpm"],
+            concurrent_requests=values["concurrent"],
+        )
+    if problems:
+        raise PolicyError(problems)
+    return out
+
+
+def load_rate_limits(path: str) -> dict[str, RateLimitConfig]:
+    try:
+        with open(path, encoding="utf-8") as fh:
+            data = yaml.safe_load(fh)
+    except (yaml.YAMLError, OSError) as exc:
+        raise PolicyError([f"{path}: cannot load ({exc.__class__.__name__})"]) from exc
+    return parse_rate_limits(data)

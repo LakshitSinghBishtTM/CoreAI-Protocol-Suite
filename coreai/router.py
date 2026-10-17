@@ -12,7 +12,6 @@ from providers import BaseProvider, CompletionRequest, CompletionResponse
 from .cache import ResponseCache
 from .circuit_breaker import CircuitBreaker
 from .deadline import Deadline
-from .health import HealthTracker
 from .errors import (
     AllProvidersUnavailable,
     CircuitOpenError,
@@ -22,6 +21,7 @@ from .errors import (
     RateLimited,
     classify,
 )
+from .health import HealthTracker
 from .limiter import GlobalRateLimiter, RateLimitConfig
 from .policy import Policy, PolicyStore
 from .retry import RetryConfig, RetryManager
@@ -92,6 +92,7 @@ class RoutingConfig:
         health_weight: float = 0.5,
         health_half_life_seconds: float = 60.0,
         hedge_after_seconds: Optional[float] = None,
+        rate_limits: Optional[dict[str, RateLimitConfig]] = None,
     ):
         self.strategy = strategy
         self.enable_failover = enable_failover
@@ -118,6 +119,9 @@ class RoutingConfig:
         if hedge_after_seconds is not None and hedge_after_seconds <= 0:
             raise ValueError("hedge_after_seconds must be positive or None")
         self.hedge_after_seconds = hedge_after_seconds
+        # Per-provider local rate limits (requests/tokens per minute, concurrency).
+        # Providers without an entry get RateLimitConfig() defaults.
+        self.rate_limits = dict(rate_limits or {})
         self.health_half_life_seconds = health_half_life_seconds
         self.enable_cache = enable_cache
         self.cache_ttl_seconds = cache_ttl_seconds
@@ -243,7 +247,9 @@ class Router:
         )
         self.limiter = GlobalRateLimiter()
         for name in providers:
-            self.limiter.register_provider(name, RateLimitConfig())
+            self.limiter.register_provider(
+                name, self.config.rate_limits.get(name) or RateLimitConfig()
+            )
         self.breakers: dict[str, CircuitBreaker] = {
             name: CircuitBreaker(
                 name,

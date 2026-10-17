@@ -42,7 +42,10 @@ async def lifespan(app: FastAPI):
     app_state["providers"] = providers
     app_state["router"] = Router(
         providers,
-        RoutingConfig.from_env(strategy=RoutingStrategy.BALANCED),
+        RoutingConfig.from_env(
+            strategy=RoutingStrategy.BALANCED,
+            rate_limits=_load_rate_limits(),
+        ),
         policies=_load_policy_store(providers),
     )
     app_state["orchestrator"] = Orchestrator()
@@ -83,6 +86,23 @@ app = FastAPI(
 app.add_middleware(RateLimitMiddleware)
 app.add_middleware(DrainMiddleware, controller=drain)
 app.include_router(routes.router)
+
+
+def _load_rate_limits():
+    """Per-provider limits from providers.<name>.rate_limits in the routing
+    file. Without a valid file, providers keep the built-in defaults."""
+    import os
+
+    from coreai.policy import PolicyError, load_rate_limits
+
+    path = os.environ.get("COREAI_ROUTING_POLICY_FILE", "config/routing.yml")
+    if not os.path.exists(path):
+        return {}
+    try:
+        return load_rate_limits(path)
+    except PolicyError as exc:
+        logger.error(f"Rate limits from {path} ignored: {exc}")
+        return {}
 
 
 def _load_policy_store(providers):

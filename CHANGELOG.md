@@ -4,6 +4,15 @@
 
 The previous `1.0.0` label did not match the project's state; versions now start at 0.1.0 (alpha).
 
+### Added (Phase 2, part 6: chaos and load checks)
+- `scripts/chaos.py`: kills, slows or breaks each provider in turn (down, 500, 529, 429, flaky, slow) and checks the gateway keeps serving at 99%+, stays within a p95 bound and gets traffic back to the provider after recovery; plus an all-providers-down scenario. Runs in CI.
+- `scripts/loadtest.py`: sustained load with `tracemalloc`; fails on memory growth, unbounded caches or histories, or errors. Runs in CI.
+- Behavior documented in `docs/operations.md`.
+
+### Fixed (Phase 2, part 6)
+- **`rate_limits` in `config/routing.yml` were ignored.** The router gave every provider a hard-coded 100 requests and 90,000 tokens per minute, so the gateway throttled itself far below configured limits. Limits are now read from `providers.<name>.rate_limits` (validated), and `RoutingConfig(rate_limits=...)` sets them in code.
+- CI lint (flake8, isort) failures in files from earlier Phase 2 parts.
+
 ### Added (Phase 2, part 5)
 - **Optional hedged requests.** With `hedge_after_seconds` (or a policy's `hedge_after_ms`), a request still unanswered after that delay is also sent to the next provider; the first success wins and the other call is cancelled. Off by default. Never used for pinned providers, pinned models or streams. A cancelled loser doesn't count as a failure; a provider tried as a hedge isn't retried in normal failover. Responses carry `metadata["hedged"]`, and `/v1/stats` reports `hedges.launched` and `hedges.won_by_second`. `low_latency` in `config/routing.yml` now hedges after 800ms. Note: a hedge can mean paying for two completions.
 
