@@ -83,7 +83,20 @@ class EmergencyShutdown:
     IMMEDIATE_TIMEOUT_S = 10
     FORCED_TIMEOUT_S = 3
 
-    def __init__(self, agent_manager: Any, kernel: Any, db: Any):
+    def __init__(
+        self,
+        agent_manager: Any,
+        kernel: Any,
+        db: Any,
+        drain: Any = None,
+        exit_fn: Callable[[int], Any] = sys.exit,
+    ):
+        # drain: a coreai.drain.DrainController. When given, graceful and
+        # immediate shutdown stop accepting requests and wait for in-flight
+        # ones before tearing subsystems down.
+        self.drain = drain
+        # exit_fn is injectable so the kill switch can be tested.
+        self._exit = exit_fn
         self.agent_manager = agent_manager
         self.kernel = kernel
         self.db = db
@@ -138,6 +151,10 @@ class EmergencyShutdown:
             message,
         )
 
+        # Stop accepting new requests before anything else, in every mode.
+        if self.drain is not None:
+            self.drain.begin_drain()
+
         try:
             if mode == ShutdownMode.GRACEFUL:
                 await self._graceful_shutdown()
@@ -153,9 +170,10 @@ class EmergencyShutdown:
 
         except Exception as exc:
             logger.critical("Shutdown handler raised: %s — forcing exit", exc)
-            sys.exit(1)
+            self._exit(1)
+            return
 
-        sys.exit(0)
+        self._exit(0)
 
     # ------------------------------------------------------------------
     # Shutdown modes
@@ -201,13 +219,25 @@ class EmergencyShutdown:
     # Subsystem teardown
     # ------------------------------------------------------------------
 
+    async def _wait_for_in_flight(self, timeout: float) -> None:
+        if self.drain is None:
+            return
+        if not await self.drain.wait_idle(timeout):
+            logger.warning(
+                "%d request(s) still in flight after %.0fs; continuing shutdown",
+                self.drain.in_flight,
+                timeout,
+            )
+
     async def _drain_and_flush(self) -> None:
+        await self._wait_for_in_flight(self.GRACEFUL_TIMEOUT_S * 0.8)
         await self.agent_manager.shutdown_all()
         await self.kernel.flush()
         await self._run_hooks()
         await self._close_db(flush=True)
 
     async def _stop_and_flush(self) -> None:
+        await self._wait_for_in_flight(self.IMMEDIATE_TIMEOUT_S * 0.5)
         await asyncio.gather(
             self.agent_manager.shutdown_all(),
             self.kernel.flush(),

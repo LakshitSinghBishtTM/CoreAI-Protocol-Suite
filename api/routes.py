@@ -579,23 +579,39 @@ async def trigger_shutdown(
     message: str = Query("", max_length=256),
     ctx: AuthContext = Depends(require_scope("admin")),
 ):
+    import asyncio
+    import os
+    import signal
+
     from agents.agent_manager import get_agent_manager
     from agents.emergency_shutdown import (
         EmergencyShutdown,
         ShutdownMode,
         ShutdownReason,
     )
+    from api.server import app_state, drain
     from coreai.kernel import get_kernel
     from database.db import get_db
 
+    # One shared instance: a second request must see the first one running.
+    shutdown = app_state.get("shutdown")
+    if shutdown is not None and shutdown.is_shutting_down:
+        raise HTTPException(
+            status_code=409,
+            detail={"error": "already_shutting_down", "event": shutdown.last_event()},
+        )
     shutdown = EmergencyShutdown(
         agent_manager=get_agent_manager(),
         kernel=get_kernel(),
         db=get_db(),
+        drain=drain,
+        # Ask the server to exit cleanly (uvicorn finishes its own shutdown)
+        # rather than raising SystemExit inside a background task.
+        exit_fn=lambda code: os.kill(os.getpid(), signal.SIGTERM),
     )
-    import asyncio
-
-    asyncio.create_task(
+    app_state["shutdown"] = shutdown
+    # Keep a reference so the task isn't garbage-collected mid-shutdown.
+    app_state["shutdown_task"] = asyncio.create_task(
         shutdown.trigger(
             mode=ShutdownMode(mode),
             reason=ShutdownReason.API_TRIGGER,
@@ -604,6 +620,21 @@ async def trigger_shutdown(
         )
     )
     return {"status": "shutdown_initiated", "mode": mode, "by": ctx.subject}
+
+
+@router.get(
+    "/admin/shutdown",
+    summary="Kill-switch status",
+    tags=["admin"],
+)
+async def shutdown_status(ctx: AuthContext = Depends(require_scope("admin"))):
+    from api.server import app_state, drain
+
+    shutdown = app_state.get("shutdown")
+    return {
+        **drain.snapshot(),
+        "event": shutdown.last_event() if shutdown else None,
+    }
 
 
 # ------------------------------------------------------------------

@@ -7,6 +7,7 @@ from agents.agent_manager import init_agent_manager
 from api import routes
 from api.middleware import RateLimitMiddleware
 from coreai import Orchestrator, Router, RoutingConfig, RoutingStrategy
+from coreai.drain import DrainController, DrainMiddleware
 from coreai.kernel import init_kernel
 from providers import (
     load_providers,
@@ -70,6 +71,8 @@ async def lifespan(app: FastAPI):
 # FastAPI App
 # ============================================================================
 
+drain = DrainController()
+
 app = FastAPI(
     title="CoreAI Protocol Suite",
     description="Intelligent LLM routing and agent orchestration",
@@ -78,6 +81,7 @@ app = FastAPI(
 )
 
 app.add_middleware(RateLimitMiddleware)
+app.add_middleware(DrainMiddleware, controller=drain)
 app.include_router(routes.router)
 
 
@@ -85,8 +89,8 @@ def _load_policy_store(providers):
     """Declarative routing policies, if a policy file exists.
 
     COREAI_ROUTING_POLICY_FILE overrides the default config/routing.yml.
-    Policies naming providers that aren't loaded (for example no API key) are
-    rejected, so the gateway starts without policies and logs why.
+    An invalid file means the gateway starts without policies and logs why.
+    Providers named in a policy that aren't loaded are simply never used.
     """
     import os
 
@@ -97,7 +101,7 @@ def _load_policy_store(providers):
         return None
     store = PolicyStore(path, known_providers=None)
     if store.last_error:
-        logger.error("Routing policies not active: %s", store.last_error)
+        logger.error(f"Routing policies not active: {store.last_error}")
         return None
     return store
 
