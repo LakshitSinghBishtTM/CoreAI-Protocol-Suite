@@ -4,6 +4,9 @@
 
 The previous `1.0.0` label did not match the project's state; versions now start at 0.1.0 (alpha).
 
+### Added (Phase 2, part 4)
+- **Per-provider health scoring** (`coreai/health.py`): a time-decayed success rate (0 to 1, 60s half-life by default) from recent outcomes. The router adds `health_weight * (1 - health)` to the balanced score (default weight 0.5; set `health_weight=0` to turn it off), so failing providers are tried later and recover as old failures age out. Caller errors (HTTP 400-class) don't count against a provider. Health is shown in `/v1/stats`, `GET /v1/providers` and the `/v1/routing/explain` trace. It applies to balanced/cost-aware/cheapest ordering; `latency_first` and `fallback` orderings are unchanged.
+
 ### Added (Phase 2, part 3)
 - **Tested kill switch.** `POST /v1/admin/shutdown` now closes intake first (new requests get 503 with `Retry-After`; `/health` and `/v1/admin/*` stay reachable), waits for in-flight requests (streams included) up to a bounded time, then tears down agents, kernel and database. `GET /v1/admin/shutdown` reports `accepting`, `in_flight` and the last shutdown event. Forced mode closes intake but does not wait.
 - `coreai/drain.py`: `DrainController` and a pure-ASGI `DrainMiddleware`.

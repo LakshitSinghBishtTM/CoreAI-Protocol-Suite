@@ -143,6 +143,7 @@ class ProviderStatusResponse(BaseModel):
     latency_ms: Optional[float] = None  # recent p50, from real requests
     model_list: List[str] = Field(default_factory=list)
     circuit_state: Optional[str] = None  # closed | open | half_open
+    health: Optional[float] = None  # 0..1, recent success rate (decayed)
     error_kinds: Dict[str, int] = Field(default_factory=dict)
 
 
@@ -478,6 +479,7 @@ async def list_providers(
                 latency_ms=_r._p50_latency(name),
                 model_list=[m.model_id for m in registry.list(provider=name)],
                 circuit_state=breaker.state.value,
+                health=round(_r.health[name].score(), 4),
                 error_kinds=dict(_r.provider_stats[name]["error_kinds"]),
             )
         )

@@ -12,6 +12,7 @@ from providers import BaseProvider, CompletionRequest, CompletionResponse
 from .cache import ResponseCache
 from .circuit_breaker import CircuitBreaker
 from .deadline import Deadline
+from .health import HealthTracker
 from .errors import (
     AllProvidersUnavailable,
     CircuitOpenError,
@@ -79,6 +80,8 @@ class RoutingConfig:
         circuit_failure_threshold: int = 5,
         circuit_reset_seconds: float = 30.0,
         cache_max_entries: int = 1000,
+        health_weight: float = 0.5,
+        health_half_life_seconds: float = 60.0,
     ):
         self.strategy = strategy
         self.enable_failover = enable_failover
@@ -96,6 +99,10 @@ class RoutingConfig:
         self.circuit_failure_threshold = circuit_failure_threshold
         self.circuit_reset_seconds = circuit_reset_seconds
         self.cache_max_entries = cache_max_entries
+        # Added to the balanced score as health_weight * (1 - health): 0 turns
+        # health scoring off, higher values avoid unhealthy providers harder.
+        self.health_weight = health_weight
+        self.health_half_life_seconds = health_half_life_seconds
         self.enable_cache = enable_cache
         self.cache_ttl_seconds = cache_ttl_seconds
         self.enable_retry = enable_retry
@@ -231,6 +238,10 @@ class Router:
             for name in providers
         }
         self.failover_count = 0
+        self.health: dict[str, HealthTracker] = {
+            name: HealthTracker(self.config.health_half_life_seconds, clock=clock)
+            for name in providers
+        }
 
         # Routing state
         self.request_count = 0
@@ -790,6 +801,7 @@ class Router:
             scores = self._balanced_scores(request, eligible, weights)
             for n in eligible:
                 trace[n]["score"] = round(scores[n], 6)
+                trace[n]["health"] = round(self.health[n].score(), 4)
             ordered = sorted(eligible, key=lambda n: scores[n])
 
         ceiling = policy.latency_ceiling_ms
@@ -1004,6 +1016,7 @@ class Router:
             name: (
                 cost_w * raw_costs[name] / max_cost
                 + latency_w * raw_latencies[name] / max_latency
+                + self.config.health_weight * (1.0 - self.health[name].score())
             )
             for name in available
         }
@@ -1052,6 +1065,7 @@ class Router:
     def _record_success(self, name: str, cost_usd: float, latency_ms: float):
         stats = self.provider_stats[name]
         stats["requests"] += 1
+        self.health[name].record(True)
         stats["total_cost"] += cost_usd
         history = stats["latency_ms_history"]
         history.append(latency_ms)
@@ -1061,6 +1075,8 @@ class Router:
     def _record_error(self, name: str, kind: Optional[ErrorKind] = None):
         stats = self.provider_stats[name]
         stats["errors"] += 1
+        if kind is not ErrorKind.BAD_REQUEST:  # the caller's fault, not the provider's
+            self.health[name].record(False)
         key = (kind or ErrorKind.UNKNOWN).value
         stats["error_kinds"][key] = stats["error_kinds"].get(key, 0) + 1
 
@@ -1086,6 +1102,7 @@ class Router:
                     "errors": s["errors"],
                     "total_cost": s["total_cost"],
                     "p50_latency_ms": self._p50_latency(name),
+                    "health": round(self.health[name].score(), 4),
                     "error_kinds": dict(s["error_kinds"]),
                     "circuit": self.breakers[name].snapshot(),
                 }
