@@ -22,6 +22,7 @@ from .errors import (
     classify,
 )
 from .limiter import GlobalRateLimiter, RateLimitConfig
+from .policy import Policy, PolicyStore
 from .retry import RetryConfig, RetryManager
 
 # ---------------------------------------------------------------------------
@@ -190,9 +191,13 @@ class Router:
         providers: dict[str, BaseProvider],
         config: RoutingConfig = None,
         clock: Callable[[], float] = time.monotonic,
+        policies: Optional[PolicyStore] = None,
     ):
         self.providers = providers
         self.config = config or RoutingConfig()
+        # Optional declarative policies (config/routing.yml). Without a store
+        # the router behaves exactly as configured by RoutingConfig.
+        self.policies = policies
         self._model_registry = get_registry()
         self._clock = clock
 
@@ -647,6 +652,10 @@ class Router:
         """Providers to try, best first. Pinned provider/model -> just one."""
         if preferred is not None:
             return [preferred]
+        policy = self._policy_for(request)
+        if policy is not None:
+            order, _ = self._plan_with_policy(request, policy)
+            return order
         healthy = [n for n in self.providers if self.breakers[n].would_allow()]
         if not healthy:
             raise AllProvidersUnavailable(
@@ -656,6 +665,214 @@ class Router:
         primary = self._select_provider(request, healthy)
         # A request for a specific model can't be served by a different
         # provider, so only model-agnostic requests fail over.
+        if not self.config.enable_failover or request.model is not None:
+            return [primary]
+        rest = [n for n in healthy if n != primary]
+        return [primary] + self._failover_order(request, rest)
+
+    # ------------------------------------------------------------------ #
+    # Declarative policies
+    # ------------------------------------------------------------------ #
+
+    def _policy_for(
+        self, request: CompletionRequest, name: Optional[str] = None
+    ) -> Optional[Policy]:
+        """The policy for this request: ``name``, else ``metadata["policy"]``,
+        else the policy called ``default``. None when no store is configured
+        or no default exists. Naming an unknown policy is an error."""
+        if self.policies is None:
+            return None
+        name = name or (request.metadata or {}).get("policy")
+        policy_set = self.policies.current()
+        policy = policy_set.get(name)
+        if policy is None and name:
+            raise ValueError(
+                f"Unknown routing policy '{name}'. Available: {policy_set.names()}"
+            )
+        return policy
+
+    def _plan_with_policy(
+        self, request: CompletionRequest, policy: Policy
+    ) -> tuple[list[str], list[dict]]:
+        """Ordered providers to try under *policy*, plus a per-provider trace.
+
+        Pure: no counters or round-robin state change, so explain() can call
+        it freely. Raises AllProvidersUnavailable if every allowed provider
+        has an open breaker, ValueError if the policy leaves none.
+        """
+        trace: dict[str, dict] = {n: {"provider": n} for n in self.providers}
+        eligible: list[str] = []
+        blocked: list[tuple[str, ErrorKind]] = []
+        for name in self.providers:
+            reason = policy.permits(name)
+            if (
+                reason is None
+                and policy.fallback_chain
+                and policy.strategy
+                in (
+                    "fallback",
+                    "explicit",
+                )
+            ):
+                if name != policy.provider and name not in policy.fallback_chain:
+                    reason = "not in policy fallback chain"
+            if reason is not None:
+                trace[name].update(status="excluded", reason=reason)
+            elif not self.breakers[name].would_allow():
+                trace[name].update(status="excluded", reason="circuit open")
+                blocked.append((name, ErrorKind.CIRCUIT_OPEN))
+            else:
+                trace[name]["status"] = "eligible"
+                eligible.append(name)
+
+        if not eligible:
+            if blocked:
+                raise AllProvidersUnavailable(
+                    blocked, retry_after=self._soonest_retry_after()
+                )
+            raise ValueError(f"Policy '{policy.name}' permits no registered provider")
+
+        ranked = self._rank_for_policy(request, policy, eligible, trace)
+
+        if policy.strategy == "explicit":
+            primary = policy.provider if policy.provider in eligible else None
+            if primary is None:
+                trace.setdefault(policy.provider, {"provider": policy.provider})
+                trace[policy.provider].setdefault("note", "pinned provider unavailable")
+            ranked = ([primary] if primary else []) + [
+                n for n in ranked if n != primary
+            ]
+
+        if policy.fallback_chain and policy.strategy != "fallback":
+            chain = [n for n in policy.fallback_chain if n in eligible]
+            head = ranked[:1]
+            order = head + [n for n in chain if n not in head]
+        else:
+            order = ranked
+
+        if request.model is not None or not self.config.enable_failover:
+            order = order[:1]
+        for pos, name in enumerate(order, 1):
+            trace[name]["position"] = pos
+        for name in eligible:
+            if name not in order:
+                trace[name][
+                    "note"
+                ] = "eligible but not used (failover disabled/pinned model)"
+        return order, [trace[n] for n in self.providers]
+
+    def _rank_for_policy(
+        self,
+        request: CompletionRequest,
+        policy: Policy,
+        eligible: list[str],
+        trace: dict[str, dict],
+    ) -> list[str]:
+        strategy = policy.strategy
+        if strategy == "fallback":
+            return [n for n in policy.fallback_chain if n in eligible]
+        if strategy == "round_robin":
+            return list(eligible)
+        if strategy == "fastest":
+            lat = {n: self._p50_latency(n) or 500.0 for n in eligible}
+            for n in eligible:
+                trace[n]["p50_latency_ms"] = lat[n]
+            ordered = sorted(eligible, key=lambda n: lat[n])
+        else:  # balanced, cheapest, explicit (ranked behind the pinned provider)
+            weights = (
+                (1.0, 0.0)
+                if strategy == "cheapest"
+                else (
+                    policy.cost_weight,
+                    policy.latency_weight,
+                )
+            )
+            scores = self._balanced_scores(request, eligible, weights)
+            for n in eligible:
+                trace[n]["score"] = round(scores[n], 6)
+            ordered = sorted(eligible, key=lambda n: scores[n])
+
+        ceiling = policy.latency_ceiling_ms
+        if ceiling is not None:
+            # Prefer providers within the latency ceiling; the rest stay
+            # available as last-resort failover rather than being dropped.
+            within = [n for n in ordered if (self._p50_latency(n) or 0.0) <= ceiling]
+            over = [n for n in ordered if n not in within]
+            for n in over:
+                trace[n]["note"] = f"p50 above latency ceiling {ceiling:g}ms"
+            ordered = within + over
+        return ordered
+
+    def explain(
+        self,
+        request: CompletionRequest,
+        policy_name: Optional[str] = None,
+        preferred_provider: Optional[str] = None,
+    ) -> dict:
+        """Dry run: say where *request* would go and why. Sends nothing and
+        changes no routing state."""
+        if preferred_provider is not None:
+            if preferred_provider not in self.providers:
+                raise ValueError(
+                    f"Provider '{preferred_provider}' not available. "
+                    f"Available: {sorted(self.providers)}"
+                )
+            return {
+                "policy": None,
+                "pinned_by_request": True,
+                "order": [preferred_provider],
+                "providers": [
+                    {
+                        "provider": n,
+                        "status": "eligible" if n == preferred_provider else "excluded",
+                        "reason": (
+                            None
+                            if n == preferred_provider
+                            else "request pinned another provider"
+                        ),
+                    }
+                    for n in self.providers
+                ],
+            }
+        policy = self._policy_for(request, policy_name)
+        if policy is None:
+            healthy = [n for n in self.providers if self.breakers[n].would_allow()]
+            if not healthy:
+                raise AllProvidersUnavailable(
+                    [(n, ErrorKind.CIRCUIT_OPEN) for n in self.providers],
+                    retry_after=self._soonest_retry_after(),
+                )
+            order = [n for n in self._candidates_no_side_effects(request, healthy)]
+            return {
+                "policy": None,
+                "strategy": self.config.strategy.value,
+                "order": order,
+                "providers": [
+                    {
+                        "provider": n,
+                        "status": "eligible" if n in healthy else "excluded",
+                        "reason": None if n in healthy else "circuit open",
+                        **({"position": order.index(n) + 1} if n in order else {}),
+                    }
+                    for n in self.providers
+                ],
+            }
+        order, trace = self._plan_with_policy(request, policy)
+        return {
+            "policy": policy.to_dict(),
+            "order": order,
+            "providers": trace,
+        }
+
+    def _candidates_no_side_effects(
+        self, request: CompletionRequest, healthy: list[str]
+    ) -> list[str]:
+        """Candidate order without advancing round-robin / warm-up counters."""
+        saved = self._rr_index
+        try:
+            primary = self._select_provider(request, healthy)
+        finally:
+            self._rr_index = saved
         if not self.config.enable_failover or request.model is not None:
             return [primary]
         rest = [n for n in healthy if n != primary]
@@ -753,7 +970,10 @@ class Router:
         return best
 
     def _balanced_scores(
-        self, request: CompletionRequest, available: list[str]
+        self,
+        request: CompletionRequest,
+        available: list[str],
+        weights: Optional[tuple[float, float]] = None,
     ) -> dict[str, float]:
         """score = cost_weight * norm_cost + latency_weight * norm_latency
         (lower is better for both)."""
@@ -776,10 +996,14 @@ class Router:
         max_cost = max(raw_costs.values()) or 1.0
         max_latency = max(raw_latencies.values()) or 1.0
 
+        cost_w, latency_w = weights or (
+            self.config.cost_weight,
+            self.config.latency_weight,
+        )
         return {
             name: (
-                self.config.cost_weight * raw_costs[name] / max_cost
-                + self.config.latency_weight * raw_latencies[name] / max_latency
+                cost_w * raw_costs[name] / max_cost
+                + latency_w * raw_latencies[name] / max_latency
             )
             for name in available
         }

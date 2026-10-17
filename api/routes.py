@@ -217,6 +217,43 @@ async def completions(
     )
 
 
+class ExplainRequest(BaseModel):
+    messages: List[Message]
+    model: Optional[str] = None
+    max_tokens: int = Field(1024, ge=1, le=200_000)
+    system_prompt: Optional[str] = None
+    provider: Optional[str] = None
+    policy: Optional[str] = None
+
+
+@router.post(
+    "/routing/explain",
+    summary="Dry run: explain where a request would be routed",
+    tags=["routing"],
+)
+async def explain_routing(
+    request: ExplainRequest,
+    ctx: AuthContext = Depends(require_scope("completions:write")),
+):
+    """Nothing is sent to any provider and no routing state changes."""
+    from api.server import get_router as _get_router
+    from providers import CompletionRequest as PCR
+    from providers import Message as PM
+
+    preq = PCR(
+        messages=[PM(role=m.role, content=m.content) for m in request.messages],
+        model=request.model,
+        max_tokens=request.max_tokens,
+        system_prompt=request.system_prompt,
+    )
+    try:
+        return _get_router().explain(
+            preq, policy_name=request.policy, preferred_provider=request.provider
+        )
+    except Exception as exc:
+        raise _http_error(exc)
+
+
 @router.post(
     "/completions/stream",
     summary="Stream a completion",

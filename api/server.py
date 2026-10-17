@@ -42,6 +42,7 @@ async def lifespan(app: FastAPI):
     app_state["router"] = Router(
         providers,
         RoutingConfig.from_env(strategy=RoutingStrategy.BALANCED),
+        policies=_load_policy_store(providers),
     )
     app_state["orchestrator"] = Orchestrator()
 
@@ -78,6 +79,27 @@ app = FastAPI(
 
 app.add_middleware(RateLimitMiddleware)
 app.include_router(routes.router)
+
+
+def _load_policy_store(providers):
+    """Declarative routing policies, if a policy file exists.
+
+    COREAI_ROUTING_POLICY_FILE overrides the default config/routing.yml.
+    Policies naming providers that aren't loaded (for example no API key) are
+    rejected, so the gateway starts without policies and logs why.
+    """
+    import os
+
+    from coreai.policy import PolicyStore
+
+    path = os.environ.get("COREAI_ROUTING_POLICY_FILE", "config/routing.yml")
+    if not os.path.exists(path):
+        return None
+    store = PolicyStore(path, known_providers=None)
+    if store.last_error:
+        logger.error("Routing policies not active: %s", store.last_error)
+        return None
+    return store
 
 
 def get_router():

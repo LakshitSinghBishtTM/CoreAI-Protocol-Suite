@@ -4,6 +4,12 @@
 
 The previous `1.0.0` label did not match the project's state; versions now start at 0.1.0 (alpha).
 
+### Added (Phase 2, part 2)
+- **Declarative routing policies.** `config/routing.yml` `policies:` are now read by `coreai/policy.py`: strategy, cost/latency weights, `latency_ceiling_ms`, `allow`/`deny` lists, `fallback_chain` and an `explicit` pinned provider. Files are validated (all problems reported at once) and hot-reloaded; an invalid edit keeps the last good policies. Select a policy per request with `metadata["policy"]`; otherwise the policy named `default` applies. Without a policy file, routing is unchanged.
+- **Dry run:** `POST /v1/routing/explain` (and `Router.explain()`) returns the provider order and, per provider, whether it is eligible, why not, and its score. It sends nothing and changes no routing state.
+- Set `COREAI_ROUTING_POLICY_FILE` to use a policy file other than `config/routing.yml`.
+- Not yet applied: a policy's `model` / `fallback_model` fields are validated but the router does not substitute models yet.
+
 ### Fixed
 - **There was no failover.** `route()` picked one provider and raised on failure; the `fallback` strategy never fell back. Failed requests now move to the next-best provider.
 - **Every Anthropic call failed** with the current SDK (1.x): the provider passed `temperature`, which `messages.create()` no longer accepts. It is no longer sent.

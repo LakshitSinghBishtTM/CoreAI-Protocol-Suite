@@ -10,3 +10,20 @@ What actually handles execution:
 - **Agent tasks** are coordinated by `agents/agent_manager.py` and delivered through the Distributed Agent Protocol, sealed and verified via the Secure Transport Protocol before delivery. See [protocols.md](protocols.md).
 
 If CoreAI grows a real multi-node execution layer in the future, this is where it should be documented again - against the actual implementation, not ahead of it.
+
+## Routing policies
+
+`config/routing.yml` (override with `COREAI_ROUTING_POLICY_FILE`) defines named policies. A request picks one with `metadata["policy"]`; otherwise the policy named `default` is used.
+
+| Key | Meaning |
+| --- | --- |
+| `strategy` | `cost_aware`/`balanced`, `cheapest`, `latency_first`, `round_robin`, `fallback`, `explicit` |
+| `weights` | `cost` and `latency`, normalised to sum to 1 (balanced only) |
+| `latency_ceiling_ms` | providers whose recent p50 is above this are tried last, not dropped |
+| `allow` / `deny` | providers a policy may or may not use; failover never leaves the allowed set |
+| `fallback_chain` | failover order after the primary; for `fallback` it is the whole order |
+| `provider` | the pinned provider for `explicit` |
+
+Open circuit breakers always exclude a provider. The file is re-checked every couple of seconds; a file that fails validation is logged and ignored, and the previous policies stay active.
+
+To see what a request would do without sending it, call `POST /v1/routing/explain` with the same body fields as a completion plus an optional `policy`.
