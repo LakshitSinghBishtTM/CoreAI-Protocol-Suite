@@ -6,14 +6,6 @@ from loguru import logger
 
 from .base import SDK_TIMEOUT_S, BaseProvider, CompletionRequest, CompletionResponse
 
-ANTHROPIC_PRICING = {
-    "claude-opus-4-5": {"input": 0.000015, "output": 0.000075},
-    "claude-sonnet-4-5": {"input": 0.000003, "output": 0.000015},
-    "claude-haiku-4-5": {"input": 0.0000008, "output": 0.000004},
-    "claude-opus-4-0": {"input": 0.000015, "output": 0.000075},
-    "claude-sonnet-4-0": {"input": 0.000003, "output": 0.000015},
-}
-
 
 # NOTE: ``request.temperature`` is intentionally not forwarded. The current
 # Anthropic SDK's messages API does not accept a ``temperature`` argument, so
@@ -50,7 +42,7 @@ class AnthropicProvider(BaseProvider):
         latency_ms = (time.monotonic() - start) * 1000
         input_tokens = response.usage.input_tokens
         output_tokens = response.usage.output_tokens
-        cost = self.estimate_cost(input_tokens, output_tokens, model)
+        cost = self._bill(input_tokens, output_tokens, model)
         content = response.content[0].text
 
         result = CompletionResponse(
@@ -84,10 +76,6 @@ class AnthropicProvider(BaseProvider):
         except Exception as e:
             logger.error(f"[anthropic] stream failed: {e}")
             raise
-
-    def estimate_cost(self, input_tokens: int, output_tokens: int, model: str) -> float:
-        pricing = ANTHROPIC_PRICING.get(model, {"input": 0.000003, "output": 0.000015})
-        return (input_tokens * pricing["input"]) + (output_tokens * pricing["output"])
 
     def count_tokens(self, text: str, model: str) -> int:
         # Anthropic uses ~4 chars per token on average

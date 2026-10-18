@@ -77,3 +77,109 @@ Throughput printed by this script is for the routing layer only (fake providers,
 ### Memory growth
 
 Every cache, history and task store is bounded (see `tests/test_bounded_state.py`); `scripts/loadtest.py` is the regression check. If memory grows in production, run the load test with `--requests 100000` first, then profile the live process with `memray`.
+
+## Audit log
+
+Administrative and configuration events are recorded with who, what, when and
+the outcome: kill-switch triggers (including rejected duplicates), routing
+policy loads and hot reloads (including rejected edits, with the problems), and
+budget config loads.
+
+- Read it with `GET /v1/admin/audit?limit=100&action=policy&actor=user:x`
+  (admin scope, newest first). `action` matches exactly or by prefix
+  (`policy` matches `policy.reload`).
+- It lives in a bounded in-memory ring (last 1000 events, lost on restart). Set
+  `COREAI_AUDIT_FILE` to also append JSON lines to a file; it rotates at 5 MB
+  to `<file>.1`, keeping at most two files.
+- Detail fields whose names contain `key`, `token`, `secret`, `password`,
+  `authorization` or `credential` are redacted, and long values are cut at 500
+  characters.
+- A failure to write the file never affects requests; `write_errors` counts
+  them.
+- Not yet recorded: API key and token changes (the gateway has no key
+  management endpoints yet) and budget changes made at runtime (budgets load
+  only at startup).
+
+## Dashboard and alerts
+
+- `deploy/grafana/caips-dashboard.json`: import it in Grafana and pick your
+  Prometheus data source. Panels cover request rate, spend per hour, traffic
+  state, health, circuit breakers, latency p50/p95/p99, errors by kind,
+  failovers and hedges, tokens and cache hit ratio.
+- `deploy/prometheus/caips-alerts.yml`: rules for an open circuit, high error
+  rate, every provider down, a cost spike (above $1/hour and 3x the last
+  hour), high p95 latency, the gateway draining, and a failed scrape. With a
+  15s scrape interval each rule fires within about a minute.
+- `/metrics` needs an admin-scope bearer token, so give Prometheus one:
+
+  ```yaml
+  scrape_configs:
+    - job_name: caips
+      scrape_interval: 15s
+      metrics_path: /metrics
+      authorization:
+        credentials_file: /etc/prometheus/caips_token   # a JWT with scope "admin"
+      static_configs:
+        - targets: ["caips:8743"]
+  ```
+
+JWTs expire (60 minutes by default, `JWT_EXPIRY_MINS`), so a long-lived scraper
+token needs a longer expiry or a refresh job until scoped, expiring API keys
+exist (Phase 10).
+
+Tests check that the dashboard and rules parse and only use metrics the
+gateway exposes. They have not been loaded into a live Grafana or checked with
+`promtool` yet, so import and review before relying on them.
+
+## Logs and request IDs
+
+Logs are JSON lines on stderr, one object per line, through a single pipeline
+(loguru; standard-library `logging`, including uvicorn, is routed into it).
+
+- Every response carries `X-Request-ID`, and every log line written while the
+  request is served carries the same `request_id`. A client-supplied
+  `X-Request-ID` is kept if it is 8 to 64 characters of letters, digits, `.`,
+  `_` or `-`; otherwise a new ID is generated.
+- One `request` line per request: `method`, `path`, `status`, `duration_ms`
+  (WARNING for 5xx). Probe and scrape paths (`/health`, `/healthz`, `/readyz`,
+  `/metrics`) are not logged.
+- One `provider response` line per successful call: `provider`, `model`,
+  `input_tokens`, `output_tokens`, `cost_usd`, `latency_ms`,
+  `failed_over_from` (providers tried first and why they were skipped are in
+  the failover logs) and `hedged`. To see which provider served a request and
+  what it cost: `jq 'select(.request_id=="<id>")'`.
+- Bearer tokens and `sk-` style keys are masked in messages and exception
+  text. Prompts and responses are never logged.
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `COREAI_LOG_FORMAT` | `json` | `json` or `text` (for local development) |
+| `COREAI_LOG_LEVEL` | `INFO` | minimum level |
+| `COREAI_LOG_FILE` | unset | also write to this file |
+| `COREAI_LOG_ROTATION` | `50 MB` | rotate the file at this size |
+| `COREAI_LOG_RETENTION` | `5` | rotated files kept |
+
+With a log file, disk use is bounded at roughly `rotation x (retention + 1)`.
+
+Not yet done: passing the request ID to providers that accept a client
+request header, and the OpenTelemetry trace ID in log lines.
+
+## Model prices
+
+All cost figures (response `cost_usd`, spend counters, budgets, cost-aware
+routing) come from one file, `config/pricing.yml`, in USD per million tokens.
+It is validated at startup: a bad file stops the gateway and lists every
+problem. Use `COREAI_PRICING_FILE` to point at another file.
+
+- **Keeping it current:** when a vendor changes a price, edit the file, bump
+  `version`, and set `reviewed` to the date you checked the vendor's price page.
+  The shipped file has `reviewed: null` and logs a warning at startup, because
+  its numbers were carried over unchanged from the old per-provider tables and
+  have not been re-checked.
+- **Unlisted models** are billed at the provider's `default` rate so requests
+  still work, with a one-time warning and the metric
+  `caips_unpriced_requests_total{provider,model}`. A non-zero value means
+  `cost_usd` for that model is a guess: add it to the file.
+- Prices that look wrong (output priced below input) are logged at startup.
+  Currently `gemini/gemini-2.5-pro` is flagged; verify it.
+- Changes need a restart (prices are not hot-reloaded).

@@ -235,11 +235,14 @@ class TestGeminiProvider:
         assert provider.name == "gemini"
 
     def test_estimate_cost_flash(self, provider):
-        from providers.gemini import GEMINI_PRICING
+        from coreai.pricing import get_pricing
 
         cost = provider.estimate_cost(1000, 500, "gemini-2.0-flash")
-        p = GEMINI_PRICING["gemini-2.0-flash"]
-        assert cost == pytest.approx(1000 * p["input"] + 500 * p["output"])
+        r, priced = get_pricing().rate("gemini", "gemini-2.0-flash")
+        assert priced
+        assert cost == pytest.approx(
+            (1000 * r.input_per_mtok + 500 * r.output_per_mtok) / 1e6
+        )
 
     def test_build_messages_excludes_system(self, provider):
         req = CompletionRequest(
@@ -291,11 +294,9 @@ class TestGrokProvider:
         assert provider.base_url == "https://api.x.ai/v1"
 
     def test_estimate_cost_grok3_mini(self, provider):
-        from providers.grok import GROK_PRICING
-
+        # $0.30 in / $0.50 out per million tokens
         cost = provider.estimate_cost(500, 200, "grok-3-mini")
-        p = GROK_PRICING["grok-3-mini"]
-        assert cost == pytest.approx(500 * p["input"] + 200 * p["output"])
+        assert cost == pytest.approx(0.00025)
 
     def test_build_messages_injects_system(self, provider):
         req = make_request(system="You are Grok.")
@@ -325,11 +326,9 @@ class TestDeepSeekProvider:
         assert provider.default_model == "deepseek-chat"
 
     def test_estimate_cost_chat(self, provider):
-        from providers.deepseek import DEEPSEEK_PRICING
-
+        # $0.27 in / $1.10 out per million tokens
         cost = provider.estimate_cost(1000, 400, "deepseek-chat")
-        p = DEEPSEEK_PRICING["deepseek-chat"]
-        assert cost == pytest.approx(1000 * p["input"] + 400 * p["output"])
+        assert cost == pytest.approx(0.00071)
 
     def test_build_messages_does_not_duplicate_system(self, provider):
         req = CompletionRequest(

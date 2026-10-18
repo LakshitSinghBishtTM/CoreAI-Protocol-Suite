@@ -7,36 +7,13 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import Optional
 
-# Per-token pricing (USD) by provider + model
-# Input/output prices per token (not per 1k — multiply accordingly)
-PRICING: dict[str, dict[str, dict[str, float]]] = {
-    "openai": {
-        "gpt-4o": {"input": 0.000005, "output": 0.000015},
-        "gpt-4o-mini": {"input": 0.00000015, "output": 0.0000006},
-        "gpt-4-turbo": {"input": 0.00001, "output": 0.00003},
-        "gpt-3.5-turbo": {"input": 0.0000005, "output": 0.0000015},
-    },
-    "anthropic": {
-        "claude-opus-4-5": {"input": 0.000015, "output": 0.000075},
-        "claude-sonnet-4-5": {"input": 0.000003, "output": 0.000015},
-        "claude-haiku-4-5": {"input": 0.0000008, "output": 0.000004},
-    },
-    "gemini": {
-        "gemini-2.0-flash": {"input": 0.0000001, "output": 0.0000004},
-        "gemini-1.5-pro": {"input": 0.00000125, "output": 0.000005},
-        "gemini-1.5-flash": {"input": 0.000000075, "output": 0.0000003},
-    },
-    "grok": {
-        "grok-2": {"input": 0.000002, "output": 0.000010},
-        "grok-2-mini": {"input": 0.0000002, "output": 0.000002},
-    },
-    "deepseek": {
-        "deepseek-chat": {"input": 0.00000027, "output": 0.0000011},
-        "deepseek-reasoner": {"input": 0.00000055, "output": 0.00000219},
-    },
-}
+from coreai.pricing import get_pricing
 
-# Fallback pricing when model not in table
+# Legacy view of the shared price table (config/pricing.yml): USD per single
+# token, by provider and model. Prefer coreai.pricing.get_pricing().
+PRICING: dict[str, dict[str, dict[str, float]]] = get_pricing().per_token()
+
+# Used only for a provider that has no table at all (USD per token).
 DEFAULT_PRICING = {"input": 0.000003, "output": 0.000015}
 
 
@@ -47,14 +24,18 @@ def calculate_cost(
     model: str,
 ) -> float:
     """
-    Calculate exact cost in USD for a completed request.
-    Falls back to provider default, then global default if model unknown.
+    Cost in USD for a completed request, from config/pricing.yml.
+    An unlisted model uses its provider's default rate (and is counted as
+    unpriced); an unknown provider uses DEFAULT_PRICING.
     """
-    provider_pricing = PRICING.get(provider, {})
-    model_pricing = provider_pricing.get(model, DEFAULT_PRICING)
-    return (
-        input_tokens * model_pricing["input"] + output_tokens * model_pricing["output"]
-    )
+    table = get_pricing()
+    rate, _ = table.rate(provider, model)
+    if rate is None:
+        return (
+            input_tokens * DEFAULT_PRICING["input"]
+            + output_tokens * DEFAULT_PRICING["output"]
+        )
+    return table.cost(provider, model, input_tokens, output_tokens)
 
 
 def estimate_cost_for_tokens(
@@ -84,15 +65,13 @@ def cheapest_provider_for_tokens(
     best_provider = available_providers[0]
     best_cost = float("inf")
 
+    table = get_pricing()
     for provider in available_providers:
-        provider_pricing = PRICING.get(provider, {})
-        if not provider_pricing:
+        rates = table.models(provider)
+        if not rates:
             continue
         # Use the cheapest model in that provider's table
-        min_cost = min(
-            input_tokens * p["input"] + output_tokens * p["output"]
-            for p in provider_pricing.values()
-        )
+        min_cost = min(r.cost(input_tokens, output_tokens) for r in rates.values())
         if min_cost < best_cost:
             best_cost = min_cost
             best_provider = provider
@@ -148,13 +127,13 @@ class BudgetTracker:
         self._total_output_tokens += output_tokens
 
         if (
-            self.warn_at_usd
+            self.warn_at_usd is not None
             and not self._warned
             and self._total_cost >= self.warn_at_usd
         ):
             self._warned = True
             # Caller should check warned flag and surface this
-        if self.hard_limit_usd and self._total_cost >= self.hard_limit_usd:
+        if self.hard_limit_usd is not None and self._total_cost >= self.hard_limit_usd:
             raise BudgetExceededError(
                 f"Budget limit of {format_cost(self.hard_limit_usd)} exceeded "
                 f"(spent {format_cost(self._total_cost)})"
@@ -162,7 +141,7 @@ class BudgetTracker:
 
     def would_exceed(self, estimated_cost: float) -> bool:
         """Check if adding estimated_cost would breach the hard limit."""
-        if not self.hard_limit_usd:
+        if self.hard_limit_usd is None:
             return False
         return (self._total_cost + estimated_cost) > self.hard_limit_usd
 
@@ -189,7 +168,7 @@ class BudgetTracker:
             "warn_at_usd": self.warn_at_usd,
             "budget_remaining_usd": (
                 round(self.hard_limit_usd - self._total_cost, 6)
-                if self.hard_limit_usd
+                if self.hard_limit_usd is not None
                 else None
             ),
         }

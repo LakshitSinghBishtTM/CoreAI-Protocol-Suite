@@ -11,14 +11,6 @@ from loguru import logger
 
 from .base import SDK_TIMEOUT_S, BaseProvider, CompletionRequest, CompletionResponse
 
-GEMINI_PRICING = {
-    "gemini-1.5-pro": {"input": 0.0000035, "output": 0.0000105},
-    "gemini-1.5-flash": {"input": 0.000000075, "output": 0.0000003},
-    "gemini-1.5-flash-8b": {"input": 0.0000000375, "output": 0.00000015},
-    "gemini-2.0-flash": {"input": 0.0000001, "output": 0.0000004},
-    "gemini-2.5-pro": {"input": 0.0000125, "output": 0.00001},
-}
-
 
 class GeminiProvider(BaseProvider):
     name = "gemini"
@@ -56,7 +48,7 @@ class GeminiProvider(BaseProvider):
         latency_ms = (time.monotonic() - start) * 1000
         input_tokens = response.usage_metadata.prompt_token_count
         output_tokens = response.usage_metadata.candidates_token_count
-        cost = self.estimate_cost(input_tokens, output_tokens, model)
+        cost = self._bill(input_tokens, output_tokens, model)
         content = response.text
 
         result = CompletionResponse(
@@ -90,10 +82,6 @@ class GeminiProvider(BaseProvider):
         except Exception as e:
             logger.error(f"[gemini] stream failed: {e}")
             raise
-
-    def estimate_cost(self, input_tokens: int, output_tokens: int, model: str) -> float:
-        pricing = GEMINI_PRICING.get(model, {"input": 0.0000001, "output": 0.0000004})
-        return (input_tokens * pricing["input"]) + (output_tokens * pricing["output"])
 
     def count_tokens(self, text: str, model: str) -> int:
         return len(text) // 4

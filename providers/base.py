@@ -63,9 +63,20 @@ class BaseProvider(ABC):
     async def stream(self, request: CompletionRequest) -> AsyncGenerator[str, None]:
         pass
 
-    @abstractmethod
     def estimate_cost(self, input_tokens: int, output_tokens: int, model: str) -> float:
-        pass
+        """Estimated USD for a call (routing, pre-flight checks). Does not count
+        toward the unpriced-model metric; use ``_bill`` for a real response."""
+        from coreai.pricing import get_pricing
+
+        return get_pricing().cost(
+            self.name, model, input_tokens, output_tokens, track=False
+        )
+
+    def _bill(self, input_tokens: int, output_tokens: int, model: str) -> float:
+        """USD for a completed call. An unlisted model is counted and logged."""
+        from coreai.pricing import get_pricing
+
+        return get_pricing().cost(self.name, model, input_tokens, output_tokens)
 
     @abstractmethod
     def count_tokens(self, text: str, model: str) -> int:

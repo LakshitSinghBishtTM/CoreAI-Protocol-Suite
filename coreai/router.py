@@ -6,6 +6,8 @@ from typing import AsyncGenerator, Callable, Optional
 
 from loguru import logger
 
+from coreai.pricing import get_pricing
+
 from neural.model import get_registry
 from providers import BaseProvider, CompletionRequest, CompletionResponse
 
@@ -34,6 +36,9 @@ _COST_WEIGHT = 0.70
 _LATENCY_WEIGHT = 0.30
 
 # How many recent latency samples to keep per provider
+# Upper bounds (ms) of latency histogram buckets; one more bucket holds +Inf.
+LATENCY_BUCKETS_MS = (50, 100, 250, 500, 1000, 2500, 5000, 10000, 30000)
+_MAX_MODELS_PER_PROVIDER = 50
 _LATENCY_HISTORY_SIZE = 20
 
 # Minimum samples required before a provider competes on latency.
@@ -270,6 +275,8 @@ class Router:
         # Routing state
         self.request_count = 0
         self._rr_index = 0  # only used by round-robin
+        # (provider, model) -> request/token counters and a latency histogram.
+        self.model_stats: dict[tuple[str, str], dict] = {}
         self.provider_stats: dict[str, dict] = {
             name: {
                 "requests": 0,
@@ -434,11 +441,23 @@ class Router:
             if skip:
                 response.metadata = {**response.metadata, "hedged": True}
             self._record_success(name, response.cost_usd, response.latency_ms)
-            logger.info(
-                f"[{name}] {response.model} | "
-                f"{response.input_tokens}in {response.output_tokens}out | "
-                f"${response.cost_usd:.6f} | {response.latency_ms:.0f}ms"
+            self._record_usage(
+                name,
+                response.model,
+                response.latency_ms,
+                response.input_tokens,
+                response.output_tokens,
             )
+            logger.bind(
+                provider=name,
+                model=response.model,
+                input_tokens=response.input_tokens,
+                output_tokens=response.output_tokens,
+                cost_usd=response.cost_usd,
+                latency_ms=round(response.latency_ms),
+                failed_over_from=[n for n, _ in failures],
+                hedged=bool(skip),
+            ).info("provider response")
             return response
 
         if len(candidates) == 1 and last_exc is not None:
@@ -1200,6 +1219,40 @@ class Router:
         total_chars = sum(len(m.content) for m in request.messages)
         return max(100, total_chars // 4)
 
+    def _model_entry(self, name: str, model: str) -> dict:
+        key = (name, model)
+        entry = self.model_stats.get(key)
+        if entry is None:
+            # Bound label cardinality: past the cap, extra models share "other".
+            known = sum(1 for p, _ in self.model_stats if p == name)
+            if known >= _MAX_MODELS_PER_PROVIDER:
+                key = (name, "other")
+                entry = self.model_stats.get(key)
+            if entry is None:
+                entry = {
+                    "requests": 0,
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                    "latency_sum_ms": 0.0,
+                    "latency_buckets": [0] * (len(LATENCY_BUCKETS_MS) + 1),
+                }
+                self.model_stats[key] = entry
+        return entry
+
+    def _record_usage(
+        self, name: str, model: str, latency_ms: float, in_tok: int, out_tok: int
+    ) -> None:
+        entry = self._model_entry(name, model or "unknown")
+        entry["requests"] += 1
+        entry["input_tokens"] += max(0, in_tok or 0)
+        entry["output_tokens"] += max(0, out_tok or 0)
+        entry["latency_sum_ms"] += latency_ms
+        for i, bound in enumerate(LATENCY_BUCKETS_MS):
+            if latency_ms <= bound:
+                entry["latency_buckets"][i] += 1
+                return
+        entry["latency_buckets"][-1] += 1  # +Inf
+
     def _record_success(self, name: str, cost_usd: float, latency_ms: float):
         stats = self.provider_stats[name]
         stats["requests"] += 1
@@ -1247,6 +1300,12 @@ class Router:
                 }
                 for name, s in self.provider_stats.items()
             },
+            "model_stats": [
+                {"provider": p, "model": m, **e, "latency_buckets": list(e["latency_buckets"])}
+                for (p, m), e in self.model_stats.items()
+            ],
+            "latency_bucket_bounds_ms": list(LATENCY_BUCKETS_MS),
+            "unpriced_models": get_pricing().unpriced_stats(),
             "cache_stats": self.cache.stats() if self.cache else None,
             "retry_stats": self.retry_manager.stats() if self.retry_manager else None,
             "limiter_stats": self.limiter.stats(),

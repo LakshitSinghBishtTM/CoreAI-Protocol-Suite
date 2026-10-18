@@ -13,7 +13,7 @@ import time
 from collections.abc import Callable, Iterable
 
 # Paths still served while draining, so probes and operators can see state.
-_ALWAYS_ALLOWED = ("/health", "/v1/admin/")
+_ALWAYS_ALLOWED = ("/health", "/healthz", "/readyz", "/v1/admin/")
 
 
 class DrainController:

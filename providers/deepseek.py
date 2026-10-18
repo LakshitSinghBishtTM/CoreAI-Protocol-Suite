@@ -17,11 +17,6 @@ AsyncOpenAI = importlib.import_module("openai").AsyncOpenAI
 
 from .base import SDK_TIMEOUT_S, BaseProvider, CompletionRequest, CompletionResponse
 
-DEEPSEEK_PRICING = {
-    "deepseek-chat": {"input": 0.00000027, "output": 0.0000011},
-    "deepseek-reasoner": {"input": 0.00000055, "output": 0.00000219},
-}
-
 DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
 
 
@@ -58,7 +53,7 @@ class DeepSeekProvider(BaseProvider):
         latency_ms = (time.monotonic() - start) * 1000
         input_tokens = response.usage.prompt_tokens
         output_tokens = response.usage.completion_tokens
-        cost = self.estimate_cost(input_tokens, output_tokens, model)
+        cost = self._bill(input_tokens, output_tokens, model)
         content = response.choices[0].message.content or ""
 
         result = CompletionResponse(
@@ -96,10 +91,6 @@ class DeepSeekProvider(BaseProvider):
         except Exception as e:
             logger.error(f"[deepseek] stream failed: {e}")
             raise
-
-    def estimate_cost(self, input_tokens: int, output_tokens: int, model: str) -> float:
-        pricing = DEEPSEEK_PRICING.get(model, DEEPSEEK_PRICING["deepseek-chat"])
-        return (input_tokens * pricing["input"]) + (output_tokens * pricing["output"])
 
     def count_tokens(self, text: str, model: str) -> int:
         return max(1, len(text) // 4)

@@ -1,0 +1,56 @@
+# Model prices: USD per one million tokens.
+#
+# This file is the single source of truth for cost tracking (providers, the
+# router's cost-aware routing, spend counters and budgets all read it).
+# Loaded and validated by coreai/pricing.py; override the path with
+# COREAI_PRICING_FILE. A bad file stops startup with every problem listed.
+#
+# Maintenance: when a vendor changes a price, edit it here, bump `version`,
+# and set `reviewed` to the date you checked the vendor's price page.
+# `default` is the price used (with a one-time warning and the
+# caips_unpriced_requests_total metric) for a model that is not listed.
+#
+# STATUS: the numbers below were carried over unchanged from the provider
+# modules they replace and have NOT been re-checked against vendor price
+# pages (reviewed: null). Check them before relying on cost figures.
+version: 1
+reviewed: null
+providers:
+  openai:
+    default: {input: 5, output: 15}
+    models:
+      gpt-4o: {input: 5, output: 15}
+      gpt-4o-mini: {input: 0.15, output: 0.6}
+      gpt-4-turbo: {input: 10, output: 30}
+      gpt-3.5-turbo: {input: 0.5, output: 1.5}
+      o1: {input: 15, output: 60}
+      o1-mini: {input: 3, output: 12}
+  anthropic:
+    default: {input: 3, output: 15}
+    models:
+      claude-opus-4-5: {input: 15, output: 75}
+      claude-sonnet-4-5: {input: 3, output: 15}
+      claude-haiku-4-5: {input: 0.8, output: 4}
+      claude-opus-4-0: {input: 15, output: 75}
+      claude-sonnet-4-0: {input: 3, output: 15}
+  gemini:
+    default: {input: 0.1, output: 0.4}
+    models:
+      gemini-1.5-pro: {input: 3.5, output: 10.5}
+      gemini-1.5-flash: {input: 0.075, output: 0.3}
+      gemini-1.5-flash-8b: {input: 0.0375, output: 0.15}
+      gemini-2.0-flash: {input: 0.1, output: 0.4}
+      gemini-2.5-pro: {input: 12.5, output: 10, note: "input is priced above output; looks like a typo, verify"}
+  grok:
+    default: {input: 3, output: 15}
+    models:
+      grok-3: {input: 3, output: 15}
+      grok-3-fast: {input: 5, output: 25}
+      grok-3-mini: {input: 0.3, output: 0.5}
+      grok-3-mini-fast: {input: 0.6, output: 4}
+      grok-2-vision: {input: 2, output: 10}
+  deepseek:
+    default: {input: 0.27, output: 1.1}
+    models:
+      deepseek-chat: {input: 0.27, output: 1.1}
+      deepseek-reasoner: {input: 0.55, output: 2.19}

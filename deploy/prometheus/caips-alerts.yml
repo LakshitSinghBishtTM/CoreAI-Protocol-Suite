@@ -1,0 +1,66 @@
+# Prometheus alert rules for the CaiPS gateway.
+# Assumes a 15s scrape interval, so each `for:` below is a few scrapes and an
+# outage or cost spike pages within about a minute. See docs/operations.md.
+groups:
+  - name: caips
+    rules:
+      - alert: CaipsProviderCircuitOpen
+        expr: max by (provider) (caips_circuit_state{state="open"}) == 1
+        for: 30s
+        labels: {severity: warning}
+        annotations:
+          summary: "Circuit open for provider {{ $labels.provider }}"
+          description: "Traffic is failing over away from {{ $labels.provider }}."
+
+      - alert: CaipsProviderHighErrorRate
+        expr: |
+          sum by (provider) (rate(caips_provider_errors_total[1m]))
+            / clamp_min(sum by (provider) (rate(caips_provider_requests_total[1m])
+                                           + rate(caips_provider_errors_total[1m])), 1e-9) > 0.2
+          and sum by (provider) (rate(caips_provider_errors_total[1m])) > 0.05
+        for: 1m
+        labels: {severity: warning}
+        annotations:
+          summary: "More than 20% of calls to {{ $labels.provider }} are failing"
+
+      - alert: CaipsAllProvidersDown
+        expr: min(1 - max by (provider) (caips_circuit_state{state="open"})) == 0
+        for: 30s
+        labels: {severity: critical}
+        annotations:
+          summary: "Every provider's circuit is open"
+          description: "The gateway cannot serve requests; /readyz returns 503."
+
+      - alert: CaipsCostSpike
+        expr: |
+          sum(rate(caips_provider_cost_usd_total[5m])) * 3600 > 1
+          and sum(rate(caips_provider_cost_usd_total[5m]))
+              > 3 * sum(rate(caips_provider_cost_usd_total[1h]))
+        for: 1m
+        labels: {severity: warning}
+        annotations:
+          summary: "Spend rate is more than 3x the last hour's average"
+          description: "Current rate above $1/hour and tripled. Check usage per key."
+
+      - alert: CaipsLatencyHigh
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le, provider) (rate(caips_request_duration_seconds_bucket[5m]))) > 10
+        for: 2m
+        labels: {severity: warning}
+        annotations:
+          summary: "p95 latency above 10s for {{ $labels.provider }}"
+
+      - alert: CaipsNotAcceptingTraffic
+        expr: min(caips_accepting_traffic) == 0
+        for: 15s
+        labels: {severity: warning}
+        annotations:
+          summary: "Gateway is draining or shut down"
+
+      - alert: CaipsTargetDown
+        expr: up{job=~".*caips.*"} == 0
+        for: 30s
+        labels: {severity: critical}
+        annotations:
+          summary: "Prometheus cannot scrape the gateway"

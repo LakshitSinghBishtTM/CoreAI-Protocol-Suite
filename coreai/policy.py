@@ -288,6 +288,8 @@ class PolicyStore:
         self._next_check = 0.0
         self.last_error: list[str] | None = None
         self.reloads = 0
+        # Optional callback(outcome, details) for audit; never raises into reload.
+        self.on_event: Callable[[str, dict], None] | None = None
         self._set = PolicySet()
         self._load(initial=True)
         self._next_check = self._clock() + self._interval
@@ -317,10 +319,20 @@ class PolicyStore:
             logger.error(
                 "Routing policy reload rejected, keeping previous policies: %s", exc
             )
+            self._notify("rejected", {"path": self.path, "problems": exc.problems})
             return
         self.last_error = None
         self.reloads += 1
         logger.info("Loaded routing policies: %s", ", ".join(self._set.names()))
+        self._notify("ok", {"path": self.path, "policies": self._set.names()})
+
+    def _notify(self, outcome: str, details: dict) -> None:
+        if self.on_event is None:
+            return
+        try:
+            self.on_event(outcome, details)
+        except Exception:  # auditing must not break policy reloads
+            logger.exception("policy audit callback failed")
 
 
 def parse_rate_limits(data: Any) -> dict[str, RateLimitConfig]:

@@ -4,6 +4,49 @@
 
 The previous `1.0.0` label did not match the project's state; versions now start at 0.1.0 (alpha).
 
+### Changed (Phase 3, part 7: cost tracking)
+- **One price table** (`config/pricing.yml`, loaded and validated by `coreai/pricing.py`) replaces five per-provider copies and a sixth, diverging, one in `utils/cost.py` (for example `gemini-1.5-pro` was $1.25/$5 in one and $3.50/$10.50 in another). Prices are per million tokens. Values were carried over unchanged from the provider modules and are marked `reviewed: null`; they have not been re-checked against vendor price pages.
+- Unlisted models are still billed at the provider default, but now log a warning once and are counted in `caips_unpriced_requests_total`. Routing estimates are not counted, only billed responses.
+- Prices that look wrong are logged at startup; `gemini-2.5-pro` (input priced above output) is flagged for verification.
+- `utils.cost` keeps its API (`PRICING`, `calculate_cost`, ...) as a facade over the shared table.
+- `BudgetTracker` fixes: a limit of `0` was ignored (truthiness checks) in `record`, `would_exceed` and `stats`.
+- The provider modules' `*_PRICING` constants are gone; use `coreai.pricing.get_pricing()`.
+
+### Added (Phase 3, part 6: structured logs and request IDs)
+- **JSON logs through one pipeline** (`coreai/logging_setup.py`): loguru as JSON lines (or `COREAI_LOG_FORMAT=text`), standard-library logging (uvicorn included) routed into it, bearer tokens and `sk-` keys masked, optional log file with size rotation and a retention count (`COREAI_LOG_FILE`, `COREAI_LOG_ROTATION`, `COREAI_LOG_RETENTION`). `structlog` was never used and is not needed.
+- **Request IDs** (`coreai/request_context.py`): a pure-ASGI middleware gives every request an ID (a safe client `X-Request-ID` is kept), puts it on every log line and in the response header, including drain 503s, and writes one access line per request.
+- The router's per-call log line is now structured (`provider`, `model`, tokens, `cost_usd`, `latency_ms`, `failed_over_from`, `hedged`), so "which provider served this request, and what did it cost" is answerable from logs. See `docs/operations.md`.
+- Log output format changed from text to JSON by default; set `COREAI_LOG_FORMAT=text` for the old style.
+
+### Removed (Phase 3, part 6)
+- `RequestLoggerMiddleware`: it was never added to the app. Replaced by the middleware above.
+
+### Not yet
+- Passing the request ID to providers, and the OpenTelemetry trace ID in logs.
+
+### Added (Phase 3, part 5: dashboard and alerts)
+- `deploy/grafana/caips-dashboard.json`: Grafana dashboard for the gateway metrics.
+- `deploy/prometheus/caips-alerts.yml`: alert rules for open circuits, error rate, all providers down, cost spikes, latency, draining and failed scrapes.
+- `tests/test_observability_assets.py` keeps both in step with `/metrics`: they parse, panels don't overlap, and every metric they use is exposed. Not yet loaded into a live Grafana or checked with `promtool`. Scrape setup and token note in `docs/operations.md`.
+
+### Added (Phase 3, part 4: latency histograms and token counts)
+- `/metrics` now exposes `caips_request_duration_seconds` (a real Prometheus histogram: buckets from 50ms to 30s plus `+Inf`, `_sum` and `_count`) and `caips_tokens_total` (input and output), both labelled by `provider` and `model`. The router keeps these counters (`Router.model_stats`, also in `stats()` as `model_stats`).
+- Model labels are capped at 50 per provider; further models share `model="other"`, so a stream of odd model names can't grow memory or metric cardinality.
+- Not yet: streamed responses (they report no usage), per-model cost, error and cache metrics per model.
+
+### Added (Phase 3, part 3: audit log)
+- **Audit log** (`coreai/audit.py`): records kill-switch triggers, routing policy loads and hot reloads (accepted and rejected) and budget config loads, with actor, target and outcome. `GET /v1/admin/audit` (admin scope) reads it. Bounded in memory; optional JSONL file via `COREAI_AUDIT_FILE` with size-capped rotation; secret-looking fields are redacted. See `docs/operations.md`.
+- `PolicyStore.on_event` callback reports reload outcomes without ever breaking a reload.
+- Not yet: key and token changes (no key-management endpoints exist yet).
+
+### Added (Phase 3, part 2: budgets and quotas)
+- **Per-subject budgets** (`coreai/budgets.py`): hard limits on cost, requests and tokens per window, plus a soft cost warning. Over-limit requests get `429` with `Retry-After`. Configure with `config/budgets.yml` or `COREAI_BUDGET_FILE` (example in `config/budgets.example.yml`; off without a file; an invalid file stops startup). `GET /v1/usage` shows the caller's usage. See `docs/budgets.md`.
+- Not yet: per-team and per-model budgets, persistence across restarts, and cost for streamed responses.
+
+### Added (Phase 3, part 1: probes and metrics)
+- `GET /healthz` (liveness, no dependency checks) and `GET /readyz` (readiness: 503 while draining, before the router exists, or when every provider's circuit is open). Both stay reachable during a drain.
+- `GET /metrics` in Prometheus text format (admin scope): requests, failovers, hedges, per-provider requests, errors by kind, cost, p50 latency, health, circuit state and opens, cache hits and misses, accepting-traffic and in-flight gauges. Rendered by `coreai/metrics.py` from `Router.stats()`, with no new dependency.
+
 ### Added (Phase 2, part 6: chaos and load checks)
 - `scripts/chaos.py`: kills, slows or breaks each provider in turn (down, 500, 529, 429, flaky, slow) and checks the gateway keeps serving at 99%+, stays within a p95 bound and gets traffic back to the provider after recovery; plus an all-providers-down scenario. Runs in CI.
 - `scripts/loadtest.py`: sustained load with `tracemalloc`; fails on memory growth, unbounded caches or histories, or errors. Runs in CI.

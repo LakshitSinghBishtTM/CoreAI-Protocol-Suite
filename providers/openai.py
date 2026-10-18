@@ -17,15 +17,6 @@ AsyncOpenAI = importlib.import_module("openai").AsyncOpenAI
 
 from .base import SDK_TIMEOUT_S, BaseProvider, CompletionRequest, CompletionResponse
 
-OPENAI_PRICING = {
-    "gpt-4o": {"input": 0.000005, "output": 0.000015},
-    "gpt-4o-mini": {"input": 0.00000015, "output": 0.0000006},
-    "gpt-4-turbo": {"input": 0.00001, "output": 0.00003},
-    "gpt-3.5-turbo": {"input": 0.0000005, "output": 0.0000015},
-    "o1": {"input": 0.000015, "output": 0.000060},
-    "o1-mini": {"input": 0.000003, "output": 0.000012},
-}
-
 # tiktoken.encoding_for_model() downloads its BPE rank file over the network
 # on first use if it isn't already cached locally. In offline/sandboxed/
 # firewalled environments that download attempt can block for a long time
@@ -61,7 +52,7 @@ class OpenAIProvider(BaseProvider):
         latency_ms = (time.monotonic() - start) * 1000
         input_tokens = response.usage.prompt_tokens
         output_tokens = response.usage.completion_tokens
-        cost = self.estimate_cost(input_tokens, output_tokens, model)
+        cost = self._bill(input_tokens, output_tokens, model)
         content = response.choices[0].message.content
 
         result = CompletionResponse(
@@ -99,10 +90,6 @@ class OpenAIProvider(BaseProvider):
         except Exception as e:
             logger.error(f"[openai] stream failed: {e}")
             raise
-
-    def estimate_cost(self, input_tokens: int, output_tokens: int, model: str) -> float:
-        pricing = OPENAI_PRICING.get(model, {"input": 0.000005, "output": 0.000015})
-        return (input_tokens * pricing["input"]) + (output_tokens * pricing["output"])
 
     def count_tokens(self, text: str, model: str) -> int:
         result_q: queue.Queue = queue.Queue(maxsize=1)

@@ -16,6 +16,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from api.auth import AuthContext, require_scope
+from coreai.budgets import BudgetExceeded
 from coreai.errors import AllProvidersUnavailable, ErrorKind, classify
 
 logger = logging.getLogger(__name__)
@@ -43,6 +44,38 @@ def _retry_after_header(seconds: Optional[float]) -> Optional[Dict[str, str]]:
     if seconds is None:
         return None
     return {"Retry-After": str(max(1, math.ceil(seconds)))}
+
+
+def _budget_error(exc: BudgetExceeded) -> HTTPException:
+    return HTTPException(
+        status_code=429,
+        detail={
+            "error": "budget_exceeded",
+            "limit": exc.limit,
+            "used": exc.used,
+            "cap": exc.cap,
+        },
+        headers={"Retry-After": str(int(math.ceil(exc.retry_after)))},
+    )
+
+
+def _budget_check(ctx) -> None:
+    from api.server import get_budgets
+
+    budgets = get_budgets()
+    if budgets is not None:
+        try:
+            budgets.check(ctx.subject)
+        except BudgetExceeded as exc:
+            raise _budget_error(exc)
+
+
+def _budget_record(ctx, cost_usd=0.0, tokens=0) -> None:
+    from api.server import get_budgets
+
+    budgets = get_budgets()
+    if budgets is not None:
+        budgets.record(ctx.subject, cost_usd, tokens)
 
 
 def _http_error(exc: Exception) -> HTTPException:
@@ -191,6 +224,7 @@ async def completions(
     from providers import CompletionRequest as PCR
     from providers import Message as PM
 
+    _budget_check(ctx)
     _router = _get_router()
     messages = [PM(role=m.role, content=m.content) for m in request.messages]
     preq = PCR(
@@ -206,6 +240,10 @@ async def completions(
     except Exception as exc:
         logger.error("Completion error for %s: %s", ctx.subject, exc)
         raise _http_error(exc)
+
+    _budget_record(
+        ctx, resp.cost_usd, (resp.input_tokens or 0) + (resp.output_tokens or 0)
+    )
 
     return CompletionResponse(
         content=resp.content,
@@ -268,6 +306,7 @@ async def completions_stream(
     from providers import CompletionRequest as PCR
     from providers import Message as PM
 
+    _budget_check(ctx)
     _router = _get_router()
     messages = [PM(role=m.role, content=m.content) for m in request.messages]
     preq = PCR(
@@ -290,6 +329,9 @@ async def completions_stream(
     except Exception as exc:
         logger.error("Stream error for %s: %s", ctx.subject, exc)
         raise _http_error(exc)
+
+    # Streams report no usage, so only the request itself is counted.
+    _budget_record(ctx)
 
     async def _generate():
         try:
@@ -545,6 +587,21 @@ async def list_models(
 
 
 @router.get(
+    "/usage",
+    summary="Your usage and limits in the current budget window",
+    tags=["completions"],
+)
+async def get_usage(
+    ctx: AuthContext = Depends(require_scope("completions:read")),
+):
+    from api.server import get_budgets
+
+    budgets = get_budgets()
+    status_ = budgets.status(ctx.subject) if budgets else None
+    return {"subject": ctx.subject, "budget": status_}
+
+
+@router.get(
     "/stats",
     response_model=StatsResponse,
     summary="System statistics",
@@ -591,13 +648,19 @@ async def trigger_shutdown(
         ShutdownMode,
         ShutdownReason,
     )
-    from api.server import app_state, drain
+    from api.server import app_state, drain, get_audit
     from coreai.kernel import get_kernel
     from database.db import get_db
 
     # One shared instance: a second request must see the first one running.
     shutdown = app_state.get("shutdown")
     if shutdown is not None and shutdown.is_shutting_down:
+        get_audit().record(
+            "admin.shutdown",
+            actor=ctx.subject,
+            outcome="rejected",
+            details={"mode": mode, "reason": "already_shutting_down"},
+        )
         raise HTTPException(
             status_code=409,
             detail={"error": "already_shutting_down", "event": shutdown.last_event()},
@@ -612,6 +675,11 @@ async def trigger_shutdown(
         exit_fn=lambda code: os.kill(os.getpid(), signal.SIGTERM),
     )
     app_state["shutdown"] = shutdown
+    get_audit().record(
+        "admin.shutdown",
+        actor=ctx.subject,
+        details={"mode": mode, "message": message},
+    )
     # Keep a reference so the task isn't garbage-collected mid-shutdown.
     app_state["shutdown_task"] = asyncio.create_task(
         shutdown.trigger(
@@ -622,6 +690,22 @@ async def trigger_shutdown(
         )
     )
     return {"status": "shutdown_initiated", "mode": mode, "by": ctx.subject}
+
+
+@router.get(
+    "/admin/audit",
+    summary="Recent audit events, newest first",
+    tags=["admin"],
+)
+async def get_audit_events(
+    limit: int = Query(100, ge=1, le=1000),
+    action: Optional[str] = Query(None, max_length=64),
+    actor: Optional[str] = Query(None, max_length=128),
+    ctx: AuthContext = Depends(require_scope("admin")),
+):
+    from api.server import get_audit
+
+    return {"events": get_audit().events(limit=limit, action=action, actor=actor)}
 
 
 @router.get(

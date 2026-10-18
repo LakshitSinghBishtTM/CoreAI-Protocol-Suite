@@ -16,14 +16,6 @@ AsyncOpenAI = importlib.import_module("openai").AsyncOpenAI
 
 from .base import SDK_TIMEOUT_S, BaseProvider, CompletionRequest, CompletionResponse
 
-GROK_PRICING = {
-    "grok-3": {"input": 0.000003, "output": 0.000015},
-    "grok-3-fast": {"input": 0.000005, "output": 0.000025},
-    "grok-3-mini": {"input": 0.0000003, "output": 0.0000005},
-    "grok-3-mini-fast": {"input": 0.0000006, "output": 0.000004},
-    "grok-2-vision": {"input": 0.000002, "output": 0.000010},
-}
-
 
 class GrokProvider(BaseProvider):
     name = "grok"
@@ -58,7 +50,7 @@ class GrokProvider(BaseProvider):
         latency_ms = (time.monotonic() - start) * 1000
         input_tokens = response.usage.prompt_tokens
         output_tokens = response.usage.completion_tokens
-        cost = self.estimate_cost(input_tokens, output_tokens, model)
+        cost = self._bill(input_tokens, output_tokens, model)
         content = response.choices[0].message.content
 
         result = CompletionResponse(
@@ -96,10 +88,6 @@ class GrokProvider(BaseProvider):
         except Exception as e:
             logger.error(f"[grok] stream failed: {e}")
             raise
-
-    def estimate_cost(self, input_tokens: int, output_tokens: int, model: str) -> float:
-        pricing = GROK_PRICING.get(model, {"input": 0.000003, "output": 0.000015})
-        return (input_tokens * pricing["input"]) + (output_tokens * pricing["output"])
 
     def count_tokens(self, text: str, model: str) -> int:
         return len(text) // 4

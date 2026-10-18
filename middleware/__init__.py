@@ -2,7 +2,7 @@
 middleware/__init__.py
 """
 
-from .logger import RequestLoggerMiddleware, log_agent_event, log_completion
+from .logger import log_agent_event, log_completion
 from .validator import (
     ValidationError,
     validate_completion_request,
@@ -21,7 +21,6 @@ except ImportError:
     pass
 
 __all__ = [
-    "RequestLoggerMiddleware",
     "log_completion",
     "log_agent_event",
     "validate_completion_request",
