@@ -23,6 +23,14 @@ requests and tokens. Off by default; create `config/budgets.yml` (see
   otherwise they are estimated (about 4 characters per token) and counted in
   `caips_stream_usage_estimated_total`.
 
+## Per-model caps
+
+A top-level `models:` section caps a model across all subjects combined, with
+the same fields and windows as a subject (see `config/budgets.example.yml`).
+It does not inherit `default`. A request is refused with the same `429` body
+when the model it names is at its cap; the call's model is recorded afterwards
+either way. Streams count toward the model when they end.
+
 ## Known limits
 
 - Limits are checked before a call and usage recorded after (for a stream,
@@ -31,7 +39,10 @@ requests and tokens. Off by default; create `config/budgets.yml` (see
   flight. The next request is refused.
 - Usage is in memory, per process, and resets on restart. Subjects tracked are
   capped at 10,000 (least recently used dropped).
-- Per team and per model budgets are not implemented yet.
+- Per-team budgets are not implemented (tokens carry no team claim yet).
+- Model caps are checked before a call only when the request names the model;
+  a request that relies on a provider's default model is counted afterwards but
+  not blocked up front.
 
 `GET /v1/usage` (scope `completions:read`) shows the caller's usage and limits.
 

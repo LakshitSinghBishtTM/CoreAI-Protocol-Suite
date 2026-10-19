@@ -4,10 +4,14 @@
 
 The previous `1.0.0` label did not match the project's state; versions now start at 0.1.0 (alpha).
 
+### Added (Phase 3, part 11: per-model budgets)
+- `models:` section in `config/budgets.yml`: a shared cost/request/token cap per model across all subjects, `429` when reached. Checked up front only when the request names the model. Validated like the rest of the file.
+- Not yet: per-team budgets (no team claim in tokens); audit entries for key changes (there are no key issue/revoke endpoints yet, so this belongs with Phase 10 scoped keys).
+
 ### Added (Phase 3, part 10: usage reports and routing docs)
 - `GET /v1/usage/report`: usage over time (requests, tokens, cost) by hour or day, grouped by subject, provider and model, as JSON or CSV. Per-caller by default; `admin` sees all. Backed by a bounded in-memory ledger (`coreai/usage.py`, 30 days, 50,000 rows), so it resets on restart.
 - `docs/routing.md`: what policy fields and weights mean, with worked examples.
-- Not yet: per-team and per-model budgets; persistent usage storage; audit entries for key changes.
+- Not yet: persistent usage storage.
 
 ### Added (Phase 3, part 9: OpenTelemetry tracing)
 - Optional tracing (`coreai/tracing.py`), off by default and costless when off. Enable with `COREAI_TRACING=1` or `OTEL_EXPORTER_OTLP_ENDPOINT`; install with `pip install 'coreai[tracing]'`. Spans: HTTP server span (route-template name, status), `caips.route`, `caips.provider_call` per attempt, `caips.stream`, with `failover` events. A caller's `traceparent` is continued. Sampling via `COREAI_TRACE_SAMPLE_RATIO`.

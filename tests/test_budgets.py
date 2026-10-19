@@ -199,3 +199,55 @@ def test_failed_provider_call_is_not_billed(api):
     server.get_router.return_value = bad
     assert client.post("/v1/completions", json=BODY).status_code == 400
     assert budgets.status("user:t")["used"]["requests"] == 0
+
+
+# --- per-model caps -------------------------------------------------------
+
+
+def test_model_cap_is_shared_across_subjects():
+    m = BudgetManager(
+        models={"big": BudgetLimits(max_cost_usd=1.0)}, clock=FakeClock(0.0)
+    )
+    m.check_model("big")
+    m.record_model("big", cost_usd=0.6)
+    m.record_model("big", cost_usd=0.6)  # another caller's call; same cap
+    with pytest.raises(BudgetExceeded) as e:
+        m.check_model("big")
+    assert e.value.limit == "cost_usd"
+    m.check_model("small")  # uncapped and unset models are never blocked
+    m.check_model(None)
+
+
+def test_model_cap_does_not_collide_with_subject_names(tmp_path):
+    m = BudgetManager(
+        BudgetLimits(max_requests=1),
+        models={"x": BudgetLimits(max_requests=5)},
+        clock=FakeClock(0.0),
+    )
+    m.record_model("x")
+    m.record("model:x")
+    m.check_model("x")
+
+
+def test_models_section_loads_and_validates(tmp_path):
+    from coreai.budgets import BudgetConfigError, load_budgets
+
+    f = tmp_path / "b.yml"
+    f.write_text("models:\n  gpt:\n    max_cost_usd: 2\n")
+    assert load_budgets(str(f)).models["gpt"].max_cost_usd == 2.0
+    f.write_text("models:\n  gpt:\n    max_cost_usd: -1\n    bogus: 1\n")
+    with pytest.raises(BudgetConfigError) as e:
+        load_budgets(str(f))
+    assert "models.gpt" in str(e.value) and "bogus" in str(e.value)
+
+
+def test_model_cap_enforced_over_http(api):
+    client, budgets = api
+    budgets.models["p-model"] = BudgetLimits(max_requests=1)
+    body = {**BODY, "model": "p-model"}
+    assert client.post("/v1/completions", json=body).status_code == 200
+    r = client.post("/v1/completions", json=body)
+    assert r.status_code == 429
+    assert r.json()["detail"]["limit"] == "requests"
+    # a request naming a different model is unaffected
+    assert client.post("/v1/completions", json=BODY).status_code == 200

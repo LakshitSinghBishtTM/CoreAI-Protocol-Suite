@@ -14,3 +14,10 @@ subjects:
   "user:alice":
     max_cost_usd: 50.00
     warn_cost_usd: 40.00
+
+# Shared cap per model, across all subjects. Does not inherit `default`.
+# Checked before a call only when the request names the model.
+models:
+  "gpt-4o":
+    max_cost_usd: 100.00
+    window: day

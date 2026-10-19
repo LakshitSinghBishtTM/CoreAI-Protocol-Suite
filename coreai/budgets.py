@@ -61,11 +61,14 @@ class BudgetManager:
         self,
         default: BudgetLimits | None = None,
         subjects: dict[str, BudgetLimits] | None = None,
+        models: dict[str, BudgetLimits] | None = None,
         clock: Callable[[], float] = time.time,
         max_subjects: int = 10_000,
     ):
         self.default = default
         self.subjects = dict(subjects or {})
+        # Shared caps per model, across all subjects (see check_model).
+        self.models = dict(models or {})
         self._clock = clock
         self._max_subjects = max_subjects
         self._usage: OrderedDict[str, _Usage] = OrderedDict()
@@ -73,6 +76,26 @@ class BudgetManager:
 
     def limits_for(self, subject: str) -> BudgetLimits | None:
         return self.subjects.get(subject, self.default)
+
+    @staticmethod
+    def _model_key(model: str) -> str:
+        return "\x00model:" + model  # cannot collide with a JWT subject
+
+    def check_model(self, model: str | None) -> None:
+        """Raise BudgetExceeded if *model* has used up its shared cap.
+        Unknown or unset models are never blocked here."""
+        limits = self.models.get(model or "")
+        if limits is not None:
+            self._check(self._model_key(model), limits, 0.0)
+
+    def record_model(self, model: str | None, cost_usd=0.0, tokens=0, n=1) -> None:
+        limits = self.models.get(model or "")
+        if limits is None:
+            return
+        u = self._current(self._model_key(model), limits)
+        u.requests += n
+        u.cost += max(0.0, cost_usd or 0.0)
+        u.tokens += max(0, tokens or 0)
 
     def _current(self, subject: str, limits: BudgetLimits) -> _Usage:
         now = self._clock()
@@ -91,6 +114,9 @@ class BudgetManager:
         limits = self.limits_for(subject)
         if limits is None:
             return
+        self._check(subject, limits, estimated_cost)
+
+    def _check(self, subject: str, limits: BudgetLimits, estimated_cost: float):
         u = self._current(subject, limits)
         retry = max(1.0, u.window_start + limits.window_seconds - self._clock())
         # (name, used, cap, amount this request would add)
@@ -206,7 +232,10 @@ def load_budgets(path: str, **kwargs: Any) -> BudgetManager:
         raise BudgetConfigError(f"cannot read {path}: {exc}") from exc
     if not isinstance(data, dict):
         raise BudgetConfigError("top level must be a mapping")
-    errors = [f"unknown top-level key '{k}'" for k in data.keys() - {"default", "subjects"}]
+    errors = [
+        f"unknown top-level key '{k}'"
+        for k in data.keys() - {"default", "subjects", "models"}
+    ]
     default = None
     if "default" in data:
         default = _parse(data["default"], "default", BudgetLimits(), errors)
@@ -219,6 +248,14 @@ def load_budgets(path: str, **kwargs: Any) -> BudgetManager:
         subjects[str(name)] = _parse(
             raw, f"subjects.{name}", default or BudgetLimits(), errors
         )
+    models: dict[str, BudgetLimits] = {}
+    raw_models = data.get("models") or {}
+    if not isinstance(raw_models, dict):
+        errors.append("models: must be a mapping")
+        raw_models = {}
+    for name, raw in raw_models.items():
+        # Model caps do not inherit `default`: that one is per subject.
+        models[str(name)] = _parse(raw, f"models.{name}", BudgetLimits(), errors)
     if errors:
         raise BudgetConfigError("; ".join(errors))
-    return BudgetManager(default, subjects, **kwargs)
+    return BudgetManager(default, subjects, models, **kwargs)

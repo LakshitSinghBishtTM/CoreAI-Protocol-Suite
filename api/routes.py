@@ -59,23 +59,25 @@ def _budget_error(exc: BudgetExceeded) -> HTTPException:
     )
 
 
-def _budget_check(ctx) -> None:
+def _budget_check(ctx, model: Optional[str] = None) -> None:
     from api.server import get_budgets
 
     budgets = get_budgets()
     if budgets is not None:
         try:
             budgets.check(ctx.subject)
+            budgets.check_model(model)
         except BudgetExceeded as exc:
             raise _budget_error(exc)
 
 
-def _budget_record(ctx, cost_usd=0.0, tokens=0) -> None:
+def _budget_record(ctx, cost_usd=0.0, tokens=0, model=None) -> None:
     from api.server import get_budgets
 
     budgets = get_budgets()
     if budgets is not None:
         budgets.record(ctx.subject, cost_usd, tokens)
+        budgets.record_model(model, cost_usd, tokens)
 
 
 def _ledger_record(ctx, provider, model, input_tokens, output_tokens, cost, n=1):
@@ -104,9 +106,9 @@ def _budget_record_stream(ctx, usage) -> None:
 
     budgets = get_budgets()
     if budgets is not None and usage is not None and usage.provider:
-        budgets.add_usage(
-            ctx.subject, usage.cost_usd, usage.input_tokens + usage.output_tokens
-        )
+        tokens = usage.input_tokens + usage.output_tokens
+        budgets.add_usage(ctx.subject, usage.cost_usd, tokens)
+        budgets.record_model(usage.model, usage.cost_usd, tokens)
 
 
 def _http_error(exc: Exception) -> HTTPException:
@@ -255,7 +257,7 @@ async def completions(
     from providers import CompletionRequest as PCR
     from providers import Message as PM
 
-    _budget_check(ctx)
+    _budget_check(ctx, request.model)
     _router = _get_router()
     messages = [PM(role=m.role, content=m.content) for m in request.messages]
     preq = PCR(
@@ -273,7 +275,10 @@ async def completions(
         raise _http_error(exc)
 
     _budget_record(
-        ctx, resp.cost_usd, (resp.input_tokens or 0) + (resp.output_tokens or 0)
+        ctx,
+        resp.cost_usd,
+        (resp.input_tokens or 0) + (resp.output_tokens or 0),
+        model=resp.model,
     )
     _ledger_record(
         ctx,
@@ -345,7 +350,7 @@ async def completions_stream(
     from providers import CompletionRequest as PCR
     from providers import Message as PM
 
-    _budget_check(ctx)
+    _budget_check(ctx, request.model)
     _router = _get_router()
     messages = [PM(role=m.role, content=m.content) for m in request.messages]
     preq = PCR(
