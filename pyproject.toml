@@ -32,8 +32,14 @@ dev = [
     "black>=24.0.0",
     "isort>=5.13.0",
     "build>=1.2.0",
+    "opentelemetry-sdk>=1.25.0",  # so the tracing tests run in CI
 ]
 postgres = ["asyncpg>=0.29.0"]
+# Optional OpenTelemetry tracing (see docs/operations.md).
+tracing = [
+    "opentelemetry-sdk>=1.25.0",
+    "opentelemetry-exporter-otlp-proto-http>=1.25.0",
+]
 
 [project.urls]
 Repository = "https://github.com/LakshitSinghBishtTM/CoreAI-Protocol-Suite"

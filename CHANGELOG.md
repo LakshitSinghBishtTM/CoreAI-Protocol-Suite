@@ -4,6 +4,14 @@
 
 The previous `1.0.0` label did not match the project's state; versions now start at 0.1.0 (alpha).
 
+### Added (Phase 3, part 9: OpenTelemetry tracing)
+- Optional tracing (`coreai/tracing.py`), off by default and costless when off. Enable with `COREAI_TRACING=1` or `OTEL_EXPORTER_OTLP_ENDPOINT`; install with `pip install 'coreai[tracing]'`. Spans: HTTP server span (route-template name, status), `caips.route`, `caips.provider_call` per attempt, `caips.stream`, with `failover` events. A caller's `traceparent` is continued. Sampling via `COREAI_TRACE_SAMPLE_RATIO`.
+- Log lines written inside a span carry `trace_id` and `span_id`.
+- Prompts, responses and exception messages never reach spans (tests fail if they do). Export is batched with a bounded queue.
+- `Router.route` and `Router.stream` are now thin wrappers over `_route` and `_stream`; behaviour is unchanged.
+- `pyproject.toml`: new `tracing` extra; the `dev` extra includes `opentelemetry-sdk` so CI runs the tracing tests.
+- Not yet: trace context is not passed on to providers or through the agent orchestrator. Verified against an in-memory exporter only, not a live collector.
+
 ### Added (Phase 3, part 8: streamed responses are metered)
 - Streams now have token counts and cost. Providers report usage from their SDKs (OpenAI, Grok and DeepSeek via `stream_options.include_usage`; Anthropic from the final message; Gemini from usage metadata, thinking tokens included). If a provider reports nothing, the router estimates from text length and flags it (`caips_stream_usage_estimated_total`).
 - The router settles every stream that delivered output, however it ended (finished, failed midway, client left): provider spend, tokens in `caips_tokens_total`, and a `stream settled` log line.

@@ -183,3 +183,55 @@ problem. Use `COREAI_PRICING_FILE` to point at another file.
 - Prices that look wrong (output priced below input) are logged at startup.
   Currently `gemini/gemini-2.5-pro` is flagged; verify it.
 - Changes need a restart (prices are not hot-reloaded).
+
+## Tracing (OpenTelemetry)
+
+Optional and off by default; when off it costs nothing. Install the extra and
+turn it on:
+
+```
+pip install 'coreai[tracing]'
+COREAI_TRACING=1 OTEL_EXPORTER_OTLP_ENDPOINT=http://collector:4318 uvicorn ...
+```
+
+Setting `OTEL_EXPORTER_OTLP_ENDPOINT` (or `..._TRACES_ENDPOINT`) also turns it
+on. Spans are sent over OTLP/HTTP and honour the standard `OTEL_EXPORTER_OTLP_*`
+variables (headers, timeout, protocol settings). Also read:
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `COREAI_TRACING` | off | `1`, `true`, `yes` or `on` to enable |
+| `OTEL_SERVICE_NAME` | `caips-gateway` | service name on every span |
+| `COREAI_TRACE_SAMPLE_RATIO` | `1` | fraction of new traces kept, 0 to 1 |
+
+A caller's W3C `traceparent` is continued, and its sampling decision wins, so a
+sampled caller is always traced even at ratio 0.
+
+**Spans**
+
+- `GET /v1/providers` style server span per HTTP request, named by route
+  template (not the raw path), with status code and `caips.request_id`. 5xx
+  responses are marked as errors.
+- `caips.route` per completion: `caips.provider`, `caips.model`, token counts,
+  `caips.cost_usd`, `caips.cached`, `caips.failed_over_from`, `caips.hedged`,
+  plus a `failover` event (from, to, error kind) each time it moves on.
+- `caips.provider_call` per provider attempt, a child of `caips.route`; failed
+  ones carry `caips.error_kind`.
+- `caips.stream` per streamed completion, with the settled usage and cost
+  (`caips.usage_estimated`, `caips.stream_completed`).
+
+Every log line written inside a span carries `trace_id` and `span_id`, so a
+slow trace links to its logs, and `request_id` links the logs to the response
+header.
+
+**Privacy and safety**
+
+- Prompts, responses and exception messages are never put on spans. Errors carry
+  the exception type and the gateway's error kind only.
+- Export is batched with a bounded queue that drops on overflow, so a slow or
+  down collector cannot grow memory or slow requests.
+- A missing package or bad setting logs an error and leaves tracing off; it
+  never stops the gateway. Spans are flushed on shutdown.
+
+Not yet: trace context is not passed on to providers, and it is not carried
+through the agent orchestrator.

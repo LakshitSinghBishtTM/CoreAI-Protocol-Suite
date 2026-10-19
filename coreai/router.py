@@ -2,10 +2,11 @@ import asyncio
 import os
 import time
 from enum import Enum
-from typing import AsyncGenerator, Callable, Optional
+from typing import Any, AsyncGenerator, Callable, Optional
 
 from loguru import logger
 
+from coreai import tracing
 from coreai.pricing import get_pricing
 
 from neural.model import get_registry
@@ -311,6 +312,34 @@ class Router:
         *,
         deadline_seconds: Optional[float] = None,
     ) -> CompletionResponse:
+        """Route a request (see ``_route``), inside a ``caips.route`` span."""
+        with tracing.start_span(
+            "caips.route", {"caips.preferred_provider": preferred_provider}
+        ) as span:
+            response = await self._route(
+                request, preferred_provider, deadline_seconds=deadline_seconds
+            )
+            span.set_attributes(
+                {
+                    "caips.provider": response.provider,
+                    "caips.model": response.model,
+                    "caips.input_tokens": response.input_tokens,
+                    "caips.output_tokens": response.output_tokens,
+                    "caips.cost_usd": response.cost_usd,
+                    "caips.cached": response.cached,
+                    "caips.failed_over_from": response.metadata.get("failed_over_from"),
+                    "caips.hedged": bool(response.metadata.get("hedged")),
+                }
+            )
+            return response
+
+    async def _route(
+        self,
+        request: CompletionRequest,
+        preferred_provider: Optional[str] = None,
+        *,
+        deadline_seconds: Optional[float] = None,
+    ) -> CompletionResponse:
         """
         Route a request to the best available provider.
 
@@ -422,6 +451,14 @@ class Router:
                     raise last_exc
                 if not is_last:
                     self.failover_count += 1
+                    tracing.add_event(
+                        "failover",
+                        {
+                            "from": ",".join(hf.errors),
+                            "to": candidates[index + 1],
+                            "kind": info.kind.value,
+                        },
+                    )
                 continue
             except Exception as exc:
                 info = classify(exc)
@@ -433,6 +470,14 @@ class Router:
                     raise
                 if not is_last:
                     self.failover_count += 1
+                    tracing.add_event(
+                        "failover",
+                        {
+                            "from": name,
+                            "to": candidates[index + 1],
+                            "kind": info.kind.value,
+                        },
+                    )
                     logger.warning(
                         f"[{name}] failed ({info.kind.value}); "
                         f"failing over to {candidates[index + 1]}"
@@ -480,6 +525,58 @@ class Router:
         *,
         deadline_seconds: Optional[float] = None,
     ) -> AsyncGenerator[str, None]:
+        """Stream a completion (see ``_stream``), inside a ``caips.stream`` span.
+
+        The span is not made the current span: it must outlive the generator's
+        yields, which can resume in a different context.
+        """
+        span = tracing.start_span(
+            "caips.stream",
+            {"caips.preferred_provider": preferred_provider},
+            current=False,
+        )
+        inner = self._stream(
+            request, preferred_provider, deadline_seconds=deadline_seconds, span=span
+        )
+        try:
+            async for chunk in inner:
+                yield chunk
+        except (GeneratorExit, asyncio.CancelledError):
+            raise  # the client left; not a failure
+        except BaseException as exc:
+            try:
+                kind = classify(exc).kind.value
+            except Exception:
+                kind = None
+            span.record_error(exc, kind)
+            raise
+        finally:
+            # Close the inner stream now so it settles usage and releases its
+            # rate-limit slot, rather than whenever it is garbage collected.
+            await inner.aclose()
+            usage = request.stream_usage
+            if usage is not None and usage.provider:
+                span.set_attributes(
+                    {
+                        "caips.provider": usage.provider,
+                        "caips.model": usage.model,
+                        "caips.input_tokens": usage.input_tokens,
+                        "caips.output_tokens": usage.output_tokens,
+                        "caips.cost_usd": usage.cost_usd,
+                        "caips.usage_estimated": usage.estimated,
+                        "caips.stream_completed": usage.completed,
+                    }
+                )
+            span.end()
+
+    async def _stream(
+        self,
+        request: CompletionRequest,
+        preferred_provider: Optional[str] = None,
+        *,
+        deadline_seconds: Optional[float] = None,
+        span: Any = None,
+    ) -> AsyncGenerator[str, None]:
         """
         Stream a completion through the router.
 
@@ -490,6 +587,7 @@ class Router:
         recalled). The request deadline covers time to first chunk; after
         that each chunk must arrive within the provider's idle timeout.
         """
+        span = span or tracing.current_span()
         self.request_count += 1
         if preferred_provider is not None and preferred_provider not in self.providers:
             available = sorted(self.providers.keys())
@@ -536,6 +634,14 @@ class Router:
                     raise
                 if not is_last:
                     self.failover_count += 1
+                    span.add_event(
+                        "failover",
+                        {
+                            "from": name,
+                            "to": candidates[index + 1],
+                            "kind": info.kind.value,
+                        },
+                    )
                     logger.warning(
                         f"[{name}] stream failed to open ({info.kind.value}); "
                         f"failing over to {candidates[index + 1]}"
@@ -623,6 +729,31 @@ class Router:
             raise
 
     async def _call_provider(
+        self,
+        name: str,
+        request: CompletionRequest,
+        deadline: Deadline,
+        attempts: int,
+    ) -> CompletionResponse:
+        """``_call_provider_untraced`` inside a ``caips.provider_call`` span."""
+        with tracing.start_span(
+            "caips.provider_call",
+            {"caips.provider": name, "caips.max_attempts": attempts},
+        ) as span:
+            response = await self._call_provider_untraced(
+                name, request, deadline, attempts
+            )
+            span.set_attributes(
+                {
+                    "caips.model": response.model,
+                    "caips.input_tokens": response.input_tokens,
+                    "caips.output_tokens": response.output_tokens,
+                    "caips.cost_usd": response.cost_usd,
+                }
+            )
+            return response
+
+    async def _call_provider_untraced(
         self,
         name: str,
         request: CompletionRequest,

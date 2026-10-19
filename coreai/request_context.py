@@ -15,6 +15,8 @@ from contextvars import ContextVar
 
 from loguru import logger
 
+from coreai import tracing
+
 HEADER = b"x-request-id"
 _SAFE = re.compile(r"^[A-Za-z0-9._-]{8,64}$")
 _request_id: ContextVar[str | None] = ContextVar("request_id", default=None)
@@ -47,6 +49,17 @@ class RequestContextMiddleware:
         token = _request_id.set(rid)
         started = time.perf_counter()
         status = {"code": 500}
+        method = scope.get("method", "")
+        span = tracing.start_span(
+            f"{method} {scope.get('path', '')}",
+            {
+                "http.request.method": method,
+                "url.path": scope.get("path", ""),
+                "caips.request_id": rid,
+            },
+            parent=tracing.extract_context(scope.get("headers") or []),
+            server=True,
+        )
 
         async def send_with_id(message):
             if message["type"] == "http.response.start":
@@ -58,7 +71,17 @@ class RequestContextMiddleware:
 
         try:
             await self.app(scope, receive, send_with_id)
+        except BaseException as exc:
+            span.record_error(exc)
+            raise
         finally:
+            route = scope.get("route")
+            if route is not None and getattr(route, "path", None):
+                span.update_name(f"{method} {route.path}")  # low-cardinality name
+            span.set_attribute("http.response.status_code", status["code"])
+            if status["code"] >= 500:
+                span.mark_error(f"http_{status['code']}")
+            span.end()
             path = scope.get("path", "")
             if not path.startswith(self.quiet_paths):
                 code = status["code"]

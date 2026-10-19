@@ -13,6 +13,7 @@ from coreai.drain import DrainController, DrainMiddleware
 from coreai.kernel import init_kernel
 from coreai.logging_setup import configure_logging
 from coreai.metrics import CONTENT_TYPE, render_prometheus
+from coreai import tracing
 from coreai.request_context import RequestContextMiddleware
 from providers import (
     load_providers,
@@ -38,6 +39,7 @@ async def lifespan(app: FastAPI):
     """Startup and shutdown events"""
     # Startup
     configure_logging()
+    tracing.setup_tracing()  # no-op unless enabled; see coreai/tracing.py
     logger.info("Starting CoreAI Protocol Suite...")
 
     providers = load_providers()
@@ -77,6 +79,7 @@ async def lifespan(app: FastAPI):
         await app_state["agent_manager"].shutdown_all()
     if app_state["kernel"]:
         await app_state["kernel"].stop()
+    tracing.shutdown_tracing()  # flush queued spans
 
 
 # ============================================================================

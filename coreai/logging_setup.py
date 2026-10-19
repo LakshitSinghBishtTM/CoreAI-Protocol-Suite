@@ -27,6 +27,7 @@ from typing import Any
 
 from loguru import logger
 
+from coreai import tracing
 from coreai.request_context import current_request_id
 
 _SECRET_PATTERNS = (
@@ -44,6 +45,10 @@ def redact(text: str) -> str:
 
 def _patcher(record: dict) -> None:
     record["extra"].setdefault("request_id", current_request_id())
+    ids = tracing.current_ids()
+    if ids is not None:
+        record["extra"].setdefault("trace_id", ids[0])
+        record["extra"].setdefault("span_id", ids[1])
 
 
 def format_json(record: dict) -> str:
