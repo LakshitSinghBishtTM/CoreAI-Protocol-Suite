@@ -225,6 +225,9 @@ class RoutingConfig:
         return cls(**kwargs)
 
 
+DEFAULT_ALIASES = {"fast": "low_latency", "cheap": "bulk", "best": "high_quality"}
+
+
 class Router:
     """Intelligent router that selects providers based on strategy."""
 
@@ -249,6 +252,9 @@ class Router:
         self.model_gate = None
         # Per-policy rotation offsets for round_robin policies.
         self._policy_rr: dict[str, int] = {}
+        # Virtual models: alias -> routing policy name. An alias only takes
+        # effect while that policy exists.
+        self.aliases: dict[str, str] = dict(DEFAULT_ALIASES)
         self.cache = (
             ResponseCache(max_entries=self.config.cache_max_entries)
             if self.config.enable_cache
@@ -359,6 +365,7 @@ class Router:
         All attempts share one deadline.
         """
         self.request_count += 1
+        self.resolve_alias(request)
 
         # Validate explicit provider choice up front so the error is clear.
         if preferred_provider is not None and preferred_provider not in self.providers:
@@ -609,6 +616,7 @@ class Router:
         """
         span = span or tracing.current_span()
         self.request_count += 1
+        self.resolve_alias(request)
         if preferred_provider is not None and preferred_provider not in self.providers:
             available = sorted(self.providers.keys())
             raise ValueError(
@@ -921,6 +929,67 @@ class Router:
                 ttl_seconds=self.config.cache_ttl_seconds,
                 options=self._cache_options(request),
             )
+
+    def alias_policy(self, model: Optional[str]) -> Optional[str]:
+        """Policy behind a virtual model name, if it is one and usable."""
+        target = self.aliases.get(model) if model else None
+        if target is None or self.policies is None:
+            return None
+        return target if self.policies.current().get(target) is not None else None
+
+    def resolve_alias(self, request: CompletionRequest) -> None:
+        """Turn a virtual model (``fast``, ``cheap``, ``best``...) into a
+        routing policy: the model is cleared and the policy named instead. A
+        real catalogue model of the same name is never shadowed."""
+        if self._model_registry.get(request.model or "") is not None:
+            return
+        policy = self.alias_policy(request.model)
+        if policy is None:
+            return
+        request.metadata = {**(request.metadata or {}), "policy": policy, "alias": request.model}
+        request.model = None
+
+    async def embed(
+        self, texts: list[str], model: Optional[str] = None, preferred: Optional[str] = None
+    ):
+        """Embed *texts* on the first healthy provider that supports it.
+        Returns ``(vectors, input_tokens, model, provider)``."""
+        names = [preferred] if preferred else list(self.providers)
+        errors: list[tuple[str, ErrorKind]] = []
+        last: Optional[Exception] = None
+        for name in names:
+            if name not in self.providers:
+                raise ValueError(f"Provider '{name}' not available")
+            p = self.providers[name]
+            if not getattr(p, "supports_embeddings", False):
+                continue
+            if not self.breakers[name].allow():
+                errors.append((name, ErrorKind.CIRCUIT_OPEN))
+                continue
+            try:
+                vectors, tokens, used = await asyncio.wait_for(
+                    p.embed(texts, model), timeout=self._timeout_for(name)
+                )
+            except Exception as exc:
+                info = classify(exc)
+                self._record_error(name, info.kind)
+                if info.counts_against_breaker:
+                    self.breakers[name].record_failure()
+                else:
+                    self.breakers[name].release()
+                errors.append((name, info.kind))
+                last = exc
+                if not (self.config.enable_failover and info.failover):
+                    raise
+                continue
+            self.breakers[name].record_success()
+            self._record_usage(name, used, None, tokens, 0)
+            return vectors, tokens, used, name
+        if last is not None and len(errors) == 1:
+            raise last
+        if errors:
+            raise AllProvidersUnavailable(errors, retry_after=self._soonest_retry_after())
+        raise ValueError("No configured provider supports embeddings")
 
     def _owner_of(self, model: Optional[str]) -> Optional[str]:
         """Provider that owns a catalogued model, or None if unknown."""

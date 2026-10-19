@@ -135,3 +135,10 @@ The previous `1.0.0` label did not match the project's state; versions now start
 
 ### Added
 - `.env.example`, `SECURITY.md`, status notes in `agents/`, `protocols/` and `neural/`, and smoke tests for `AgentManager`.
+
+## Unreleased (roadmap Phase 4 / Phase 0 follow-ups)
+- Added `/v1/embeddings` (OpenAI provider) and virtual models `fast`, `cheap`, `best`
+  mapped to the `low_latency`, `bulk` and `high_quality` routing policies; they are
+  listed by `/v1/models`.
+- Untracked `.env`, `.env.production` and `config/secrets.json`; CI now runs gitleaks
+  and `pip-audit`.

@@ -33,6 +33,18 @@ class OpenAIProvider(BaseProvider):
         super().__init__(api_key)
         self.client = AsyncOpenAI(api_key=api_key, timeout=SDK_TIMEOUT_S, max_retries=0)
 
+    supports_embeddings = True
+    default_embedding_model = "text-embedding-3-small"
+
+    async def embed(self, texts, model=None):
+        model = model or self.default_embedding_model
+        resp = await self.client.embeddings.create(model=model, input=texts)
+        vectors = [d.embedding for d in sorted(resp.data, key=lambda d: d.index)]
+        tokens = getattr(getattr(resp, "usage", None), "prompt_tokens", None)
+        if not isinstance(tokens, int):
+            tokens = sum(len(t) for t in texts) // 4
+        return vectors, tokens, model
+
     @staticmethod
     def _is_reasoning_model(model: str) -> bool:
         """o-series models reject ``max_tokens`` and a custom temperature."""

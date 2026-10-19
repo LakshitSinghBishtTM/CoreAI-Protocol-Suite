@@ -148,6 +148,14 @@ class BaseProvider(ABC):
     async def complete(self, request: CompletionRequest) -> CompletionResponse:
         pass
 
+    supports_embeddings: bool = False
+    default_embedding_model: str = ""
+
+    async def embed(self, texts: list[str], model: Optional[str] = None):
+        """Return ``(vectors, input_tokens, model)``. Providers that offer
+        embeddings override this and set ``supports_embeddings``."""
+        raise NotImplementedError(f"{self.name} does not support embeddings")
+
     @abstractmethod
     async def stream(self, request: CompletionRequest) -> AsyncGenerator[str, None]:
         pass

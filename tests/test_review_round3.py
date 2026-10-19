@@ -260,3 +260,38 @@ def test_named_policy_forwarded_by_api_schema():
         Api(messages=[])
     with pytest.raises(Exception):
         Api(messages=[{"role": "tool", "content": "x"}])
+
+
+def test_virtual_model_alias_maps_to_policy(tmp_path):
+    r = _policy_router(
+        tmp_path,
+        "policies:\n  default:\n    strategy: fallback\n    fallback_chain: [a, b]\n"
+        "  low_latency:\n    strategy: fallback\n    fallback_chain: [b, a]\n",
+        a=_p("a"),
+        b=_p("b"),
+    )
+    req = _req(model="fast")
+    resp = asyncio.run(r.route(req))
+    assert resp.provider == "b" and req.model is None
+    # an alias whose policy doesn't exist is left alone; real models aren't shadowed
+    req2 = _req(model="cheap")
+    r.resolve_alias(req2)
+    assert req2.model == "cheap"
+    req3 = _req(model="gpt-4o")
+    r.resolve_alias(req3)
+    assert req3.model == "gpt-4o"
+
+
+def test_embeddings_route_to_supporting_provider():
+    from unittest.mock import AsyncMock
+
+    plain = make_provider("a")
+    plain.supports_embeddings = False
+    emb = make_provider("openai")
+    emb.supports_embeddings = True
+    emb.embed = AsyncMock(return_value=([[0.1, 0.2]], 3, "text-embedding-3-small"))
+    r = _router(a=plain, openai=emb)
+    vectors, tokens, model, provider = asyncio.run(r.embed(["hi"]))
+    assert provider == "openai" and tokens == 3 and vectors == [[0.1, 0.2]]
+    with pytest.raises(ValueError):
+        asyncio.run(_router(a=plain).embed(["hi"]))

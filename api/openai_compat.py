@@ -327,6 +327,71 @@ async def chat_completions(
     return StreamingResponse(_generate(), media_type="text/event-stream")
 
 
+class EmbeddingsRequest(BaseModel):
+    model: Optional[str] = None
+    input: Any
+    encoding_format: Optional[str] = None
+    provider: Optional[str] = None
+
+
+@router.post("/embeddings", summary="Create embeddings (OpenAI-compatible)")
+async def create_embeddings(
+    body: EmbeddingsRequest,
+    ctx: AuthContext = Depends(require_scope("completions:write")),
+):
+    from api import routes
+    from api.server import get_router
+
+    raw = body.input
+    texts = [raw] if isinstance(raw, str) else raw
+    if (
+        not isinstance(texts, list)
+        or not texts
+        or not all(isinstance(t, str) and t for t in texts)
+    ):
+        return _error_response(
+            CompatError(
+                400, "input must be a non-empty string or list of non-empty strings.",
+                "invalid_request_error", "invalid_value", "input",
+            )  # fmt: skip
+        )
+    if body.encoding_format not in (None, "float"):
+        return _error_response(
+            CompatError(
+                400, "Only encoding_format 'float' is supported.",
+                "invalid_request_error", "unsupported_parameter", "encoding_format",
+            )  # fmt: skip
+        )
+    try:
+        r = get_router()
+        routes._budget_check(ctx, body.model)
+        vectors, tokens, used, provider = await r.embed(texts, body.model, body.provider)
+    except HTTPException as exc:
+        return _error_response(_from_http(exc))
+    except ValueError as exc:
+        return _error_response(
+            CompatError(400, str(exc), "invalid_request_error", "invalid_value")
+        )
+    except Exception as exc:
+        logger.error("Embeddings error for %s: %s", ctx.subject, exc)
+        kind = classify(exc).kind.value
+        return _error_response(
+            CompatError(502, f"The upstream provider failed ({kind}).", "server_error", kind)
+        )
+    cost = r.providers[provider]._bill(tokens, 0, used)
+    routes._budget_record(ctx, cost, tokens, model=used)
+    routes._ledger_record(ctx, provider, used, tokens, 0, cost)
+    return {
+        "object": "list",
+        "model": used,
+        "data": [
+            {"object": "embedding", "index": i, "embedding": v}
+            for i, v in enumerate(vectors)
+        ],
+        "usage": {"prompt_tokens": tokens, "total_tokens": tokens},
+    }
+
+
 @router.get("/models", summary="List models (OpenAI-compatible)")
 async def list_models_openai(
     ctx: AuthContext = Depends(require_scope("completions:read")),
@@ -348,10 +413,13 @@ async def list_models_openai(
     for name, model in defaults.items():
         if model:
             seen.setdefault(model, name)
-    return {
-        "object": "list",
-        "data": [
-            {"id": mid, "object": "model", "created": 0, "owned_by": owner}
-            for mid, owner in sorted(seen.items())
-        ],
-    }
+    data = [
+        {"id": mid, "object": "model", "created": 0, "owned_by": owner}
+        for mid, owner in sorted(seen.items())
+    ]
+    # Virtual models: names that map to a routing policy.
+    r = get_router()
+    for alias in sorted(r.aliases):
+        if r.alias_policy(alias):
+            data.append({"id": alias, "object": "model", "created": 0, "owned_by": "caips"})
+    return {"object": "list", "data": data}
