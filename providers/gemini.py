@@ -10,6 +10,8 @@ from google.genai import types
 from loguru import logger
 
 from .base import (
+    normalize_finish_reason,
+    validate_conversation,
     SDK_TIMEOUT_S,
     BaseProvider,
     CompletionRequest,
@@ -65,6 +67,7 @@ class GeminiProvider(BaseProvider):
             output_tokens=output_tokens,
             cost_usd=cost,
             latency_ms=latency_ms,
+            metadata={"finish_reason": self._finish(response)},
         )
         self._track(result)
         logger.debug(
@@ -92,6 +95,9 @@ class GeminiProvider(BaseProvider):
                     request.stream_usage.report(
                         getattr(meta, "prompt_token_count", None), out
                     )
+                fr = self._finish(chunk)
+                if fr is not None and request.stream_usage is not None:
+                    request.stream_usage.finish_reason = fr
                 if chunk.text:
                     yield chunk.text
         except Exception as e:
@@ -104,6 +110,7 @@ class GeminiProvider(BaseProvider):
     def _build_messages(self, request: CompletionRequest) -> tuple[list[dict], str]:
         # Gemini uses history + last message separately
         # roles are "user" and "model" (not "assistant")
+        validate_conversation(request.messages)
         history = []
         messages = split_system(request)[1]
 
@@ -111,5 +118,13 @@ class GeminiProvider(BaseProvider):
             role = "model" if msg.role == "assistant" else "user"
             history.append({"role": role, "parts": [{"text": msg.content}]})
 
-        last_message = messages[-1].content if messages else "Hello"
-        return history, last_message
+        # validate_conversation guarantees the last message is a user turn.
+        return history, messages[-1].content
+
+    @staticmethod
+    def _finish(resp):
+        try:
+            cands = getattr(resp, "candidates", None) or []
+            return normalize_finish_reason(cands[0].finish_reason) if cands else None
+        except Exception:
+            return None

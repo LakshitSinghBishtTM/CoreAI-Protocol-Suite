@@ -69,6 +69,8 @@ class TaskOrchestrator:
         self._tasks: Dict[str, TaskItem] = {}
         self._results: Dict[str, asyncio.Future] = {}
         self._dispatch_task: Optional[asyncio.Task] = None
+        # Executing _run_task coroutines, so cancel() and stop() can reach them.
+        self._running_tasks: Dict[str, asyncio.Task] = {}
         self._running = False
         logger.info("TaskOrchestrator initialized")
 
@@ -83,8 +85,14 @@ class TaskOrchestrator:
 
     async def stop(self) -> None:
         self._running = False
+        pending = list(self._running_tasks.values())
         if self._dispatch_task:
-            self._dispatch_task.cancel()
+            pending.append(self._dispatch_task)
+        for t in pending:
+            t.cancel()
+        # Wait for the work to actually stop before reporting stopped.
+        await asyncio.gather(*pending, return_exceptions=True)
+        self._running_tasks.clear()
         # Cancel all pending futures
         for task_id, fut in self._results.items():
             if not fut.done():
@@ -167,6 +175,9 @@ class TaskOrchestrator:
         if not item or item.status in (TaskStatus.COMPLETED, TaskStatus.FAILED):
             return False
         item.status = TaskStatus.CANCELLED
+        running = self._running_tasks.get(task_id)
+        if running and not running.done():
+            running.cancel()  # stop the executing coroutine, not just the status
         fut = self._results.get(task_id)
         if fut and not fut.done():
             fut.cancel()
@@ -211,8 +222,14 @@ class TaskOrchestrator:
                 idle_agents = self.agent_manager.get_idle_agents()
                 if idle_agents and not self._queue.empty():
                     item: TaskItem = self._queue.get_nowait()
+                    if item.status == TaskStatus.CANCELLED:
+                        continue  # cancelled while queued: never run it
                     agent_id = idle_agents[0]
-                    asyncio.create_task(self._run_task(item, agent_id))
+                    t = asyncio.create_task(self._run_task(item, agent_id))
+                    self._running_tasks[item.task_id] = t
+                    t.add_done_callback(
+                        lambda _t, tid=item.task_id: self._running_tasks.pop(tid, None)
+                    )
             except asyncio.QueueEmpty:
                 pass
             except Exception as exc:
@@ -231,19 +248,30 @@ class TaskOrchestrator:
                 self.agent_manager.dispatch_task(agent_id, item.payload),
                 timeout=timeout,
             )
+            if item.status == TaskStatus.CANCELLED:
+                return
             item.status = TaskStatus.COMPLETED
             item.result = result
             if fut and not fut.done():
                 fut.set_result(result)
             logger.info("Task %s completed by agent %s", item.task_id, agent_id)
 
+        except asyncio.CancelledError:
+            # Cancelled via cancel() or stop(): keep the CANCELLED status and
+            # do not retry.
+            if item.status != TaskStatus.CANCELLED:
+                item.status = TaskStatus.CANCELLED
+            raise
+
         except asyncio.TimeoutError:
-            await self._handle_failure(
-                item, fut, f"Timed out after {item.payload.get('timeout')}s"
-            )
+            if item.status != TaskStatus.CANCELLED:
+                await self._handle_failure(
+                    item, fut, f"Timed out after {item.payload.get('timeout')}s"
+                )
 
         except Exception as exc:
-            await self._handle_failure(item, fut, str(exc))
+            if item.status != TaskStatus.CANCELLED:
+                await self._handle_failure(item, fut, str(exc))
 
     async def _handle_failure(
         self,

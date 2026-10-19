@@ -10,7 +10,7 @@ Contact: api@coreai.com
 import json
 import logging
 import math
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from fastapi.responses import Response, StreamingResponse
@@ -161,12 +161,17 @@ def _http_error(exc: Exception) -> HTTPException:
 
 
 class Message(BaseModel):
-    role: str = Field(..., description="user | assistant | system")
+    role: Literal["user", "assistant", "system"] = Field(
+        ..., description="user | assistant | system"
+    )
     content: str
 
 
 class CompletionRequest(BaseModel):
-    messages: List[Message]
+    messages: List[Message] = Field(..., min_length=1)
+    policy: Optional[str] = Field(
+        None, description="Named routing policy (see config/routing.yml)"
+    )
     model: Optional[str] = None
     max_tokens: int = Field(1024, ge=1, le=32768)
     temperature: float = Field(0.7, ge=0.0, le=2.0)
@@ -281,6 +286,7 @@ async def completions(
         max_tokens=request.max_tokens,
         temperature=request.temperature,
         system_prompt=request.system_prompt,
+        metadata={"policy": request.policy} if request.policy else {},
     )
 
     try:
@@ -317,7 +323,7 @@ async def completions(
 
 
 class ExplainRequest(BaseModel):
-    messages: List[Message]
+    messages: List[Message] = Field(..., min_length=1)
     model: Optional[str] = None
     max_tokens: int = Field(1024, ge=1, le=200_000)
     system_prompt: Optional[str] = None
@@ -382,6 +388,7 @@ async def completions_stream(
         temperature=request.temperature,
         system_prompt=request.system_prompt,
         stream=True,
+        metadata={"policy": request.policy} if request.policy else {},
     )
 
     # Open the stream first so failures before any output become proper HTTP
@@ -579,10 +586,12 @@ async def terminate_agent(
 
     from coreai.task_runner import get_task_runner
 
-    await get_agent_manager().terminate_agent(agent_id, reason=f"api:{ctx.subject}")
+    # Stop the agent's worker and wait for its running task to end *before*
+    # the agent is shut down and unregistered.
     runner = get_task_runner()
     if runner is not None:
         await runner.drop_agent(agent_id)
+    await get_agent_manager().terminate_agent(agent_id, reason=f"api:{ctx.subject}")
 
 
 # ------------------------------------------------------------------
@@ -805,6 +814,7 @@ async def trigger_shutdown(
         kernel=get_kernel(),
         db=get_db(),
         drain=drain,
+        task_runner=app_state.get("task_runner"),
         # Ask the server to exit cleanly (uvicorn finishes its own shutdown)
         # rather than raising SystemExit inside a background task.
         exit_fn=lambda code: os.kill(os.getpid(), signal.SIGTERM),

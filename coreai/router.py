@@ -1,4 +1,5 @@
 import asyncio
+import dataclasses
 import os
 import time
 from enum import Enum
@@ -17,6 +18,9 @@ from providers import (
     StreamUsage,
 )
 
+from providers.base import validate_conversation
+
+from .budgets import BudgetExceeded
 from .cache import ResponseCache
 from .circuit_breaker import CircuitBreaker
 from .deadline import Deadline
@@ -243,6 +247,8 @@ class Router:
         # Optional ``callable(model)`` that raises when a model's shared budget
         # is spent (set by the API). Called with the model actually chosen.
         self.model_gate = None
+        # Per-policy rotation offsets for round_robin policies.
+        self._policy_rr: dict[str, int] = {}
         self.cache = (
             ResponseCache(max_entries=self.config.cache_max_entries)
             if self.config.enable_cache
@@ -362,24 +368,16 @@ class Router:
                 f"Available: {available}"
             )
 
+        validate_conversation(request.messages)
         deadline = self._new_deadline(deadline_seconds)
-        candidates = self._candidates(request, preferred_provider)
+        # Resolve the provider and model for each candidate, then drop the
+        # ones that cannot serve this request (context window, output limit,
+        # streaming, per-model budget) before anything is spent. Runs before
+        # the cache lookup so a cache hit cannot bypass a model's budget cap.
+        screened = self._screen(request, preferred_provider)
+        candidates = [n for n, _ in screened]
+        reqs = [r for _, r in screened]
         provider_name = candidates[0]
-
-        # Fail fast on context-window overflow using the neural model
-        # registry, instead of letting the provider API reject it after
-        # we've already spent a rate-limit slot and a cache lookup on it.
-        profile = self._resolve_model_profile(provider_name, request.model)
-        if profile is not None:
-            estimated_input = self._estimate_tokens(request)
-            headroom = estimated_input + (request.max_tokens or 0)
-            if not profile.fits_context(headroom):
-                raise ValueError(
-                    f"Request (~{estimated_input} input + "
-                    f"{request.max_tokens or 0} max_tokens = ~{headroom} tokens) "
-                    f"exceeds {profile.model_id}'s {profile.context_window}-token "
-                    f"context window."
-                )
 
         # Cache lookup — key includes provider_name so explicit-provider
         # requests are never satisfied from a different provider's cache.
@@ -390,7 +388,7 @@ class Router:
             _t0 = time.monotonic()
             cached = await self.cache.get(
                 provider_name,
-                request.model or "*",
+                reqs[0].model or "*",
                 messages_dict,
                 self._cache_options(request),
             )
@@ -419,7 +417,7 @@ class Router:
             if name in skip:
                 continue
             is_last = index == len(candidates) - 1
-            self._admit_model(request, name)
+            req = reqs[index]
             if not self.breakers[name].allow():
                 last_exc = CircuitOpenError(name, self.breakers[name].retry_after())
                 failures.append((name, ErrorKind.CIRCUIT_OPEN))
@@ -433,7 +431,7 @@ class Router:
                 partner = None
                 if hedge_delay is not None and not is_last and not request.stream:
                     nxt = candidates[index + 1]
-                    if nxt not in skip:
+                    if nxt not in skip and nxt != name:
                         partner = nxt
                 if partner is not None:
                     partner_attempts = (
@@ -444,20 +442,22 @@ class Router:
                             self.config.max_attempts_before_failover,
                         )
                     )
+                    partner_req = reqs[index + 1]
                     name, response = await self._call_hedged(
                         name,
                         partner,
-                        request,
+                        req,
                         deadline,
                         attempts,
                         partner_attempts,
                         hedge_delay,
                         skip,
+                        partner_request=partner_req,
                     )
+                    if name == partner:
+                        req = partner_req
                 else:
-                    response = await self._call_provider(
-                        name, request, deadline, attempts
-                    )
+                    response = await self._call_provider(name, req, deadline, attempts)
             except HedgeFailure as hf:
                 last_exc = hf.errors[hf.primary]
                 for n, e in hf.errors.items():
@@ -504,7 +504,7 @@ class Router:
                     )
                 continue
 
-            await self._cache_response(name, request, response)
+            await self._cache_response(name, req, response)
             if failures:
                 response.metadata = {
                     **response.metadata,
@@ -616,14 +616,17 @@ class Router:
                 f"Available: {available}"
             )
 
+        validate_conversation(request.messages)
         deadline = self._new_deadline(deadline_seconds)
-        candidates = self._candidates(request, preferred_provider)
+        screened = self._screen(request, preferred_provider)
+        candidates = [n for n, _ in screened]
+        reqs = [r for _, r in screened]
         failures: list[tuple[str, ErrorKind]] = []
         last_exc: Optional[Exception] = None
 
         for index, name in enumerate(candidates):
             is_last = index == len(candidates) - 1
-            self._admit_model(request, name)
+            req = reqs[index]
             breaker = self.breakers[name]
             if not breaker.allow():
                 last_exc = CircuitOpenError(name, breaker.retry_after())
@@ -640,10 +643,11 @@ class Router:
             chars = 0  # text delivered, to estimate tokens if none are reported
             usage = StreamUsage()
             request.stream_usage = usage
+            req.stream_usage = usage
             gen = None
             try:
                 gen, first = await self._open_stream(
-                    name, request, deadline, attempts, timeout, breaker
+                    name, req, deadline, attempts, timeout, breaker
                 )
             except Exception as exc:
                 info = classify(exc)
@@ -671,7 +675,7 @@ class Router:
 
             # Stream is open and the first chunk (if any) is in hand.
             usage.opened_model = (
-                request.model or self.providers[name].default_model or ""
+                req.model or self.providers[name].default_model or ""
             )
             try:
                 if first is not _END:
@@ -712,7 +716,7 @@ class Router:
                 self.provider_stats[name]["requests"] += 1
                 return
             finally:
-                self._settle_stream(name, request, usage, chars, started, completed)
+                self._settle_stream(name, req, usage, chars, started, completed)
                 self.limiter.release(name)
                 await self._close_stream(gen)
 
@@ -918,16 +922,58 @@ class Router:
                 options=self._cache_options(request),
             )
 
+    def _owner_of(self, model: Optional[str]) -> Optional[str]:
+        """Provider that owns a catalogued model, or None if unknown."""
+        profile = self._model_registry.get(model) if model else None
+        return profile.provider if profile is not None else None
+
     def _candidates(
         self, request: CompletionRequest, preferred: Optional[str]
     ) -> list[str]:
         """Providers to try, best first. Pinned provider/model -> just one."""
+        return self._plan(request, preferred)[0]
+
+    def _plan(
+        self, request: CompletionRequest, preferred: Optional[str]
+    ) -> tuple[list[str], list[Optional[str]]]:
+        """Candidate providers and, in parallel, the model each should use
+        (None = the provider's default)."""
+        owner = self._owner_of(request.model)
         if preferred is not None:
-            return [preferred]
+            if owner is not None and owner != preferred:
+                raise ValueError(
+                    f"Model '{request.model}' belongs to provider '{owner}', "
+                    f"not '{preferred}'"
+                )
+            return [preferred], [request.model]
+
         policy = self._policy_for(request)
+        if request.model is not None and owner is not None:
+            # An explicit model is served by the provider that owns it.
+            if owner not in self.providers:
+                raise ValueError(
+                    f"Model '{request.model}' needs provider '{owner}', "
+                    "which is not configured"
+                )
+            if policy is not None:
+                reason = policy.permits(owner)
+                if reason is not None:
+                    raise ValueError(
+                        f"Policy '{policy.name}' does not allow provider "
+                        f"'{owner}' for model '{request.model}': {reason}"
+                    )
+            if not self.breakers[owner].would_allow():
+                raise AllProvidersUnavailable(
+                    [(owner, ErrorKind.CIRCUIT_OPEN)],
+                    retry_after=self._soonest_retry_after(),
+                )
+            return [owner], [request.model]
+
         if policy is not None:
-            order, _ = self._plan_with_policy(request, policy)
-            return order
+            order, _ = self._plan_with_policy(request, policy, advance=True)
+            if request.model is not None:
+                return order, [request.model] * len(order)
+            return order, self._policy_models(policy, order)
         healthy = [n for n in self.providers if self.breakers[n].would_allow()]
         if not healthy:
             raise AllProvidersUnavailable(
@@ -935,12 +981,106 @@ class Router:
                 retry_after=self._soonest_retry_after(),
             )
         primary = self._select_provider(request, healthy)
-        # A request for a specific model can't be served by a different
-        # provider, so only model-agnostic requests fail over.
+        # An unrecognised model name can't be matched to a provider, so such
+        # requests are not failed over.
         if not self.config.enable_failover or request.model is not None:
-            return [primary]
+            return [primary], [request.model]
         rest = [n for n in healthy if n != primary]
-        return [primary] + self._failover_order(request, rest)
+        order = [primary] + self._failover_order(request, rest)
+        return order, [None] * len(order)
+
+    def _screen(
+        self, request: CompletionRequest, preferred: Optional[str]
+    ) -> list[tuple[str, CompletionRequest]]:
+        """Plan candidates and drop those that cannot serve *request*.
+
+        A pinned provider/model gets a hard error. In automatic routing a
+        candidate that is over its model budget or incompatible with the
+        request is skipped so the next one can serve it; only if none is left
+        is the first reason raised."""
+        names, models = self._plan(request, preferred)
+        pinned = preferred is not None or request.model is not None
+        keep: list[tuple[str, CompletionRequest]] = []
+        problem: Optional[str] = None
+        budget_exc: Optional[BudgetExceeded] = None
+        for name, model in zip(names, models):
+            req = (
+                request
+                if model == request.model
+                else dataclasses.replace(request, model=model)
+            )
+            reason = self._model_problem(req, name)
+            if reason:
+                if pinned or len(names) == 1:
+                    raise ValueError(reason)
+                problem = problem or reason
+                continue
+            try:
+                self._admit_model(req, name)
+            except BudgetExceeded as exc:
+                if pinned or len(names) == 1:
+                    raise
+                budget_exc = budget_exc or exc
+                continue
+            keep.append((name, req))
+        if not keep:
+            if budget_exc is not None:
+                raise budget_exc
+            raise ValueError(problem or "No provider can serve this request")
+        return keep
+
+    def _model_problem(self, req: CompletionRequest, name: str) -> Optional[str]:
+        """Why the catalogued model can't serve *req*, or None. Unknown
+        models are not blocked: the catalogue may lag behind new releases."""
+        profile = self._resolve_model_profile(name, req.model)
+        if profile is None:
+            return None
+        estimated_input = self._estimate_tokens(req)
+        out = req.max_tokens or 0
+        if not profile.fits_context(estimated_input + out):
+            return (
+                f"Request (~{estimated_input} input + {out} max_tokens = "
+                f"~{estimated_input + out} tokens) exceeds {profile.model_id}'s "
+                f"{profile.context_window}-token context window."
+            )
+        if profile.max_output_tokens and out > profile.max_output_tokens:
+            return (
+                f"max_tokens={out} exceeds {profile.model_id}'s output limit "
+                f"of {profile.max_output_tokens} tokens."
+            )
+        if req.stream and not profile.supports_streaming:
+            return f"{profile.model_id} does not support streaming."
+        return None
+
+    def _policy_models(
+        self, policy: Policy, order: list[str]
+    ) -> list[Optional[str]]:
+        """Model per candidate: the policy's ``model`` for the first, its
+        ``fallback_model`` for later ones, when the provider owns it."""
+        models: list[Optional[str]] = []
+        for i, name in enumerate(order):
+            wanted = policy.model if i == 0 else policy.fallback_model
+            owner = self._owner_of(wanted)
+            models.append(wanted if wanted and owner in (None, name) else None)
+        return models
+
+    def _apply_policy_models(
+        self, policy: Policy, order: list[str], eligible: list[str]
+    ) -> list[str]:
+        """Put the providers owning the policy's model / fallback_model first
+        and second (a provider may repeat to retry with its fallback model)."""
+        order = list(order)
+        free = policy.strategy not in ("explicit", "fallback")
+        if free and policy.model:
+            o = self._owner_of(policy.model)
+            if o in eligible:
+                order = [o] + [n for n in order if n != o]
+        if policy.fallback_model and self.config.enable_failover and order:
+            o = self._owner_of(policy.fallback_model)
+            if o in eligible and (o == order[0] or free):
+                rest = [n for n in order[1:] if n != o]
+                order = [order[0], o] + rest
+        return order
 
     # ------------------------------------------------------------------ #
     # Declarative policies
@@ -964,7 +1104,7 @@ class Router:
         return policy
 
     def _plan_with_policy(
-        self, request: CompletionRequest, policy: Policy
+        self, request: CompletionRequest, policy: Policy, advance: bool = False
     ) -> tuple[list[str], list[dict]]:
         """Ordered providers to try under *policy*, plus a per-provider trace.
 
@@ -979,12 +1119,9 @@ class Router:
             reason = policy.permits(name)
             if (
                 reason is None
-                and policy.fallback_chain
-                and policy.strategy
-                in (
-                    "fallback",
-                    "explicit",
-                )
+                and policy.strategy in ("fallback", "explicit")
+                # An explicit policy without a chain pins its one provider.
+                and (policy.fallback_chain or policy.strategy == "explicit")
             ):
                 if name != policy.provider and name not in policy.fallback_chain:
                     reason = "not in policy fallback chain"
@@ -1022,6 +1159,10 @@ class Router:
         else:
             order = ranked
 
+        if advance and policy.strategy == "round_robin":
+            self._policy_rr[policy.name] = self._policy_rr.get(policy.name, 0) + 1
+        if request.model is None:
+            order = self._apply_policy_models(policy, order, eligible)
         if request.model is not None or not self.config.enable_failover:
             order = order[:1]
         for pos, name in enumerate(order, 1):
@@ -1044,7 +1185,8 @@ class Router:
         if strategy == "fallback":
             return [n for n in policy.fallback_chain if n in eligible]
         if strategy == "round_robin":
-            return list(eligible)
+            k = self._policy_rr.get(policy.name, 0) % len(eligible)
+            return eligible[k:] + eligible[:k]
         if strategy == "fastest":
             lat = {n: self._p50_latency(n) or 500.0 for n in eligible}
             for n in eligible:
@@ -1172,6 +1314,7 @@ class Router:
         attempts_partner: int,
         delay: float,
         skip: set[str],
+        partner_request: Optional[CompletionRequest] = None,
     ) -> tuple[str, CompletionResponse]:
         """Call *primary*; if it is still running after *delay* seconds, also
         call *partner* and return whichever succeeds first, cancelling the
@@ -1189,7 +1332,9 @@ class Router:
             return primary, await t1
 
         t2 = asyncio.ensure_future(
-            self._call_provider(partner, request, deadline, attempts_partner)
+            self._call_provider(
+                partner, partner_request or request, deadline, attempts_partner
+            )
         )
         skip.add(partner)
         self.hedge_count += 1
@@ -1264,7 +1409,9 @@ class Router:
         for name in available:
             p = self.providers[name]
             cost = p.estimate_cost(
-                estimated, estimated, request.model or p.default_model
+                estimated,
+                self._estimate_output_tokens(request, estimated),
+                request.model or p.default_model,
             )
             if cost < best_cost:
                 best_cost = cost
@@ -1325,7 +1472,9 @@ class Router:
         for name in available:
             p = self.providers[name]
             raw_costs[name] = p.estimate_cost(
-                estimated, estimated, request.model or p.default_model
+                estimated,
+                self._estimate_output_tokens(request, estimated),
+                request.model or p.default_model,
             )
             history = self.provider_stats[name]["latency_ms_history"]
             raw_latencies[name] = (
@@ -1448,6 +1597,11 @@ class Router:
             "temperature": request.temperature,
             "max_tokens": request.max_tokens,
         }
+
+    @staticmethod
+    def _estimate_output_tokens(request: CompletionRequest, fallback: int) -> int:
+        """Output size for cost ranking: the requested limit when set."""
+        return request.max_tokens if request.max_tokens else fallback
 
     def _estimate_tokens(self, request: CompletionRequest) -> int:
         total_chars = sum(len(m.content) for m in request.messages)

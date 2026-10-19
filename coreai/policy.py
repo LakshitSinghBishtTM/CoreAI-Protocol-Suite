@@ -93,6 +93,7 @@ class Policy:
             "fallback_chain": list(self.fallback_chain),
             "provider": self.provider,
             "model": self.model,
+            "fallback_model": self.fallback_model,
             "allow": sorted(self.allow) if self.allow is not None else None,
             "deny": sorted(self.deny),
         }

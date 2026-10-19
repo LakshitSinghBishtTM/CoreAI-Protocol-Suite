@@ -178,7 +178,7 @@ class TrainingJob:
 
     @property
     def duration_s(self) -> Optional[float]:
-        if self.started_at and self.finished_at:
+        if self.started_at is not None and self.finished_at is not None:
             return round(self.finished_at - self.started_at, 1)
         return None
 
@@ -339,7 +339,22 @@ class TrainingManager:
             raise TrainingError(f"Job {job_id} has no provider job ID")
 
         raw = await provider_client.get_fine_tune(job.provider_job_id)
+        previous = job.status
         job.status = TrainingStatus(raw.get("status", "queued"))
+        if job.started_at is None and (
+            job.status == TrainingStatus.RUNNING
+            or (
+                job.status
+                in (
+                    TrainingStatus.SUCCEEDED,
+                    TrainingStatus.FAILED,
+                )
+                and previous != TrainingStatus.QUEUED
+            )
+        ):
+            # First time we see it running: prefer the provider's own timestamp.
+            ts = raw.get("started_at") or raw.get("started")
+            job.started_at = float(ts) if isinstance(ts, (int, float)) else time.time()
         job.trained_tokens = raw.get("trained_tokens", 0)
         job.fine_tuned_model = raw.get("fine_tuned_model")
 

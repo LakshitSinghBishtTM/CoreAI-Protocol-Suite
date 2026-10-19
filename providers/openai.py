@@ -15,7 +15,7 @@ from loguru import logger
 # submodule (providers.openai) which shares the same short name.
 AsyncOpenAI = importlib.import_module("openai").AsyncOpenAI
 
-from .base import SDK_TIMEOUT_S, BaseProvider, CompletionRequest, CompletionResponse, split_system
+from .base import SDK_TIMEOUT_S, BaseProvider, CompletionRequest, CompletionResponse, normalize_finish_reason, split_system
 
 # tiktoken.encoding_for_model() downloads its BPE rank file over the network
 # on first use if it isn't already cached locally. In offline/sandboxed/
@@ -33,6 +33,16 @@ class OpenAIProvider(BaseProvider):
         super().__init__(api_key)
         self.client = AsyncOpenAI(api_key=api_key, timeout=SDK_TIMEOUT_S, max_retries=0)
 
+    @staticmethod
+    def _is_reasoning_model(model: str) -> bool:
+        """o-series models reject ``max_tokens`` and a custom temperature."""
+        return model.startswith(("o1", "o3", "o4"))
+
+    def _sampling_kwargs(self, model: str, request: CompletionRequest) -> dict:
+        if self._is_reasoning_model(model):
+            return {"max_completion_tokens": request.max_tokens}
+        return {"max_tokens": request.max_tokens, "temperature": request.temperature}
+
     async def complete(self, request: CompletionRequest) -> CompletionResponse:
         model = request.model or self.default_model
         messages = self._build_messages(request)
@@ -42,8 +52,7 @@ class OpenAIProvider(BaseProvider):
             response = await self.client.chat.completions.create(
                 model=model,
                 messages=messages,
-                max_tokens=request.max_tokens,
-                temperature=request.temperature,
+                **self._sampling_kwargs(model, request),
             )
         except Exception as e:
             logger.error(f"[openai] completion failed: {e}")
@@ -63,6 +72,7 @@ class OpenAIProvider(BaseProvider):
             output_tokens=output_tokens,
             cost_usd=cost,
             latency_ms=latency_ms,
+            metadata={"finish_reason": normalize_finish_reason(response.choices[0].finish_reason)},
         )
         self._track(result)
         logger.debug(
@@ -79,8 +89,7 @@ class OpenAIProvider(BaseProvider):
             stream = await self.client.chat.completions.create(
                 model=model,
                 messages=messages,
-                max_tokens=request.max_tokens,
-                temperature=request.temperature,
+                **self._sampling_kwargs(model, request),
                 stream=True,
                 stream_options={"include_usage": True},
             )
@@ -94,6 +103,9 @@ class OpenAIProvider(BaseProvider):
                     )
                 if not chunk.choices:  # the final usage-only chunk has none
                     continue
+                fr = getattr(chunk.choices[0], "finish_reason", None)
+                if fr and request.stream_usage is not None:
+                    request.stream_usage.finish_reason = normalize_finish_reason(fr)
                 delta = chunk.choices[0].delta.content
                 if delta:
                     yield delta

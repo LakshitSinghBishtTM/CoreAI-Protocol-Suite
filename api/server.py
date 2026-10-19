@@ -44,6 +44,12 @@ async def lifespan(app: FastAPI):
     tracing.setup_tracing()  # no-op unless enabled; see coreai/tracing.py
     logger.info("Starting CoreAI Protocol Suite...")
 
+    # Database-backed API-key auth needs the engine initialised.
+    from database import db as _db
+
+    _db.init_db()
+    app_state["db"] = True
+
     providers = load_providers()
     if not providers:
         logger.error("No providers loaded! Check API keys in .env")
@@ -84,6 +90,9 @@ async def lifespan(app: FastAPI):
         await app_state["agent_manager"].shutdown_all()
     if app_state["kernel"]:
         await app_state["kernel"].stop()
+    if app_state.get("db"):
+        await _db.close_db()
+        app_state["db"] = False
     tracing.shutdown_tracing()  # flush queued spans
 
 
@@ -269,16 +278,6 @@ async def metrics(ctx: AuthContext = Depends(require_scope("admin"))):
         router.stats(), accepting=drain.accepting, in_flight=drain.in_flight
     )
     return PlainTextResponse(text, media_type=CONTENT_TYPE)
-
-
-@app.post("/v1/agents/{agent_id}/register")
-async def register_agent(
-    agent_id: str,
-    orchestrator: Orchestrator = Depends(get_orchestrator),
-):
-    """Register a new agent"""
-    orchestrator.register_agent(agent_id)
-    return {"agent_id": agent_id, "status": "registered"}
 
 
 if __name__ == "__main__":

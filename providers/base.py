@@ -36,6 +36,7 @@ class StreamUsage:
     cost_usd: float = 0.0
     provider: str = ""
     opened_model: str = ""  # model of the provider that opened the stream
+    finish_reason: Optional[str] = None  # normalised: stop | length | content_filter
 
     def report(self, input_tokens, output_tokens, model=None) -> None:
         i, o = _count(input_tokens), _count(output_tokens)
@@ -72,6 +73,41 @@ class CompletionResponse:
     latency_ms: float
     cached: bool = False
     metadata: dict = field(default_factory=dict)
+
+
+VALID_ROLES = ("system", "user", "assistant")
+
+
+def normalize_finish_reason(raw) -> Optional[str]:
+    """Map a provider's stop reason onto the OpenAI vocabulary."""
+    if raw is None:
+        return None
+    r = str(getattr(raw, "name", raw)).lower()
+    if r in ("length", "max_tokens", "max_output_tokens"):
+        return "length"
+    if r in ("content_filter", "safety", "refusal", "recitation", "blocklist"):
+        return "content_filter"
+    return "stop"
+
+
+def validate_conversation(messages: list) -> None:
+    """Reject malformed conversations instead of letting adapters silently
+    rewrite them: roles must be known, there must be a non-system message,
+    and the first and last non-system messages must be from the user."""
+    if not messages:
+        raise ValueError("messages must not be empty")
+    for m in messages:
+        if m.role not in VALID_ROLES:
+            raise ValueError(
+                f"Invalid message role '{m.role}'; expected one of {VALID_ROLES}"
+            )
+    rest = [m for m in messages if m.role != "system"]
+    if not rest:
+        raise ValueError("messages must contain at least one non-system message")
+    if rest[0].role != "user":
+        raise ValueError("The first non-system message must have role 'user'")
+    if rest[-1].role != "user":
+        raise ValueError("The last message must have role 'user'")
 
 
 def split_system(request: "CompletionRequest") -> tuple[Optional[str], list[Message]]:

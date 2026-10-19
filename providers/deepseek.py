@@ -15,7 +15,7 @@ from loguru import logger
 # providers.openai submodule which shares the same short name.
 AsyncOpenAI = importlib.import_module("openai").AsyncOpenAI
 
-from .base import SDK_TIMEOUT_S, BaseProvider, CompletionRequest, CompletionResponse, split_system
+from .base import SDK_TIMEOUT_S, BaseProvider, CompletionRequest, CompletionResponse, normalize_finish_reason, split_system
 
 DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
 
@@ -64,6 +64,7 @@ class DeepSeekProvider(BaseProvider):
             output_tokens=output_tokens,
             cost_usd=cost,
             latency_ms=latency_ms,
+            metadata={"finish_reason": normalize_finish_reason(response.choices[0].finish_reason)},
         )
         self._track(result)
         logger.debug(
@@ -95,6 +96,9 @@ class DeepSeekProvider(BaseProvider):
                     )
                 if not chunk.choices:  # the final usage-only chunk has none
                     continue
+                fr = getattr(chunk.choices[0], "finish_reason", None)
+                if fr and request.stream_usage is not None:
+                    request.stream_usage.finish_reason = normalize_finish_reason(fr)
                 delta = chunk.choices[0].delta.content
                 if delta:
                     yield delta

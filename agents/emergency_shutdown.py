@@ -89,12 +89,16 @@ class EmergencyShutdown:
         kernel: Any,
         db: Any,
         drain: Any = None,
+        task_runner: Any = None,
         exit_fn: Callable[[int], Any] = sys.exit,
     ):
         # drain: a coreai.drain.DrainController. When given, graceful and
         # immediate shutdown stop accepting requests and wait for in-flight
         # ones before tearing subsystems down.
         self.drain = drain
+        # task_runner: a coreai.TaskRunner. Its background tasks outlive HTTP
+        # requests, so they are cancelled and awaited before agents are torn down.
+        self.task_runner = task_runner
         # exit_fn is injectable so the kill switch can be tested.
         self._exit = exit_fn
         self.agent_manager = agent_manager
@@ -229,8 +233,17 @@ class EmergencyShutdown:
                 timeout,
             )
 
+    async def _stop_tasks(self) -> None:
+        if self.task_runner is None:
+            return
+        try:
+            await self.task_runner.shutdown()
+        except Exception as exc:
+            logger.error("Task runner shutdown error: %s", exc)
+
     async def _drain_and_flush(self) -> None:
         await self._wait_for_in_flight(self.GRACEFUL_TIMEOUT_S * 0.8)
+        await self._stop_tasks()
         await self.agent_manager.shutdown_all()
         await self.kernel.flush()
         await self._run_hooks()
@@ -238,6 +251,7 @@ class EmergencyShutdown:
 
     async def _stop_and_flush(self) -> None:
         await self._wait_for_in_flight(self.IMMEDIATE_TIMEOUT_S * 0.5)
+        await self._stop_tasks()
         await asyncio.gather(
             self.agent_manager.shutdown_all(),
             self.kernel.flush(),
@@ -246,6 +260,10 @@ class EmergencyShutdown:
         await self._close_db(flush=True)
 
     async def _kill_agents(self) -> None:
+        try:
+            await asyncio.wait_for(self._stop_tasks(), timeout=1)
+        except (asyncio.TimeoutError, Exception) as exc:
+            logger.error("Task kill error: %s", exc)
         try:
             await asyncio.wait_for(self.agent_manager.shutdown_all(), timeout=2)
         except (asyncio.TimeoutError, Exception) as exc:

@@ -175,6 +175,15 @@ async def _validate_api_key_against_db(raw_key: str) -> Optional[AuthContext]:
 
     if not record:
         return None
+    expires_at = getattr(record, "expires_at", None)
+    if expires_at is not None:
+        from datetime import datetime, timezone
+
+        now = datetime.now(timezone.utc)
+        if expires_at.tzinfo is None:
+            now = now.replace(tzinfo=None)
+        if expires_at <= now:
+            return None
     # Scopes: a per-key ``scopes`` column if the schema has one, else the
     # operator-set API_KEY_DEFAULT_SCOPES (comma separated). Both default to
     # nothing, so keys stay fail-closed until the operator grants scopes.
@@ -202,7 +211,11 @@ async def get_auth_context(
     x_api_key: Optional[str] = Header(default=None, alias="X-API-Key"),
 ) -> AuthContext:
     if x_api_key:
-        ctx = await _validate_api_key_against_db(x_api_key)
+        try:
+            ctx = await _validate_api_key_against_db(x_api_key)
+        except Exception as exc:  # DB unavailable: stay a 401, like Bearer keys
+            logger.warning("API-key lookup failed: %s", exc)
+            ctx = None
         if not ctx:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,

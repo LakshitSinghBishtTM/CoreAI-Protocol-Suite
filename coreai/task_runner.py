@@ -63,6 +63,7 @@ class TaskRunner:
             if record is None:
                 raise RuntimeError(f"Agent {agent_id} is no longer available")
             self.orch.start_task(task_id)
+
             def _progress(n: int, _t=task) -> None:
                 _t.iterations = n
 

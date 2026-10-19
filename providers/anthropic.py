@@ -5,6 +5,8 @@ import anthropic as sdk
 from loguru import logger
 
 from .base import (
+    normalize_finish_reason,
+    validate_conversation,
     SDK_TIMEOUT_S,
     BaseProvider,
     CompletionRequest,
@@ -69,6 +71,7 @@ class AnthropicProvider(BaseProvider):
             output_tokens=output_tokens,
             cost_usd=cost,
             latency_ms=latency_ms,
+            metadata={"finish_reason": normalize_finish_reason(getattr(response, "stop_reason", None))},
         )
         self._track(result)
         logger.debug(
@@ -98,6 +101,9 @@ class AnthropicProvider(BaseProvider):
                             final.usage.output_tokens,
                             final.model,
                         )
+                        request.stream_usage.finish_reason = normalize_finish_reason(
+                            getattr(final, "stop_reason", None)
+                        )
                     except Exception as exc:  # usage is best effort
                         logger.debug(f"[anthropic] no stream usage: {exc}")
         except Exception as e:
@@ -113,8 +119,8 @@ class AnthropicProvider(BaseProvider):
         rest = split_system(request)[1]
         messages = [{"role": m.role, "content": m.content} for m in rest]
 
-        # Anthropic requires first message to be from user
-        if not messages or messages[0]["role"] != "user":
-            messages.insert(0, {"role": "user", "content": "Hello"})
+        # Anthropic requires the first message to be from the user. Reject
+        # rather than inventing a prompt turn.
+        validate_conversation(request.messages)
 
         return messages

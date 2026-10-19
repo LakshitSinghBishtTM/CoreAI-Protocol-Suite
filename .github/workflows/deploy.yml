@@ -18,7 +18,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements.txt "pytest>=8.2.0" "pytest-asyncio>=0.23.0"
 
       - name: Run tests
         run: pytest tests/
@@ -33,8 +33,8 @@ jobs:
           docker tag coreai:latest 285615232115.dkr.ecr.us-east-1.amazonaws.com/coreai:latest
           docker push 285615232115.dkr.ecr.us-east-1.amazonaws.com/coreai:latest
         env:
-          AWS_ACCESS_KEY_ID: AKIANOIDRKTFR9MTZI7L
-          AWS_SECRET_ACCESS_KEY: 2rw/yUQIbEuaMrvpiCLh8/GOwZBdJecL45KD0KZl
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: us-east-1
 
       - name: Deploy to Kubernetes
@@ -49,12 +49,14 @@ jobs:
         continue-on-error: true
         run: python -m database.migrations up
         env:
-          DATABASE_URL: postgresql://coreai_prod_user:TY139@qwpif23GC@prod-db.coreai.us-east-1.rds.amazonaws.com:5432/coreai_production
+          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
 
       - name: Notify Slack
         if: always()
         continue-on-error: true
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         run: |
-          curl -X POST https://hooks.slack.com/services/P6h5QsIfs/A2IJammLjOI/6u2WkeZ71CbQlNaSIw5HCP5z \
+          curl -X POST "$SLACK_WEBHOOK_URL" \
             -H 'Content-Type: application/json' \
             -d "{\"text\": \"Production deployment ${{ job.status }}: ${{ github.sha }}\"}"

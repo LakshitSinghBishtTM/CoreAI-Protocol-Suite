@@ -107,6 +107,14 @@ class UsageLedger:
             raise UsageQueryError(f"group_by must be from {list(GROUP_BY)}: {bad}")
         if since is not None and until is not None and since >= until:
             raise UsageQueryError("since must be before until")
+        # Usage is stored in hourly buckets, so a bound inside an hour cannot be
+        # honoured exactly. Refuse it rather than silently include or drop usage.
+        for label, bound in (("since", since), ("until", until)):
+            if bound is not None and bound % BUCKETS["hour"] != 0:
+                raise UsageQueryError(
+                    f"{label} must be aligned to a whole hour (a multiple of 3600 "
+                    "seconds); usage is recorded in hourly buckets"
+                )
         size = BUCKETS[bucket]
         agg: dict[tuple, _Row] = {}
         for (hour, subj, prov, model), row in self._rows.items():

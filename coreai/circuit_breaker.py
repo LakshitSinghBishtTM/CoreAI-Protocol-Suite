@@ -76,13 +76,21 @@ class CircuitBreaker:
         return False
 
     def record_success(self) -> None:
-        if self._state is CircuitState.HALF_OPEN:
+        state = self.state
+        if state is CircuitState.OPEN:
+            # A late success from a call admitted before the circuit opened
+            # says nothing about recovery; only a half-open probe may close it.
+            return
+        if state is CircuitState.HALF_OPEN:
             self._probes_in_flight = max(0, self._probes_in_flight - 1)
         self._state = CircuitState.CLOSED
         self._failures = 0
 
     def record_failure(self) -> None:
-        if self._state is CircuitState.HALF_OPEN:
+        state = self.state
+        if state is CircuitState.OPEN:
+            return  # already open; late failures must not extend the window
+        if state is CircuitState.HALF_OPEN:
             self._probes_in_flight = max(0, self._probes_in_flight - 1)
             self._open()
             return

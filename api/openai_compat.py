@@ -64,6 +64,8 @@ class ChatRequest(BaseModel):
     n: Optional[int] = None
     response_format: Optional[dict[str, Any]] = None
     provider: Optional[str] = None
+    metadata: Optional[dict[str, Any]] = None
+    policy: Optional[str] = None
 
 
 class CompatError(Exception):
@@ -179,7 +181,16 @@ def _convert(body: ChatRequest):
         temperature=0.7 if body.temperature is None else body.temperature,
         system_prompt="\n\n".join(system) or None,
         stream=body.stream,
+        metadata=_policy_metadata(body),
     )
+
+
+def _policy_metadata(body) -> dict:
+    """Named routing policy from ``metadata.policy`` (or a top-level
+    ``policy`` field), so OpenAI-compatible clients can pick one."""
+    raw = body.metadata if isinstance(getattr(body, "metadata", None), dict) else {}
+    name = raw.get("policy") or getattr(body, "policy", None)
+    return {"policy": name} if isinstance(name, str) and name else {}
 
 
 def _chunk(cid, created, model, delta, finish=None, usage=None) -> str:
@@ -235,7 +246,7 @@ async def chat_completions(
                         {
                             "index": 0,
                             "message": {"role": "assistant", "content": resp.content},
-                            "finish_reason": "stop",
+                            "finish_reason": (resp.metadata or {}).get("finish_reason") or "stop",
                         }
                     ],
                     "usage": {
@@ -296,7 +307,11 @@ async def chat_completions(
             await stream.aclose()
             routes._budget_record_stream(ctx, preq.stream_usage)
         if ok:
-            yield _chunk(cid, created, model_name, {}, finish="stop")
+            u0 = preq.stream_usage
+            yield _chunk(
+                cid, created, model_name, {},
+                finish=(u0.finish_reason if u0 is not None else None) or "stop",
+            )
             u = preq.stream_usage
             if include_usage and u is not None:
                 yield _chunk(

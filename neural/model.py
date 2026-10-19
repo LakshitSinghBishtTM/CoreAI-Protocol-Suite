@@ -70,7 +70,9 @@ class ModelProfile:
     modalities: list[Modality] = field(default_factory=lambda: [Modality.TEXT])
     pricing: Optional[TokenPricing] = None
     supports_streaming: bool = True
-    supports_function_calling: bool = True
+    # The gateway does not execute tool calls (Kernel.complete drops them and
+    # the OpenAI-compatible API rejects them), so don't advertise it.
+    supports_function_calling: bool = False
     supports_system_prompt: bool = True
     knowledge_cutoff: Optional[str] = None
     deprecated: bool = False
@@ -232,13 +234,43 @@ MODEL_CATALOGUE: dict[str, ModelProfile] = {
         knowledge_cutoff="2024-07",
         notes="Chain-of-thought reasoning — slower but higher accuracy on complex tasks",
     ),
+    "claude-haiku-4-5": ModelProfile(
+        model_id="claude-haiku-4-5",
+        provider="anthropic",
+        family=ModelFamily.CLAUDE,
+        tier=ModelTier.ECONOMY,
+        context_window=200_000,
+        max_output_tokens=64_000,
+        modalities=[Modality.TEXT, Modality.VISION, Modality.CODE],
+        pricing=TokenPricing(1.00, 5.00),
+    ),
+    "gemini-2.0-flash": ModelProfile(
+        model_id="gemini-2.0-flash",
+        provider="gemini",
+        family=ModelFamily.GEMINI,
+        tier=ModelTier.ECONOMY,
+        context_window=1_048_576,
+        max_output_tokens=8_192,
+        modalities=[Modality.TEXT, Modality.VISION, Modality.AUDIO, Modality.CODE],
+        pricing=TokenPricing(0.10, 0.40),
+    ),
+    "grok-3-mini": ModelProfile(
+        model_id="grok-3-mini",
+        provider="grok",
+        family=ModelFamily.GROK,
+        tier=ModelTier.BALANCED,
+        context_window=131_072,
+        max_output_tokens=8_192,
+        modalities=[Modality.TEXT, Modality.CODE],
+        pricing=TokenPricing(0.30, 0.50),
+    ),
 }
 
 DEFAULT_MODELS: dict[str, str] = {
     "openai": "gpt-4o-mini",
-    "anthropic": "claude-3-5-sonnet-20241022",
-    "gemini": "gemini-1.5-flash",
-    "grok": "grok-2-mini",
+    "anthropic": "claude-haiku-4-5",
+    "gemini": "gemini-2.0-flash",
+    "grok": "grok-3-mini",
     "deepseek": "deepseek-chat",
 }
 

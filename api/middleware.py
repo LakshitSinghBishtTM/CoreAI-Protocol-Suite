@@ -55,7 +55,9 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         """Return a rate-limit key: prefer API key header, fall back to IP."""
         api_key = request.headers.get("X-API-Key")
         if api_key:
-            return f"key:{api_key[:16]}"  # prefix only — don't log full key
+            # Hash the whole key: a prefix would make keys sharing one throttle
+            # each other. The digest also keeps the key itself out of logs.
+            return f"key:{hashlib.sha256(api_key.encode()).hexdigest()[:16]}"
         auth = request.headers.get("Authorization") or ""
         if auth.lower().startswith("bearer ") and auth[7:].strip():
             # Hash, not a prefix: every JWT starts with the same header bytes.
@@ -76,10 +78,11 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         # even when _windows was constructed as a plain dict rather than the
         # defaultdict(deque) __init__ normally sets up (e.g. tests that build
         # the middleware via __new__ and assign `_windows = {}` directly).
+        cutoff = now - 60.0
+        self._sweep(now, cutoff)
         window = self._windows.setdefault(client_key, deque())
 
         # Evict timestamps outside the 60-second window
-        cutoff = now - 60.0
         while window and window[0] <= cutoff:
             window.popleft()
 
@@ -90,6 +93,20 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         window.append(now)
         return True, 0.0
+
+    SWEEP_INTERVAL_S = 60.0
+    MAX_CLIENTS = 10_000
+
+    def _sweep(self, now: float, cutoff: float) -> None:
+        """Drop clients with no request in the window, so keys that never
+        return don't accumulate. Runs at most once a minute unless the table
+        is oversized."""
+        last = getattr(self, "_last_sweep", 0.0)
+        if now - last < self.SWEEP_INTERVAL_S and len(self._windows) <= self.MAX_CLIENTS:
+            return
+        self._last_sweep = now
+        for key in [k for k, w in self._windows.items() if not w or w[-1] <= cutoff]:
+            del self._windows[key]
 
     def _remaining(self, client_key: str) -> int:
         """Return remaining requests allowed in the current window."""
