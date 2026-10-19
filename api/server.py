@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 from loguru import logger
 
 from agents.agent_manager import init_agent_manager
+from coreai.task_runner import TaskRunner
 from api import openai_compat, routes
 from api.auth import AuthContext, require_scope
 from api.middleware import RateLimitMiddleware
@@ -29,6 +30,7 @@ app_state = {
     "orchestrator": None,
     "kernel": None,
     "agent_manager": None,
+    "task_runner": None,
     "budgets": None,
     "audit": None,
 }
@@ -68,6 +70,7 @@ async def lifespan(app: FastAPI):
     agent_manager = init_agent_manager(kernel, kernel.memory)
     await agent_manager.start_health_monitor()
     app_state["agent_manager"] = agent_manager
+    app_state["task_runner"] = TaskRunner(app_state["orchestrator"], agent_manager)
 
     logger.info("CoreAI server ready")
 
@@ -75,6 +78,8 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     logger.info("Shutting down CoreAI...")
+    if app_state.get("task_runner"):
+        await app_state["task_runner"].shutdown()
     if app_state["agent_manager"]:
         await app_state["agent_manager"].shutdown_all()
     if app_state["kernel"]:

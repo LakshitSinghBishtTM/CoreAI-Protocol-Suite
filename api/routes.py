@@ -423,9 +423,17 @@ async def create_task(
     request: TaskRequest,
     ctx: AuthContext = Depends(require_scope("tasks:write")),
 ):
+    from agents.agent_manager import get_agent_manager
     from api.server import get_orchestrator as _get_orch
+    from coreai.task_runner import get_task_runner
 
     orch = _get_orch()
+    manager = get_agent_manager()
+    runner = get_task_runner()
+    if request.agent_id not in manager.agents:
+        raise HTTPException(status_code=404, detail="Agent not found")
+    if request.agent_id not in orch.agents:  # created before the link existed
+        orch.register_agent(request.agent_id)
     try:
         task = orch.assign_task(
             request.agent_id,
@@ -438,6 +446,8 @@ async def create_task(
     except Exception as exc:
         logger.error("Task creation error: %s", exc)
         raise HTTPException(status_code=400, detail=str(exc))
+    if runner is not None:
+        runner.submit(task.task_id)
 
     return TaskResponse(
         task_id=task.task_id,
@@ -489,9 +499,10 @@ async def cancel_task(
     task_id: str = Path(...),
     ctx: AuthContext = Depends(require_scope("tasks:write")),
 ):
-    from api.server import get_orchestrator as _get_orch
+    from coreai.task_runner import get_task_runner
 
-    cancelled = _get_orch().cancel_task(task_id)
+    runner = get_task_runner()
+    cancelled = runner.cancel(task_id) if runner else False
     if not cancelled:
         raise HTTPException(
             status_code=404, detail="Task not found or already completed"
@@ -521,6 +532,11 @@ async def register_agent(
         capabilities=request.capabilities,
         config=request.config,
     )
+    from api.server import get_orchestrator as _get_orch
+
+    _get_orch().register_agent(
+        agent_id, {"name": request.name, "capabilities": request.capabilities}
+    )
     return {"agent_id": agent_id, "status": "registered"}
 
 
@@ -549,7 +565,12 @@ async def terminate_agent(
 ):
     from agents.agent_manager import get_agent_manager
 
+    from coreai.task_runner import get_task_runner
+
     await get_agent_manager().terminate_agent(agent_id, reason=f"api:{ctx.subject}")
+    runner = get_task_runner()
+    if runner is not None:
+        await runner.drop_agent(agent_id)
 
 
 # ------------------------------------------------------------------

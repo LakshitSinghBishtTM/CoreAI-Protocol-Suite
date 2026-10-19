@@ -384,6 +384,7 @@ class Router:
             messages_dict = [
                 {"role": m.role, "content": m.content} for m in request.messages
             ]
+            _t0 = time.monotonic()
             cached = await self.cache.get(
                 provider_name,
                 request.model or "*",
@@ -397,7 +398,13 @@ class Router:
                 # No upstream call was made: report zero spend, keep the
                 # original cost for reference, and flag the hit.
                 meta["original_cost_usd"] = hit.get("cost_usd", 0.0)
-                hit.update(cached=True, cost_usd=0.0, metadata=meta)
+                meta["original_latency_ms"] = hit.get("latency_ms", 0.0)
+                hit.update(
+                    cached=True,
+                    cost_usd=0.0,
+                    latency_ms=(time.monotonic() - _t0) * 1000,
+                    metadata=meta,
+                )
                 return CompletionResponse(**hit)
 
         failures: list[tuple[str, ErrorKind]] = []
@@ -658,6 +665,9 @@ class Router:
                 continue
 
             # Stream is open and the first chunk (if any) is in hand.
+            usage.opened_model = (
+                request.model or self.providers[name].default_model or ""
+            )
             try:
                 if first is not _END:
                     started = True

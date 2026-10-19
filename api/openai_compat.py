@@ -265,7 +265,13 @@ async def chat_completions(
     except HTTPException as exc:
         return _error_response(_from_http(exc))
 
-    model_name = body.model or "auto"
+    # The router has already picked a provider and model; report the real one.
+    usage = preq.stream_usage
+    model_name = (
+        (usage.opened_model if usage is not None and usage.opened_model else None)
+        or body.model
+        or "auto"
+    )
     include_usage = bool((body.stream_options or {}).get("include_usage"))
 
     async def _generate():

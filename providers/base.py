@@ -35,6 +35,7 @@ class StreamUsage:
     completed: bool = False  # the stream ended normally
     cost_usd: float = 0.0
     provider: str = ""
+    opened_model: str = ""  # model of the provider that opened the stream
 
     def report(self, input_tokens, output_tokens, model=None) -> None:
         i, o = _count(input_tokens), _count(output_tokens)

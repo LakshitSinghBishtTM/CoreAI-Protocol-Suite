@@ -5,6 +5,7 @@ Rate limiting middleware for CoreAI API.
 Tracks requests per client (API key or IP) in a sliding 60-second window.
 """
 
+import hashlib
 import time
 from collections import defaultdict, deque
 from typing import Tuple
@@ -55,6 +56,11 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         api_key = request.headers.get("X-API-Key")
         if api_key:
             return f"key:{api_key[:16]}"  # prefix only — don't log full key
+        auth = request.headers.get("Authorization") or ""
+        if auth.lower().startswith("bearer ") and auth[7:].strip():
+            # Hash, not a prefix: every JWT starts with the same header bytes.
+            digest = hashlib.sha256(auth[7:].strip().encode()).hexdigest()[:16]
+            return f"bearer:{digest}"
         return f"ip:{request.client.host}"
 
     def _check_rate_limit(self, client_key: str) -> Tuple[bool, float]:

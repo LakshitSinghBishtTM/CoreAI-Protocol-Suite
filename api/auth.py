@@ -175,7 +175,21 @@ async def _validate_api_key_against_db(raw_key: str) -> Optional[AuthContext]:
 
     if not record:
         return None
-    return AuthContext(subject=record.owner or record.id, scopes=[], is_api_key=True)
+    # Scopes: a per-key ``scopes`` column if the schema has one, else the
+    # operator-set API_KEY_DEFAULT_SCOPES (comma separated). Both default to
+    # nothing, so keys stay fail-closed until the operator grants scopes.
+    key_scopes = getattr(record, "scopes", None)
+    if isinstance(key_scopes, str):
+        key_scopes = [s.strip() for s in key_scopes.split(",") if s.strip()]
+    if not key_scopes:
+        key_scopes = [
+            s.strip()
+            for s in os.environ.get("API_KEY_DEFAULT_SCOPES", "").split(",")
+            if s.strip()
+        ]
+    return AuthContext(
+        subject=record.owner or record.id, scopes=list(key_scopes), is_api_key=True
+    )
 
 
 # ------------------------------------------------------------------
@@ -197,8 +211,20 @@ async def get_auth_context(
         return ctx
 
     if credentials:
-        payload = decode_token(credentials.credentials)
-        return AuthContext(subject=payload.sub, scopes=payload.scopes)
+        try:
+            payload = decode_token(credentials.credentials)
+            return AuthContext(subject=payload.sub, scopes=payload.scopes)
+        except HTTPException:
+            # Not a valid JWT: an opaque API key sent as a Bearer token (the
+            # OpenAI SDK's default) is accepted if it matches a stored key.
+            try:
+                ctx = await _validate_api_key_against_db(credentials.credentials)
+            except Exception as exc:  # DB unavailable: stay a 401, not a 500
+                logger.warning("API-key lookup failed: %s", exc)
+                ctx = None
+            if ctx:
+                return ctx
+            raise
 
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
