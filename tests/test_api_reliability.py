@@ -191,13 +191,26 @@ def test_unexpected_errors_are_500_without_internal_details(make_client, auth):
     assert "hunter2" not in r.text
 
 
+
+def _sse_text(body: str) -> str:
+    """Concatenate the content of SSE ``data:`` frames (ignores [DONE])."""
+    import json as _json
+
+    out = []
+    for frame in body.split("\n\n"):
+        for line in frame.splitlines():
+            if line.startswith("data: ") and line != "data: [DONE]":
+                out.append(_json.loads(line[6:]).get("content", ""))
+    return "".join(out)
+
+
 # ------------------------------------------------------------------ streaming
 
 
 def test_stream_success(make_client, auth):
     router = make_router({"a": make_stream_provider("a", chunks=("Hel", "lo"))})
     r = make_client(router).post("/v1/completions/stream", json=BODY, headers=auth)
-    assert r.status_code == 200 and r.text == "Hello"
+    assert r.status_code == 200 and _sse_text(r.text) == "Hello"
 
 
 def test_stream_that_cannot_open_is_an_http_error_not_a_200(make_client, auth):
@@ -218,7 +231,7 @@ def test_stream_fails_over_before_first_chunk(make_client, auth):
         max_retry_attempts=1,
     )
     r = make_client(router).post("/v1/completions/stream", json=BODY, headers=auth)
-    assert r.status_code == 200 and r.text == "from-b"
+    assert r.status_code == 200 and _sse_text(r.text) == "from-b"
 
 
 def test_mid_stream_failure_is_marked_without_leaking_the_message(make_client, auth):
@@ -229,8 +242,8 @@ def test_mid_stream_failure_is_marked_without_leaking_the_message(make_client, a
     )
     r = make_client(router).post("/v1/completions/stream", json=BODY, headers=auth)
     assert r.status_code == 200  # headers were already sent with the first chunk
-    assert r.text.startswith("par")
-    assert r.text.endswith("[stream_error] server_error")
+    assert _sse_text(r.text) == "par"
+    assert "event: error" in r.text and '"server_error"' in r.text
     assert "/srv/secret" not in r.text
 
 

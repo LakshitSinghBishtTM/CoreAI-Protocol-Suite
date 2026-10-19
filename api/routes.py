@@ -7,6 +7,7 @@ Completions, streaming, agent tasks, provider management, and admin.
 Contact: api@coreai.com
 """
 
+import json
 import logging
 import math
 from typing import Any, Dict, List, Optional
@@ -257,6 +258,9 @@ async def completions(
     from providers import CompletionRequest as PCR
     from providers import Message as PM
 
+    if request.stream:
+        return await completions_stream(request, ctx)
+
     _budget_check(ctx, request.model)
     _router = _get_router()
     messages = [PM(role=m.role, content=m.content) for m in request.messages]
@@ -297,6 +301,7 @@ async def completions(
         output_tokens=resp.output_tokens,
         cost_usd=resp.cost_usd,
         latency_ms=resp.latency_ms,
+        cached=resp.cached,
     )
 
 
@@ -335,6 +340,11 @@ async def explain_routing(
         )
     except Exception as exc:
         raise _http_error(exc)
+
+
+def _sse(data: dict) -> str:
+    """One Server-Sent Event frame."""
+    return f"data: {json.dumps(data)}\n\n"
 
 
 @router.post(
@@ -381,12 +391,13 @@ async def completions_stream(
     async def _generate():
         try:
             if first is not None:
-                yield first
+                yield _sse({"content": first})
                 async for chunk in stream:
-                    yield chunk
+                    yield _sse({"content": chunk})
+            yield "data: [DONE]\n\n"
         except Exception as exc:
             logger.error("Stream error for %s: %s", ctx.subject, exc)
-            yield f"[stream_error] {classify(exc).kind.value}"
+            yield "event: error\n" + _sse({"error": classify(exc).kind.value})
         finally:
             # Closing the stream lets the router settle it, even if the client
             # left early, so usage is read afterwards.
@@ -420,6 +431,7 @@ async def create_task(
             request.agent_id,
             request.objective,
             request.context,
+            priority=request.priority,
         )
         task.max_iterations = request.max_iterations
         orch.task_store.update(task)

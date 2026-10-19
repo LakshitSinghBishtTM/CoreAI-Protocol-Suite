@@ -9,7 +9,13 @@ from google import genai
 from google.genai import types
 from loguru import logger
 
-from .base import SDK_TIMEOUT_S, BaseProvider, CompletionRequest, CompletionResponse
+from .base import (
+    SDK_TIMEOUT_S,
+    BaseProvider,
+    CompletionRequest,
+    CompletionResponse,
+    split_system,
+)
 
 
 class GeminiProvider(BaseProvider):
@@ -27,7 +33,7 @@ class GeminiProvider(BaseProvider):
         return types.GenerateContentConfig(
             max_output_tokens=request.max_tokens,
             temperature=request.temperature,
-            system_instruction=request.system_prompt or None,
+            system_instruction=split_system(request)[0],
         )
 
     async def complete(self, request: CompletionRequest) -> CompletionResponse:
@@ -99,7 +105,7 @@ class GeminiProvider(BaseProvider):
         # Gemini uses history + last message separately
         # roles are "user" and "model" (not "assistant")
         history = []
-        messages = [m for m in request.messages if m.role != "system"]
+        messages = split_system(request)[1]
 
         for msg in messages[:-1]:
             role = "model" if msg.role == "assistant" else "user"

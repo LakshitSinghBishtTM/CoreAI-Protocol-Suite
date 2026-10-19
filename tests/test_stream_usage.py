@@ -318,13 +318,26 @@ def api(monkeypatch):
         pt.stop()
 
 
+
+def _sse_text(body: str) -> str:
+    """Concatenate the content of SSE ``data:`` frames (ignores [DONE])."""
+    import json as _json
+
+    out = []
+    for frame in body.split("\n\n"):
+        for line in frame.splitlines():
+            if line.startswith("data: ") and line != "data: [DONE]":
+                out.append(_json.loads(line[6:]).get("content", ""))
+    return "".join(out)
+
+
 BODY = {"messages": [{"role": "user", "content": "hi"}]}
 
 
 def test_stream_cost_and_tokens_count_toward_the_budget(api):
     client, budgets = api
     r = client.post("/v1/completions/stream", json=BODY)
-    assert r.status_code == 200 and r.text == "abcd"
+    assert r.status_code == 200 and _sse_text(r.text) == "abcd"
     used = budgets.status("user:s")["used"]
     assert used["requests"] == 1  # counted once, not twice
     assert used["cost_usd"] == pytest.approx(0.3)

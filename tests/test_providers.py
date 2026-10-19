@@ -7,6 +7,7 @@ GeminiProvider, GrokProvider, DeepSeekProvider, and load_providers().
 All external SDK calls are mocked — no real API calls are made.
 """
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -177,7 +178,7 @@ class TestAnthropicProvider:
     @pytest.mark.asyncio
     async def test_complete_returns_response(self, provider):
         mock_resp = MagicMock()
-        mock_resp.content[0].text = "Paris"
+        mock_resp.content = [SimpleNamespace(type="text", text="Paris")]
         mock_resp.usage.input_tokens = 15
         mock_resp.usage.output_tokens = 3
         provider.client.messages.create = AsyncMock(return_value=mock_resp)

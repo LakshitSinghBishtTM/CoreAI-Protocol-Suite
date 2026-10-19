@@ -4,7 +4,13 @@ from typing import AsyncGenerator
 import anthropic as sdk
 from loguru import logger
 
-from .base import SDK_TIMEOUT_S, BaseProvider, CompletionRequest, CompletionResponse
+from .base import (
+    SDK_TIMEOUT_S,
+    BaseProvider,
+    CompletionRequest,
+    CompletionResponse,
+    split_system,
+)
 
 
 # NOTE: ``request.temperature`` is intentionally not forwarded. The current
@@ -25,6 +31,7 @@ class AnthropicProvider(BaseProvider):
 
     async def complete(self, request: CompletionRequest) -> CompletionResponse:
         model = request.model or self.default_model
+        system = split_system(request)[0]
         messages = self._build_messages(request)
 
         start = time.monotonic()
@@ -32,7 +39,7 @@ class AnthropicProvider(BaseProvider):
             response = await self.client.messages.create(
                 model=model,
                 max_tokens=request.max_tokens,
-                system=request.system_prompt or sdk.NOT_GIVEN,
+                system=system or sdk.NOT_GIVEN,
                 messages=messages,
             )
         except Exception as e:
@@ -43,7 +50,16 @@ class AnthropicProvider(BaseProvider):
         input_tokens = response.usage.input_tokens
         output_tokens = response.usage.output_tokens
         cost = self._bill(input_tokens, output_tokens, model)
-        content = response.content[0].text
+        content = "".join(
+            b.text
+            for b in (response.content or [])
+            if isinstance(getattr(b, "text", None), str)
+        )
+        if not content:
+            raise ValueError(
+                f"[anthropic] response had no text content "
+                f"(stop_reason={getattr(response, 'stop_reason', None)})"
+            )
 
         result = CompletionResponse(
             content=content,
@@ -62,13 +78,14 @@ class AnthropicProvider(BaseProvider):
 
     async def stream(self, request: CompletionRequest) -> AsyncGenerator[str, None]:
         model = request.model or self.default_model
+        system = split_system(request)[0]
         messages = self._build_messages(request)
 
         try:
             async with self.client.messages.stream(
                 model=model,
                 max_tokens=request.max_tokens,
-                system=request.system_prompt or sdk.NOT_GIVEN,
+                system=system or sdk.NOT_GIVEN,
                 messages=messages,
             ) as stream:
                 async for text in stream.text_stream:
@@ -92,12 +109,9 @@ class AnthropicProvider(BaseProvider):
         return len(text) // 4
 
     def _build_messages(self, request: CompletionRequest) -> list[dict]:
-        messages = []
-        for msg in request.messages:
-            # Anthropic doesn't allow system role in messages array
-            if msg.role == "system":
-                continue
-            messages.append({"role": msg.role, "content": msg.content})
+        # System text is sent via ``system=`` (see split_system); none in messages.
+        rest = split_system(request)[1]
+        messages = [{"role": m.role, "content": m.content} for m in rest]
 
         # Anthropic requires first message to be from user
         if not messages or messages[0]["role"] != "user":

@@ -32,6 +32,7 @@ class AgentTask:
     completed_at: Optional[datetime] = None
     iterations: int = 0
     max_iterations: int = 10
+    priority: int = 2  # 0-3, higher runs first
     metadata: dict = field(default_factory=dict)
 
     def to_dict(self) -> dict:
@@ -76,11 +77,14 @@ class TaskStore:
             old_id, _ = self._finished.popitem(last=False)
             self.tasks.pop(old_id, None)
 
-    def create(self, agent_id: str, objective: str, context: dict = None) -> AgentTask:
+    def create(
+        self, agent_id: str, objective: str, context: dict = None, priority: int = 2
+    ) -> AgentTask:
         task = AgentTask(
             agent_id=agent_id,
             objective=objective,
             context=context or {},
+            priority=priority,
         )
         self.tasks[task.task_id] = task
         logger.info(f"Created task {task.task_id} for agent {agent_id}")
@@ -97,7 +101,8 @@ class TaskStore:
         return [t for t in self.tasks.values() if t.agent_id == agent_id]
 
     def list_by_status(self, status: TaskStatus) -> list[AgentTask]:
-        return [t for t in self.tasks.values() if t.status == status]
+        tasks = [t for t in self.tasks.values() if t.status == status]
+        return sorted(tasks, key=lambda t: (-t.priority, t.created_at))
 
     def delete(self, task_id: str):
         self.tasks.pop(task_id, None)
@@ -135,13 +140,13 @@ class Orchestrator:
         logger.info(f"Unregistered agent {agent_id}")
 
     def assign_task(
-        self, agent_id: str, objective: str, context: dict = None
+        self, agent_id: str, objective: str, context: dict = None, priority: int = 2
     ) -> AgentTask:
-        """Assign a task to an agent"""
+        """Assign a task to an agent (priority 0-3, higher is more urgent)"""
         if agent_id not in self.agents:
             raise ValueError(f"Agent {agent_id} not registered")
 
-        task = self.task_store.create(agent_id, objective, context)
+        task = self.task_store.create(agent_id, objective, context, priority)
         self.active_tasks[task.task_id] = agent_id
         self.agents[agent_id]["total_tasks"] += 1
 

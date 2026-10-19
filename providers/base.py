@@ -73,6 +73,20 @@ class CompletionResponse:
     metadata: dict = field(default_factory=dict)
 
 
+def split_system(request: "CompletionRequest") -> tuple[Optional[str], list[Message]]:
+    """Merge ``system_prompt`` and system-role messages (in order) into one
+    system string; return it with the remaining non-system messages."""
+    parts = [request.system_prompt] if request.system_prompt else []
+    rest: list[Message] = []
+    for m in request.messages:
+        if m.role == "system":
+            if m.content:
+                parts.append(m.content)
+        else:
+            rest.append(m)
+    return ("\n\n".join(parts) or None), rest
+
+
 # Backstop timeout for the underlying HTTP client, in seconds. The router
 # enforces the real per-provider timeouts (coreai.router) and cancels slow
 # calls first; this only guarantees a hung connection is eventually closed.

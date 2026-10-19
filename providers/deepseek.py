@@ -15,7 +15,7 @@ from loguru import logger
 # providers.openai submodule which shares the same short name.
 AsyncOpenAI = importlib.import_module("openai").AsyncOpenAI
 
-from .base import SDK_TIMEOUT_S, BaseProvider, CompletionRequest, CompletionResponse
+from .base import SDK_TIMEOUT_S, BaseProvider, CompletionRequest, CompletionResponse, split_system
 
 DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
 
@@ -106,12 +106,7 @@ class DeepSeekProvider(BaseProvider):
         return max(1, len(text) // 4)
 
     def _build_messages(self, request: CompletionRequest) -> list[dict]:
-        messages = []
-        for msg in request.messages:
-            messages.append({"role": msg.role, "content": msg.content})
-
-        has_system = any(m["role"] == "system" for m in messages)
-        if request.system_prompt and not has_system:
-            messages.insert(0, {"role": "system", "content": request.system_prompt})
-
+        system, rest = split_system(request)
+        messages = [{"role": "system", "content": system}] if system else []
+        messages.extend({"role": m.role, "content": m.content} for m in rest)
         return messages

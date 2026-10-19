@@ -14,7 +14,7 @@ from loguru import logger
 # providers.openai submodule which shares the same short name.
 AsyncOpenAI = importlib.import_module("openai").AsyncOpenAI
 
-from .base import SDK_TIMEOUT_S, BaseProvider, CompletionRequest, CompletionResponse
+from .base import SDK_TIMEOUT_S, BaseProvider, CompletionRequest, CompletionResponse, split_system
 
 
 class GrokProvider(BaseProvider):
@@ -103,9 +103,7 @@ class GrokProvider(BaseProvider):
         return len(text) // 4
 
     def _build_messages(self, request: CompletionRequest) -> list[dict]:
-        messages = []
-        if request.system_prompt:
-            messages.append({"role": "system", "content": request.system_prompt})
-        for msg in request.messages:
-            messages.append({"role": msg.role, "content": msg.content})
+        system, rest = split_system(request)
+        messages = [{"role": "system", "content": system}] if system else []
+        messages.extend({"role": m.role, "content": m.content} for m in rest)
         return messages

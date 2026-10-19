@@ -139,16 +139,31 @@ class ResponseCache:
         self.hits = 0
         self.misses = 0
 
-    def _make_key(self, provider: str, model: str, messages: list[dict]) -> str:
-        """Create cache key from provider, model, and message content"""
-        msg_str = json.dumps(messages, sort_keys=True)
+    def _make_key(
+        self,
+        provider: str,
+        model: str,
+        messages: list[dict],
+        options: Optional[dict] = None,
+    ) -> str:
+        """Cache key from provider, model, messages and every other
+        answer-affecting option (system_prompt, temperature, max_tokens...)."""
+        msg_str = json.dumps(
+            {"messages": messages, "options": options or {}},
+            sort_keys=True,
+            default=str,
+        )
         msg_hash = hashlib.sha256(msg_str.encode()).hexdigest()
         return f"cache:{provider}:{model}:{msg_hash}"
 
     async def get(
-        self, provider: str, model: str, messages: list[dict]
+        self,
+        provider: str,
+        model: str,
+        messages: list[dict],
+        options: Optional[dict] = None,
     ) -> Optional[dict]:
-        key = self._make_key(provider, model, messages)
+        key = self._make_key(provider, model, messages, options)
         result = await self.backend.get(key)
         if result:
             self.hits += 1
@@ -164,13 +179,20 @@ class ResponseCache:
         messages: list[dict],
         response: dict,
         ttl_seconds: int = 3600,
+        options: Optional[dict] = None,
     ):
-        key = self._make_key(provider, model, messages)
+        key = self._make_key(provider, model, messages, options)
         await self.backend.set(key, response, ttl_seconds)
         logger.debug(f"Cache SET: {key}")
 
-    async def delete(self, provider: str, model: str, messages: list[dict]):
-        key = self._make_key(provider, model, messages)
+    async def delete(
+        self,
+        provider: str,
+        model: str,
+        messages: list[dict],
+        options: Optional[dict] = None,
+    ):
+        key = self._make_key(provider, model, messages, options)
         await self.backend.delete(key)
 
     async def clear(self):

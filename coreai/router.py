@@ -385,11 +385,20 @@ class Router:
                 {"role": m.role, "content": m.content} for m in request.messages
             ]
             cached = await self.cache.get(
-                provider_name, request.model or "*", messages_dict
+                provider_name,
+                request.model or "*",
+                messages_dict,
+                self._cache_options(request),
             )
             if cached:
                 logger.debug(f"Cache HIT for provider={provider_name}")
-                return CompletionResponse(**cached)
+                hit = dict(cached)
+                meta = dict(hit.get("metadata") or {})
+                # No upstream call was made: report zero spend, keep the
+                # original cost for reference, and flag the hit.
+                meta["original_cost_usd"] = hit.get("cost_usd", 0.0)
+                hit.update(cached=True, cost_usd=0.0, metadata=meta)
+                return CompletionResponse(**hit)
 
         failures: list[tuple[str, ErrorKind]] = []
         last_exc: Optional[Exception] = None
@@ -891,6 +900,7 @@ class Router:
                 messages_dict,
                 dict(response.__dict__),
                 ttl_seconds=self.config.cache_ttl_seconds,
+                options=self._cache_options(request),
             )
 
     def _candidates(
@@ -1410,8 +1420,17 @@ class Router:
         except Exception:
             logger.exception(f"[{name}] could not settle stream usage")
 
+    @staticmethod
+    def _cache_options(request: CompletionRequest) -> dict:
+        return {
+            "system_prompt": request.system_prompt,
+            "temperature": request.temperature,
+            "max_tokens": request.max_tokens,
+        }
+
     def _estimate_tokens(self, request: CompletionRequest) -> int:
         total_chars = sum(len(m.content) for m in request.messages)
+        total_chars += len(request.system_prompt or "")
         return max(100, total_chars // 4)
 
     def _model_entry(self, name: str, model: str) -> dict:

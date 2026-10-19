@@ -166,7 +166,9 @@ async def test_failed_over_response_is_cached_under_the_serving_provider():
     b = make_provider("b")
     router = make_router({"a": a, "b": b}, enable_cache=True, max_retry_attempts=1)
     await router.route(request())
-    cached = await router.cache.get("b", "*", [{"role": "user", "content": "hello"}])
+    cached = await router.cache.get(
+        "b", "*", [{"role": "user", "content": "hello"}], router._cache_options(request())
+    )
     assert cached is not None
     assert "failed_over_from" not in cached["metadata"]  # cache copy is unaffected
 
