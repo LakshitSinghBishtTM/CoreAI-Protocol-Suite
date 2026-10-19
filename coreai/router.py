@@ -9,14 +9,14 @@ from loguru import logger
 
 from coreai import tracing
 from coreai.pricing import get_pricing
-from neural.model import get_registry
+from neural.model import Modality, get_registry
 from providers import (
     BaseProvider,
     CompletionRequest,
     CompletionResponse,
     StreamUsage,
 )
-from providers.base import validate_conversation
+from providers.base import request_images, validate_conversation
 
 from .budgets import BudgetExceeded
 from .cache import ResponseCache
@@ -47,6 +47,9 @@ _LATENCY_WEIGHT = 0.30
 # Upper bounds (ms) of latency histogram buckets; one more bucket holds +Inf.
 LATENCY_BUCKETS_MS = (50, 100, 250, 500, 1000, 2500, 5000, 10000, 30000)
 _MAX_MODELS_PER_PROVIDER = 50
+# Rough size of one image in prompt characters (about 1000 tokens), for the
+# context-window check and cost ranking.
+_IMAGE_CHARS = 4000
 _LATENCY_HISTORY_SIZE = 20
 
 # Minimum samples required before a provider competes on latency.
@@ -1106,6 +1109,9 @@ class Router:
     def _model_problem(self, req: CompletionRequest, name: str) -> Optional[str]:
         """Why the catalogued model can't serve *req*, or None. Unknown
         models are not blocked: the catalogue may lag behind new releases."""
+        images = request_images(req)
+        if images and not getattr(self.providers[name], "supports_vision", False):
+            return f"Provider '{name}' does not accept image input."
         if req.tools:
             if req.stream:
                 return "Tool calling is not supported with streaming yet."
@@ -1114,6 +1120,8 @@ class Router:
         profile = self._resolve_model_profile(name, req.model)
         if profile is None:
             return None
+        if images and Modality.VISION not in profile.modalities:
+            return f"{profile.model_id} does not accept image input."
         if req.tools and not profile.supports_function_calling:
             return f"{profile.model_id} does not support tool calling."
         estimated_input = self._estimate_tokens(req)
@@ -1686,6 +1694,7 @@ class Router:
     def _estimate_tokens(self, request: CompletionRequest) -> int:
         total_chars = sum(len(m.content) for m in request.messages)
         total_chars += len(request.system_prompt or "")
+        total_chars += _IMAGE_CHARS * len(request_images(request))
         return max(100, total_chars // 4)
 
     def _model_entry(self, name: str, model: str) -> dict:

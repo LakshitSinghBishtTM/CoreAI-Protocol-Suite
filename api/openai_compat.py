@@ -9,8 +9,9 @@ Supported: text messages (system, developer, user, assistant), ``model``,
 Tool calling (``tools``, ``tool_choice``, assistant ``tool_calls`` and
 ``tool`` messages) and ``response_format`` (``json_object``, ``json_schema``)
 work without streaming; the gateway returns tool calls and never runs them.
-Anything else that would change the answer (``stop``, ``n`` above 1, image
-parts, tools with ``stream=true``) is refused with a 400 rather than silently
+Image inputs (``image_url`` parts on user messages, http(s) or base64 data URLs)
+are accepted for models that take images. Anything else that would change the
+answer (``stop``, ``n`` above 1, audio parts, tools with ``stream=true``) is refused with a 400 rather than silently
 dropped. Extension field: ``provider`` pins a provider.
 
 Errors use OpenAI's envelope: ``{"error": {"message", "type", "code", "param"}}``.
@@ -197,6 +198,42 @@ def _check_response_format(rf: Optional[dict]) -> None:
     )  # fmt: skip
 
 
+MAX_IMAGE_BYTES = 20_000_000  # base64 characters of inline images per request
+
+
+def _image(obj: Any, index: int) -> dict:
+    from providers.base import IMAGE_TYPES, parse_data_url
+
+    param = f"messages[{index}].content"
+    url = obj.get("url") if isinstance(obj, dict) else obj
+    if not isinstance(url, str) or not url:
+        raise _bad("image_url.url must be a string.", param)
+    if url.startswith("data:"):
+        img = parse_data_url(url)
+        if img is None or img["media_type"] not in IMAGE_TYPES:
+            raise _bad(
+                f"Images must be base64 data URLs of type {', '.join(IMAGE_TYPES)}.",
+                param,
+            )
+        return img
+    if url.startswith(("http://", "https://")):
+        return {"url": url}
+    raise _bad("image_url.url must be an http(s) or data URL.", param)
+
+
+def _content(content: Any, index: int, allow_images: bool) -> tuple[str, list[dict]]:
+    """Text and images of a message. Images are accepted on user messages."""
+    if not (allow_images and isinstance(content, list)):
+        return _text_of(content, index), []
+    text, images = [], []
+    for part in content:
+        if isinstance(part, dict) and part.get("type") == "image_url":
+            images.append(_image(part.get("image_url"), index))
+        else:
+            text.append(_text_of([part], index))
+    return "".join(text), images
+
+
 def _convert(body: ChatRequest):
     """OpenAI request -> provider CompletionRequest."""
     from providers import CompletionRequest as PCR
@@ -220,7 +257,9 @@ def _convert(body: ChatRequest):
     messages = []
     for i, m in enumerate(body.messages):
         role = m.get("role")
-        text = _text_of(m.get("content"), i)
+        text, images = _content(
+            m.get("content"), i, allow_images=m.get("role") == "user"
+        )
         if role in ("system", "developer"):
             system.append(text)
         elif role == "tool":
@@ -240,7 +279,7 @@ def _convert(body: ChatRequest):
                 )
             )
         elif role in ("user", "assistant"):
-            messages.append(PM(role=role, content=text))
+            messages.append(PM(role=role, content=text, images=images or None))
         else:
             raise CompatError(
                 400, f"Unsupported message role '{role}'.",
@@ -251,6 +290,15 @@ def _convert(body: ChatRequest):
             400, "At least one user or assistant message is required.",
             "invalid_request_error", "invalid_value", "messages",
         )  # fmt: skip
+    if (
+        sum(len(i.get("data", "")) for m in messages for i in m.images or [])
+        > MAX_IMAGE_BYTES
+    ):
+        raise _bad(
+            "Inline images are too large for one request.",
+            "messages",
+            "request_too_large",
+        )
     return PCR(
         messages=messages,
         model=body.model,

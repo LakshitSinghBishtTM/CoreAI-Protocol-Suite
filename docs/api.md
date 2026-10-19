@@ -580,10 +580,11 @@ The test suite runs the official OpenAI Python SDK against the gateway
 | `max_tokens`, `max_completion_tokens` | Supported (the latter wins) |
 | `system` and `developer` messages | Joined into the system prompt |
 | Text content parts | Supported |
+| `image_url` parts on user messages | Supported (see below) |
 | `top_p`, `seed`, `user`, `presence_penalty`, `frequency_penalty`, `logit_bias` | Accepted and ignored |
 | `tools`, `tool_choice`, assistant `tool_calls`, `tool` messages | Supported without streaming (see below) |
 | `response_format` `json_object` or `json_schema` | Supported (see below) |
-| `functions`, `function_call`, `stop`, `logprobs`, `n` above 1, `response_format` types other than text/json, tools with `stream: true`, image or audio parts | `400` with `code: "unsupported_parameter"` and the `param` name. Refused so a change in meaning is never silent |
+| `functions`, `function_call`, `stop`, `logprobs`, `n` above 1, `response_format` types other than text/json, tools with `stream: true`, audio parts | `400` with `code: "unsupported_parameter"` and the `param` name. Refused so a change in meaning is never silent |
 | `provider` (extension) | Pin a provider |
 
 - **Errors** use OpenAI's envelope `{"error": {"message", "type", "param", "code"}}`.
@@ -601,6 +602,11 @@ The test suite runs the official OpenAI Python SDK against the gateway
   tools are never cached, only go to providers and models that support tools
   (`supports_function_calling` in `/v1/models/details`), and are refused with
   `stream: true` for now. Gemini call ids are generated (`call_0`, `call_1`).
+- **Images:** `image_url` parts on user messages, as `https://` links or
+  `data:image/{jpeg,png,gif,webp};base64,...` URLs (20 MB of inline data per
+  request). Only vision-capable providers and models are used; others are
+  skipped, or the request is a 400 if the model is pinned. Gemini takes inline
+  data only, so a link to Gemini is a 400. Image requests are never cached.
 - **Structured output:** `json_object` and `json_schema` are native on OpenAI
   and Grok and on Gemini (JSON mime type). DeepSeek gets JSON mode with the
   schema in the prompt. Anthropic has no JSON mode, so the instruction and
@@ -612,3 +618,28 @@ The test suite runs the official OpenAI Python SDK against the gateway
   provider's default model. `GET /v1/models/details` is the richer registry
   that `GET /v1/models` used to return (**breaking change**).
 
+## Anthropic-compatible API
+
+`POST /v1/messages` follows Anthropic's Messages API, so an Anthropic SDK
+works by changing the base URL (`base_url="http://localhost:8000"`) and
+passing a CaiPS token as `auth_token` (or an API key as `x-api-key`). The
+official SDK is exercised against it in `tests/test_vision_and_messages.py`,
+including streaming.
+
+| Request field | Behaviour |
+| --- | --- |
+| `model`, `max_tokens` (required), `messages`, `system`, `temperature`, `stream` | Supported. `system` may be a string or text blocks |
+| `text`, `image` (base64 or URL), `tool_use`, `tool_result` blocks | Supported |
+| `tools` (with `input_schema`), `tool_choice` `auto`/`any`/`none`/`tool` | Supported without streaming |
+| `top_p`, `top_k`, `metadata` | Accepted and ignored |
+| `stop_sequences`, documents, thinking and server-tool blocks, tools with `stream: true` | `400` |
+| `provider` (extension) | Pin a provider |
+
+- Requests go through the same router, budgets and failover as
+  `/v1/chat/completions`, and may be served by any provider.
+- Errors use Anthropic's envelope `{"type": "error", "error": {"type", "message"}}`.
+- Streams send `message_start`, one text content block, `message_delta` and
+  `message_stop`. A failure after output has started sends an `error` event and
+  no `message_stop`.
+- `stop_reason` is `end_turn`, `max_tokens`, `tool_use` or `refusal`.
+- Token counting (`/v1/messages/count_tokens`) and the batch API are not implemented.

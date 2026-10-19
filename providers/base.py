@@ -1,4 +1,5 @@
 import json
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import AsyncGenerator, Optional
@@ -15,6 +16,9 @@ class Message:
     tool_calls: Optional[list[dict]] = None
     # For role "tool": the id of the call this message answers.
     tool_call_id: Optional[str] = None
+    # Images on a user message: [{"media_type": "image/png", "data": "<base64>"}]
+    # for inline data or [{"url": "https://..."}] for a remote image.
+    images: Optional[list[dict]] = None
 
 
 def _count(value) -> int | None:
@@ -79,7 +83,7 @@ class CompletionRequest:
     def cacheable(self) -> bool:
         """Tool conversations are never served from, or stored in, the cache:
         the cache key only covers role and content."""
-        return not self.tools and not any(m.tool_calls or m.role == "tool" for m in self.messages)
+        return not self.tools and not any(m.tool_calls or m.images or m.role == "tool" for m in self.messages)
 
 
 @dataclass
@@ -147,6 +151,27 @@ def split_system(request: "CompletionRequest") -> tuple[Optional[str], list[Mess
         else:
             rest.append(m)
     return ("\n\n".join(parts) or None), rest
+
+
+IMAGE_TYPES = ("image/jpeg", "image/png", "image/gif", "image/webp")
+_DATA_URL = re.compile(r"^data:([\w.+-]+/[\w.+-]+);base64,(.+)$", re.DOTALL)
+
+
+def parse_data_url(url: str) -> Optional[dict]:
+    """``{"media_type", "data"}`` for a base64 data URL, else None."""
+    m = _DATA_URL.match(url or "")
+    return {"media_type": m.group(1).lower(), "data": m.group(2)} if m else None
+
+
+def image_url(image: dict) -> str:
+    """The image as a URL an OpenAI-style endpoint accepts."""
+    if image.get("url"):
+        return image["url"]
+    return f"data:{image['media_type']};base64,{image['data']}"
+
+
+def request_images(request: "CompletionRequest") -> list[dict]:
+    return [img for m in request.messages for img in (m.images or [])]
 
 
 def parse_arguments(raw) -> dict:
@@ -234,6 +259,10 @@ def openai_messages(request: "CompletionRequest", extra_system: Optional[str] = 
                     ],
                 }
             )
+        elif m.images:
+            parts = [{"type": "text", "text": m.content}] if m.content else []
+            parts.extend({"type": "image_url", "image_url": {"url": image_url(i)}} for i in m.images)
+            out.append({"role": m.role, "content": parts})
         else:
             out.append({"role": m.role, "content": m.content})
     return out
@@ -293,6 +322,7 @@ class BaseProvider(ABC):
         pass
 
     supports_tools: bool = False
+    supports_vision: bool = False
     supports_embeddings: bool = False
     default_embedding_model: str = ""
 

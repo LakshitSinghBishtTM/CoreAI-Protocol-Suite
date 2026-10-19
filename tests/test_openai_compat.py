@@ -17,6 +17,7 @@ def make_client(monkeypatch):
     monkeypatch.setenv("SECRET_KEY", "openai-compat-test-secret")
     import api.server as server
     from api.auth import create_access_token
+    from api.anthropic_compat import router as anthropic_compat
     from api.openai_compat import router as compat
     from api.routes import router as api_router
 
@@ -26,6 +27,7 @@ def make_client(monkeypatch):
         app = FastAPI()
         app.include_router(api_router)
         app.include_router(compat)
+        app.include_router(anthropic_compat)
         orch = MagicMock()
         orch.stats.return_value = {}
         for p in (

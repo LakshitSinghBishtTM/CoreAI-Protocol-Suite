@@ -30,6 +30,7 @@ class AnthropicProvider(BaseProvider):
     name = "anthropic"
     default_model = "claude-haiku-4-5"
     supports_tools = True
+    supports_vision = True
 
     def __init__(self, api_key: str):
         super().__init__(api_key)
@@ -182,6 +183,20 @@ class AnthropicProvider(BaseProvider):
                     for c in m.tool_calls
                 )
                 messages.append({"role": "assistant", "content": blocks})
+            elif m.images:
+                blocks = [self._image_block(i) for i in m.images]
+                if m.content:
+                    blocks.append({"type": "text", "text": m.content})
+                messages.append({"role": m.role, "content": blocks})
             else:
                 messages.append({"role": m.role, "content": m.content})
         return messages
+
+    @staticmethod
+    def _image_block(image: dict) -> dict:
+        if image.get("url"):
+            return {"type": "image", "source": {"type": "url", "url": image["url"]}}
+        return {
+            "type": "image",
+            "source": {"type": "base64", "media_type": image["media_type"], "data": image["data"]},
+        }

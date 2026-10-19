@@ -37,6 +37,7 @@ TIKTOKEN_TIMEOUT_S = 2.0
 class OpenAIProvider(BaseProvider):
     name = "openai"
     supports_tools = True
+    supports_vision = True
     default_model = "gpt-4o-mini"
 
     def __init__(self, api_key: str):

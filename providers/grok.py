@@ -29,6 +29,7 @@ from .base import (
 class GrokProvider(BaseProvider):
     name = "grok"
     supports_tools = True
+    supports_vision = True
     default_model = "grok-3-mini"
     base_url = "https://api.x.ai/v1"
 

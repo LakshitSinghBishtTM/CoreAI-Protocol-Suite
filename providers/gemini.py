@@ -2,6 +2,7 @@
 providers/gemini.py
 """
 
+import base64
 import json
 import time
 from typing import Any, AsyncGenerator
@@ -29,6 +30,7 @@ class GeminiProvider(BaseProvider):
     name = "gemini"
     default_model = "gemini-2.0-flash"
     supports_tools = True
+    supports_vision = True
 
     def __init__(self, api_key: str):
         super().__init__(api_key)
@@ -183,7 +185,10 @@ class GeminiProvider(BaseProvider):
                 contents.append({"role": "model", "parts": parts})
             else:
                 role = "model" if msg.role == "assistant" else "user"
-                contents.append({"role": role, "parts": [{"text": msg.content}]})
+                parts = [{"inline_data": self._blob(i)} for i in msg.images or []]
+                if msg.content or not parts:
+                    parts.append({"text": msg.content})
+                contents.append({"role": role, "parts": parts})
 
         # validate_conversation guarantees the last message is a user or tool turn.
         last = contents[-1]
@@ -191,6 +196,12 @@ class GeminiProvider(BaseProvider):
         if len(last["parts"]) == 1 and "text" in last["parts"][0]:
             return history, last["parts"][0]["text"]
         return history, last["parts"]
+
+    @staticmethod
+    def _blob(image: dict) -> dict:
+        if not image.get("data"):
+            raise ValueError("Gemini accepts images as inline data only (send a data: URL, not a link).")
+        return {"mime_type": image["media_type"], "data": base64.b64decode(image["data"])}
 
     def _metadata(self, response, tool_calls: list[dict]) -> dict:
         meta = {"finish_reason": self._finish(response)}

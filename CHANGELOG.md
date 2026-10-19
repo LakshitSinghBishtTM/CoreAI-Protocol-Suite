@@ -143,6 +143,10 @@ The previous `1.0.0` label did not match the project's state; versions now start
   The model catalogue advertises `supports_function_calling` again (False for
   `deepseek-reasoner`). Tool requests bypass the cache; the cache key now includes
   `response_format`. Streaming with tools is refused with a 400.
+- Added image inputs (`image_url` parts) to `/v1/chat/completions` for OpenAI, Grok,
+  Anthropic and Gemini; text-only models and providers are skipped or refused.
+- Added the Anthropic-compatible `POST /v1/messages` (text, images, tools, streaming
+  of text), checked against the official `anthropic` SDK.
 - Lint: ruff and black replace flake8 and isort; mypy baseline for `providers/base.py`.
 - Runtime dependencies cut from 14 to 11; `redis` is now an optional extra.
 - Docker image: no apt layer, healthcheck uses Python instead of curl.
