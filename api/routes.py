@@ -12,7 +12,7 @@ import math
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field
 
 from api.auth import AuthContext, require_scope
@@ -78,8 +78,29 @@ def _budget_record(ctx, cost_usd=0.0, tokens=0) -> None:
         budgets.record(ctx.subject, cost_usd, tokens)
 
 
+def _ledger_record(ctx, provider, model, input_tokens, output_tokens, cost, n=1):
+    from api.server import get_usage_ledger
+
+    get_usage_ledger().record(
+        ctx.subject, provider, model, input_tokens, output_tokens, cost, requests=n
+    )
+
+
 def _budget_record_stream(ctx, usage) -> None:
     from api.server import get_budgets
+
+    # One ledger row per stream, written when it ends (usage is known then).
+    if usage is not None:
+        _ledger_record(
+            ctx,
+            usage.provider,
+            usage.model,
+            usage.input_tokens,
+            usage.output_tokens,
+            usage.cost_usd,
+        )
+    else:
+        _ledger_record(ctx, "", "", 0, 0, 0.0)
 
     budgets = get_budgets()
     if budgets is not None and usage is not None and usage.provider:
@@ -253,6 +274,14 @@ async def completions(
 
     _budget_record(
         ctx, resp.cost_usd, (resp.input_tokens or 0) + (resp.output_tokens or 0)
+    )
+    _ledger_record(
+        ctx,
+        resp.provider,
+        resp.model,
+        resp.input_tokens,
+        resp.output_tokens,
+        resp.cost_usd,
     )
 
     return CompletionResponse(
@@ -613,6 +642,48 @@ async def get_usage(
     budgets = get_budgets()
     status_ = budgets.status(ctx.subject) if budgets else None
     return {"subject": ctx.subject, "budget": status_}
+
+
+@router.get(
+    "/usage/report",
+    summary="Usage over time, as JSON or CSV",
+    tags=["completions"],
+)
+async def usage_report(
+    since: Optional[float] = Query(None, description="Unix time, inclusive"),
+    until: Optional[float] = Query(None, description="Unix time, exclusive"),
+    bucket: str = Query("day", description="hour or day"),
+    group_by: str = Query("", description="comma list of subject, provider, model"),
+    format: str = Query("json", description="json or csv"),
+    ctx: AuthContext = Depends(require_scope("completions:read")),
+):
+    """Your own usage; callers with the ``admin`` scope see every subject."""
+    from api.server import get_usage_ledger
+    from coreai.usage import UsageQueryError, to_csv
+
+    if format not in ("json", "csv"):
+        raise HTTPException(status_code=400, detail="format must be json or csv")
+    groups = [g for g in group_by.split(",") if g]
+    is_admin = "admin" in ctx.scopes
+    if not is_admin and "subject" in groups:
+        groups.remove("subject")  # a caller only ever sees themselves
+    try:
+        rows = get_usage_ledger().report(
+            subject=None if is_admin else ctx.subject,
+            since=since,
+            until=until,
+            bucket=bucket,
+            group_by=groups,
+        )
+    except UsageQueryError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    if format == "csv":
+        return Response(
+            to_csv(rows, groups),
+            media_type="text/csv",
+            headers={"Content-Disposition": 'attachment; filename="usage.csv"'},
+        )
+    return {"bucket": bucket, "group_by": groups, "rows": rows}
 
 
 @router.get(

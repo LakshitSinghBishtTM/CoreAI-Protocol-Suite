@@ -138,7 +138,10 @@ def _load_budgets():
         "budget.config_loaded",
         actor="system",
         target=path,
-        details={"default": manager.default is not None, "subjects": len(manager.subjects)},
+        details={
+            "default": manager.default is not None,
+            "subjects": len(manager.subjects),
+        },
     )
     return manager
 
@@ -190,6 +193,15 @@ def get_audit():
 
         app_state["audit"] = AuditLog(path=os.environ.get("COREAI_AUDIT_FILE"))
     return app_state["audit"]
+
+
+def get_usage_ledger():
+    """The usage ledger (always on; bounded in memory)."""
+    if app_state.get("usage") is None:
+        from coreai.usage import UsageLedger
+
+        app_state["usage"] = UsageLedger()
+    return app_state["usage"]
 
 
 def get_budgets():

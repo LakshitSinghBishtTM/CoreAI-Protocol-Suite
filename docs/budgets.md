@@ -34,3 +34,22 @@ requests and tokens. Off by default; create `config/budgets.yml` (see
 - Per team and per model budgets are not implemented yet.
 
 `GET /v1/usage` (scope `completions:read`) shows the caller's usage and limits.
+
+## Usage reports
+
+`GET /v1/usage/report` (scope `completions:read`) returns usage over time from
+an in-memory ledger, as JSON or CSV.
+
+| Parameter | Values |
+| --- | --- |
+| `bucket` | `day` (default) or `hour` |
+| `group_by` | comma list of `subject`, `provider`, `model` |
+| `since`, `until` | Unix times; `since` inclusive, `until` exclusive |
+| `format` | `json` (default) or `csv` |
+
+Callers see only their own usage; a token with the `admin` scope sees every
+subject. Streams are recorded when they end. The ledger is bounded (30 days
+and 50,000 rows) and resets on restart, so use the Prometheus metrics for
+long-term history. CSV text cells starting with `=`, `+`, `-` or `@` are
+prefixed with `'` so spreadsheets do not run them as formulas.
+
