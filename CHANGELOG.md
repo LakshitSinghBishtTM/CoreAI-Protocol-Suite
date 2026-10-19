@@ -4,6 +4,12 @@
 
 The previous `1.0.0` label did not match the project's state; versions now start at 0.1.0 (alpha).
 
+### Added (Phase 4, part 1: OpenAI-compatible chat and models)
+- `POST /v1/chat/completions` (`api/openai_compat.py`): OpenAI request and response shapes, SSE streaming with `stream_options.include_usage`, OpenAI error envelope, and an error event plus `[DONE]` (no `finish_reason`) when a stream fails midway. Budgets, usage ledger and metering apply as for `/v1/completions`. Verified with the official OpenAI Python SDK in tests, not against a live provider.
+- Parameters that would change the answer (tools, `stop`, JSON mode, `n` above 1, images) are refused with `400 unsupported_parameter` instead of ignored; see `docs/api.md`.
+- **Breaking:** `GET /v1/models` now returns the OpenAI list shape; the old registry response moved to `GET /v1/models/details`.
+- Not yet: `/v1/embeddings`, `/v1/completions` (legacy OpenAI form; the existing `/v1/completions` is the CaiPS native one and unchanged), tool calling, structured output, vision, model aliases, `finish_reason: "length"`.
+
 ### Added (Phase 3, part 11: per-model budgets)
 - `models:` section in `config/budgets.yml`: a shared cost/request/token cap per model across all subjects, `429` when reached. Checked up front only when the request names the model. Validated like the rest of the file.
 - Not yet: per-team budgets (no team claim in tokens); audit entries for key changes (there are no key issue/revoke endpoints yet, so this belongs with Phase 10 scoped keys).

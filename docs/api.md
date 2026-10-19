@@ -558,3 +558,42 @@ The API serves as a stable contract between clients and the CoreAI platform.
 Clients should interact with platform capabilities rather than individual providers, runtimes, or agents.
 
 This abstraction allows CoreAI deployments to evolve internally while preserving a consistent external interface for applications, services, and operational tooling.
+
+## OpenAI-compatible API
+
+`POST /v1/chat/completions` and `GET /v1/models` follow the OpenAI shapes, so
+an OpenAI SDK works by changing the base URL and passing a CaiPS token as the
+API key:
+
+```python
+from openai import OpenAI
+client = OpenAI(base_url="http://localhost:8000/v1", api_key="<CaiPS token>")
+client.chat.completions.create(model="gpt-4o", messages=[{"role": "user", "content": "hi"}])
+```
+
+The test suite runs the official OpenAI Python SDK against the gateway
+(`tests/test_openai_compat.py`), including streaming.
+
+| Request field | Behaviour |
+| --- | --- |
+| `model`, `messages`, `temperature`, `stream`, `stream_options.include_usage` | Supported |
+| `max_tokens`, `max_completion_tokens` | Supported (the latter wins) |
+| `system` and `developer` messages | Joined into the system prompt |
+| Text content parts | Supported |
+| `top_p`, `seed`, `user`, `presence_penalty`, `frequency_penalty`, `logit_bias` | Accepted and ignored |
+| `tools`, `tool_choice`, `functions`, `stop`, `logprobs`, `n` above 1, `response_format` other than text, image or audio parts | `400` with `code: "unsupported_parameter"` and the `param` name. Refused so a change in meaning is never silent |
+| `provider` (extension) | Pin a provider |
+
+- **Errors** use OpenAI's envelope `{"error": {"message", "type", "param", "code"}}`.
+  Budget refusals are `429` with `Retry-After`.
+- **Streaming:** if no output has started, a provider failure is a normal HTTP
+  error (after failover). If it fails after output has started, the stream
+  sends an error event (`code: "stream_<kind>"`) and `[DONE]` and never a
+  `finish_reason`, so a client can tell the answer is incomplete.
+- `finish_reason` is always `"stop"` on success; `"length"` is not reported yet.
+- Response headers `X-CaiPS-Provider` and `X-CaiPS-Cost-USD` (non-streaming).
+- Chunks carry the requested model name (`auto` if none was given).
+- `GET /v1/models` lists the registry models of active providers plus each
+  provider's default model. `GET /v1/models/details` is the richer registry
+  that `GET /v1/models` used to return (**breaking change**).
+

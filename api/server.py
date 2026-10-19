@@ -5,7 +5,7 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 from loguru import logger
 
 from agents.agent_manager import init_agent_manager
-from api import routes
+from api import openai_compat, routes
 from api.auth import AuthContext, require_scope
 from api.middleware import RateLimitMiddleware
 from coreai import Orchestrator, Router, RoutingConfig, RoutingStrategy
@@ -100,6 +100,7 @@ app.add_middleware(DrainMiddleware, controller=drain)
 # Added last so it is outermost: every response, even a drain 503, gets an ID.
 app.add_middleware(RequestContextMiddleware)
 app.include_router(routes.router)
+app.include_router(openai_compat.router)
 
 
 def _load_rate_limits():

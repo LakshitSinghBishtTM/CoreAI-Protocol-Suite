@@ -577,7 +577,7 @@ async def list_providers(
 
 
 @router.get(
-    "/models",
+    "/models/details",
     response_model=List[ModelInfoResponse],
     summary="List known models and their capabilities",
     tags=["providers"],

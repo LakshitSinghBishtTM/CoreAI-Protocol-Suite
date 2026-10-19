@@ -96,7 +96,9 @@ All routes except `/health` need authentication. Scope required is in brackets.
 | `POST /v1/completions` | Completion through the router `[completions:write]` |
 | `POST /v1/completions/stream` | Streaming completion `[completions:write]` |
 | `GET /v1/providers` | Provider health from circuit breakers and recent errors (no network calls) `[completions:read]` |
-| `GET /v1/models` | Model registry `[completions:read]` |
+| `POST /v1/chat/completions` | OpenAI-compatible chat, streaming with SSE `[completions:write]` (see `docs/api.md`) |
+| `GET /v1/models` | OpenAI-compatible model list `[completions:read]` |
+| `GET /v1/models/details` | Model registry with prices and capabilities `[completions:read]` |
 | `POST /v1/tasks`, `GET` and `DELETE /v1/tasks/{id}` | Background tasks `[tasks:read, tasks:write]` |
 | `POST /v1/agents`, `GET /v1/agents`, `DELETE /v1/agents/{id}` | Experimental agents `[agents:read, agents:write]` |
 | `GET /v1/stats` | Runtime statistics `[admin]` |
