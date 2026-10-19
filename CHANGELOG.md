@@ -137,6 +137,15 @@ The previous `1.0.0` label did not match the project's state; versions now start
 - `.env.example`, `SECURITY.md`, status notes in `agents/`, `protocols/` and `neural/`, and smoke tests for `AgentManager`.
 
 ## Unreleased (roadmap Phase 4 / Phase 0 follow-ups)
+- Normalised tool calling: `tools`, `tool_choice`, assistant `tool_calls` and `tool`
+  messages on `/v1/chat/completions` for OpenAI, Grok, DeepSeek, Anthropic and Gemini
+  (non-streaming). Structured output via `response_format` `json_object` / `json_schema`.
+  The model catalogue advertises `supports_function_calling` again (False for
+  `deepseek-reasoner`). Tool requests bypass the cache; the cache key now includes
+  `response_format`. Streaming with tools is refused with a 400.
+- Lint: ruff and black replace flake8 and isort; mypy baseline for `providers/base.py`.
+- Runtime dependencies cut from 14 to 11; `redis` is now an optional extra.
+- Docker image: no apt layer, healthcheck uses Python instead of curl.
 - Added `/v1/embeddings` (OpenAI provider) and virtual models `fast`, `cheap`, `best`
   mapped to the `low_latency`, `bulk` and `high_quality` routing policies; they are
   listed by `/v1/models`.

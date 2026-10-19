@@ -87,10 +87,10 @@ def test_system_and_text_parts_are_mapped(make_client):
 @pytest.mark.parametrize(
     "extra,param",
     [
-        ({"tools": [{"type": "function"}]}, "tools"),
         ({"stop": ["x"]}, "stop"),
         ({"n": 2}, "n"),
-        ({"response_format": {"type": "json_object"}}, "response_format"),
+        ({"response_format": {"type": "xml"}}, "response_format"),
+        ({"tools": [{"type": "function", "function": {"name": "f"}}], "stream": True}, "tools"),
     ],
 )
 def test_unsupported_parameters_are_refused_not_dropped(make_client, extra, param):

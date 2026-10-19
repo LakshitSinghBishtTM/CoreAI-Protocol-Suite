@@ -2,27 +2,33 @@
 providers/gemini.py
 """
 
+import json
 import time
-from typing import AsyncGenerator
+from typing import Any, AsyncGenerator
 
 from google import genai
 from google.genai import types
 from loguru import logger
 
 from .base import (
-    normalize_finish_reason,
-    validate_conversation,
     SDK_TIMEOUT_S,
     BaseProvider,
     CompletionRequest,
     CompletionResponse,
+    forced_tool_name,
+    normalize_finish_reason,
+    parse_arguments,
     split_system,
+    system_with_json,
+    tool_specs,
+    validate_conversation,
 )
 
 
 class GeminiProvider(BaseProvider):
     name = "gemini"
     default_model = "gemini-2.0-flash"
+    supports_tools = True
 
     def __init__(self, api_key: str):
         super().__init__(api_key)
@@ -32,11 +38,53 @@ class GeminiProvider(BaseProvider):
         )
 
     def _build_config(self, request: CompletionRequest) -> types.GenerateContentConfig:
-        return types.GenerateContentConfig(
-            max_output_tokens=request.max_tokens,
-            temperature=request.temperature,
-            system_instruction=split_system(request)[0],
-        )
+        kw: dict = {
+            "max_output_tokens": request.max_tokens,
+            "temperature": request.temperature,
+            "system_instruction": system_with_json(request),
+        }
+        if (request.response_format or {}).get("type") in ("json_object", "json_schema"):
+            kw["response_mime_type"] = "application/json"
+        choice = request.tool_choice
+        if request.tools and choice != "none":
+            field = "parameters_json_schema" if "parameters_json_schema" in types.FunctionDeclaration.model_fields else "parameters"
+            kw["tools"] = [
+                types.Tool(
+                    function_declarations=[
+                        types.FunctionDeclaration(
+                            name=t["name"], description=t["description"], **{field: t["parameters"]}
+                        )
+                        for t in tool_specs(request)
+                    ]
+                )
+            ]
+            forced = forced_tool_name(choice)
+            mode = "ANY" if (forced or choice == "required") else "AUTO"
+            kw["tool_config"] = types.ToolConfig(
+                function_calling_config=types.FunctionCallingConfig(
+                    mode=mode, allowed_function_names=[forced] if forced else None
+                )
+            )
+        return types.GenerateContentConfig(**kw)
+
+    @staticmethod
+    def _tool_calls(response) -> list[dict]:
+        calls = []
+        try:
+            parts = response.candidates[0].content.parts or []
+            for part in parts:
+                fc = getattr(part, "function_call", None)
+                if fc is not None and getattr(fc, "name", None):
+                    calls.append(
+                        {
+                            "id": f"call_{len(calls)}",
+                            "name": fc.name,
+                            "arguments": json.dumps(dict(getattr(fc, "args", None) or {})),
+                        }
+                    )
+        except Exception:
+            return []
+        return calls
 
     async def complete(self, request: CompletionRequest) -> CompletionResponse:
         model = request.model or self.default_model
@@ -57,7 +105,8 @@ class GeminiProvider(BaseProvider):
         input_tokens = response.usage_metadata.prompt_token_count
         output_tokens = response.usage_metadata.candidates_token_count
         cost = self._bill(input_tokens, output_tokens, model)
-        content = response.text
+        tool_calls = self._tool_calls(response)
+        content = (response.text if not tool_calls else "") or ""
 
         result = CompletionResponse(
             content=content,
@@ -67,7 +116,7 @@ class GeminiProvider(BaseProvider):
             output_tokens=output_tokens,
             cost_usd=cost,
             latency_ms=latency_ms,
-            metadata={"finish_reason": self._finish(response)},
+            metadata=self._metadata(response, tool_calls),
         )
         self._track(result)
         logger.debug(
@@ -107,19 +156,48 @@ class GeminiProvider(BaseProvider):
     def count_tokens(self, text: str, model: str) -> int:
         return len(text) // 4
 
-    def _build_messages(self, request: CompletionRequest) -> tuple[list[dict], str]:
+    def _build_messages(self, request: CompletionRequest) -> tuple[list[dict], Any]:
         # Gemini uses history + last message separately
         # roles are "user" and "model" (not "assistant")
         validate_conversation(request.messages)
-        history = []
-        messages = split_system(request)[1]
+        names: dict[str, str] = {}  # tool_call_id -> function name
+        contents: list[dict] = []
+        for msg in split_system(request)[1]:
+            if msg.role == "tool":
+                part = {
+                    "function_response": {
+                        "name": names.get(msg.tool_call_id or "", "tool"),
+                        "response": {"result": msg.content},
+                    }
+                }
+                last = contents[-1] if contents else None
+                if last and last["role"] == "user" and "function_response" in last["parts"][-1]:
+                    last["parts"].append(part)  # results of one turn share a message
+                else:
+                    contents.append({"role": "user", "parts": [part]})
+            elif msg.role == "assistant" and msg.tool_calls:
+                parts = [{"text": msg.content}] if msg.content else []
+                for c in msg.tool_calls:
+                    names[c["id"]] = c["name"]
+                    parts.append({"function_call": {"name": c["name"], "args": parse_arguments(c.get("arguments"))}})
+                contents.append({"role": "model", "parts": parts})
+            else:
+                role = "model" if msg.role == "assistant" else "user"
+                contents.append({"role": role, "parts": [{"text": msg.content}]})
 
-        for msg in messages[:-1]:
-            role = "model" if msg.role == "assistant" else "user"
-            history.append({"role": role, "parts": [{"text": msg.content}]})
+        # validate_conversation guarantees the last message is a user or tool turn.
+        last = contents[-1]
+        history = contents[:-1]
+        if len(last["parts"]) == 1 and "text" in last["parts"][0]:
+            return history, last["parts"][0]["text"]
+        return history, last["parts"]
 
-        # validate_conversation guarantees the last message is a user turn.
-        return history, messages[-1].content
+    def _metadata(self, response, tool_calls: list[dict]) -> dict:
+        meta = {"finish_reason": self._finish(response)}
+        if tool_calls:
+            meta["tool_calls"] = tool_calls
+            meta["finish_reason"] = "tool_calls"
+        return meta
 
     @staticmethod
     def _finish(resp):

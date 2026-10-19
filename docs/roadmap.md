@@ -108,7 +108,7 @@ This phase makes CaiPS a drop-in gateway: existing SDKs and tools work by changi
 
 - OpenAI-compatible `/v1/chat/completions`, `/v1/completions`, `/v1/embeddings` and `/v1/models`.
 - Streaming over server-sent events, with defined behavior when a provider fails mid-stream (clean error event, no silent truncation).
-- Normalized tool calling and structured output (JSON mode, JSON schema) across OpenAI, Anthropic and Gemini formats.
+- Normalized tool calling and structured output (JSON mode, JSON schema) across OpenAI, Anthropic and Gemini formats. *Status: done without streaming for all four providers; streamed tool calls, schema validation and local models are open.*
 - Vision and image inputs where the provider supports them, with capability flags per model.
 - Optional Anthropic-compatible `/v1/messages` endpoint for clients that expect it.
 - Model aliases and virtual models (for example `fast`, `cheap`, `best`) mapped to routing policies.

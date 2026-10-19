@@ -581,7 +581,9 @@ The test suite runs the official OpenAI Python SDK against the gateway
 | `system` and `developer` messages | Joined into the system prompt |
 | Text content parts | Supported |
 | `top_p`, `seed`, `user`, `presence_penalty`, `frequency_penalty`, `logit_bias` | Accepted and ignored |
-| `tools`, `tool_choice`, `functions`, `stop`, `logprobs`, `n` above 1, `response_format` other than text, image or audio parts | `400` with `code: "unsupported_parameter"` and the `param` name. Refused so a change in meaning is never silent |
+| `tools`, `tool_choice`, assistant `tool_calls`, `tool` messages | Supported without streaming (see below) |
+| `response_format` `json_object` or `json_schema` | Supported (see below) |
+| `functions`, `function_call`, `stop`, `logprobs`, `n` above 1, `response_format` types other than text/json, tools with `stream: true`, image or audio parts | `400` with `code: "unsupported_parameter"` and the `param` name. Refused so a change in meaning is never silent |
 | `provider` (extension) | Pin a provider |
 
 - **Errors** use OpenAI's envelope `{"error": {"message", "type", "param", "code"}}`.
@@ -590,7 +592,20 @@ The test suite runs the official OpenAI Python SDK against the gateway
   error (after failover). If it fails after output has started, the stream
   sends an error event (`code: "stream_<kind>"`) and `[DONE]` and never a
   `finish_reason`, so a client can tell the answer is incomplete.
-- `finish_reason` is always `"stop"` on success; `"length"` is not reported yet.
+- `finish_reason` is `"stop"`, `"length"`, `"content_filter"` or `"tool_calls"`.
+- **Tool calling:** send OpenAI-style `tools` and `tool_choice`; the reply has
+  `message.tool_calls` and `finish_reason: "tool_calls"`. The gateway
+  translates to each provider's format (Anthropic `tool_use`/`tool_result`,
+  Gemini `function_call`/`function_response`) but never runs a tool. Send the
+  results back as `role: "tool"` messages with `tool_call_id`. Requests with
+  tools are never cached, only go to providers and models that support tools
+  (`supports_function_calling` in `/v1/models/details`), and are refused with
+  `stream: true` for now. Gemini call ids are generated (`call_0`, `call_1`).
+- **Structured output:** `json_object` and `json_schema` are native on OpenAI
+  and Grok and on Gemini (JSON mime type). DeepSeek gets JSON mode with the
+  schema in the prompt. Anthropic has no JSON mode, so the instruction and
+  schema go in the system prompt and code fences are stripped. The schema is
+  not validated by the gateway on any provider, so check the output.
 - Response headers `X-CaiPS-Provider` and `X-CaiPS-Cost-USD` (non-streaming).
 - Chunks carry the requested model name (`auto` if none was given).
 - `GET /v1/models` lists the registry models of active providers plus each

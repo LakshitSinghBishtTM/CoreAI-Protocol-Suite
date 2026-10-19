@@ -39,6 +39,8 @@ jobs:
         run: ruff check coreai/ api/ agents/
       - name: black
         run: black --check coreai/ api/ agents/
+      - name: mypy (files already clean)
+        run: mypy providers/base.py
 
   test:
     runs-on: ubuntu-latest

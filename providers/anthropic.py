@@ -1,3 +1,4 @@
+import json
 import time
 from typing import AsyncGenerator
 
@@ -5,15 +6,19 @@ import anthropic as sdk
 from loguru import logger
 
 from .base import (
-    normalize_finish_reason,
-    validate_conversation,
     SDK_TIMEOUT_S,
     BaseProvider,
     CompletionRequest,
     CompletionResponse,
+    forced_tool_name,
+    normalize_finish_reason,
+    parse_arguments,
     split_system,
+    strip_json_fences,
+    system_with_json,
+    tool_specs,
+    validate_conversation,
 )
-
 
 # NOTE: ``request.temperature`` is intentionally not forwarded. The current
 # Anthropic SDK's messages API does not accept a ``temperature`` argument, so
@@ -24,6 +29,7 @@ from .base import (
 class AnthropicProvider(BaseProvider):
     name = "anthropic"
     default_model = "claude-haiku-4-5"
+    supports_tools = True
 
     def __init__(self, api_key: str):
         super().__init__(api_key)
@@ -33,7 +39,7 @@ class AnthropicProvider(BaseProvider):
 
     async def complete(self, request: CompletionRequest) -> CompletionResponse:
         model = request.model or self.default_model
-        system = split_system(request)[0]
+        system = system_with_json(request)
         messages = self._build_messages(request)
 
         start = time.monotonic()
@@ -43,6 +49,7 @@ class AnthropicProvider(BaseProvider):
                 max_tokens=request.max_tokens,
                 system=system or sdk.NOT_GIVEN,
                 messages=messages,
+                **self._tool_kwargs(request),
             )
         except Exception as e:
             logger.error(f"[anthropic] completion failed: {e}")
@@ -57,7 +64,14 @@ class AnthropicProvider(BaseProvider):
             for b in (response.content or [])
             if isinstance(getattr(b, "text", None), str)
         )
-        if not content:
+        tool_calls = [
+            {"id": b.id, "name": b.name, "arguments": json.dumps(b.input or {})}
+            for b in (response.content or [])
+            if getattr(b, "type", None) == "tool_use"
+        ]
+        if request.response_format and not tool_calls:
+            content = strip_json_fences(content)
+        if not content and not tool_calls:
             raise ValueError(
                 f"[anthropic] response had no text content "
                 f"(stop_reason={getattr(response, 'stop_reason', None)})"
@@ -71,7 +85,7 @@ class AnthropicProvider(BaseProvider):
             output_tokens=output_tokens,
             cost_usd=cost,
             latency_ms=latency_ms,
-            metadata={"finish_reason": normalize_finish_reason(getattr(response, "stop_reason", None))},
+            metadata=self._metadata(response, tool_calls),
         )
         self._track(result)
         logger.debug(
@@ -81,7 +95,7 @@ class AnthropicProvider(BaseProvider):
 
     async def stream(self, request: CompletionRequest) -> AsyncGenerator[str, None]:
         model = request.model or self.default_model
-        system = split_system(request)[0]
+        system = system_with_json(request)
         messages = self._build_messages(request)
 
         try:
@@ -90,6 +104,7 @@ class AnthropicProvider(BaseProvider):
                 max_tokens=request.max_tokens,
                 system=system or sdk.NOT_GIVEN,
                 messages=messages,
+                **self._tool_kwargs(request),
             ) as stream:
                 async for text in stream.text_stream:
                     yield text
@@ -114,13 +129,59 @@ class AnthropicProvider(BaseProvider):
         # Anthropic uses ~4 chars per token on average
         return len(text) // 4
 
+    @staticmethod
+    def _metadata(response, tool_calls: list[dict]) -> dict:
+        meta = {"finish_reason": normalize_finish_reason(getattr(response, "stop_reason", None))}
+        if tool_calls:
+            meta["tool_calls"] = tool_calls
+            meta["finish_reason"] = "tool_calls"
+        return meta
+
+    @staticmethod
+    def _tool_kwargs(request: CompletionRequest) -> dict:
+        """OpenAI-style tools and tool_choice in Anthropic's shape."""
+        choice = request.tool_choice
+        if not request.tools or choice == "none":
+            return {}
+        kw: dict = {
+            "tools": [
+                {"name": t["name"], "description": t["description"], "input_schema": t["parameters"]}
+                for t in tool_specs(request)
+            ]
+        }
+        forced = forced_tool_name(choice)
+        if forced:
+            kw["tool_choice"] = {"type": "tool", "name": forced}
+        elif choice == "required":
+            kw["tool_choice"] = {"type": "any"}
+        elif choice == "auto":
+            kw["tool_choice"] = {"type": "auto"}
+        return kw
+
     def _build_messages(self, request: CompletionRequest) -> list[dict]:
         # System text is sent via ``system=`` (see split_system); none in messages.
-        rest = split_system(request)[1]
-        messages = [{"role": m.role, "content": m.content} for m in rest]
-
-        # Anthropic requires the first message to be from the user. Reject
-        # rather than inventing a prompt turn.
         validate_conversation(request.messages)
-
+        messages: list[dict] = []
+        for m in split_system(request)[1]:
+            if m.role == "tool":
+                block = {"type": "tool_result", "tool_use_id": m.tool_call_id, "content": m.content}
+                last = messages[-1] if messages else None
+                if last and last["role"] == "user" and isinstance(last["content"], list):
+                    last["content"].append(block)  # results of one turn share a message
+                else:
+                    messages.append({"role": "user", "content": [block]})
+            elif m.role == "assistant" and m.tool_calls:
+                blocks = [{"type": "text", "text": m.content}] if m.content else []
+                blocks.extend(
+                    {
+                        "type": "tool_use",
+                        "id": c["id"],
+                        "name": c["name"],
+                        "input": parse_arguments(c.get("arguments")),
+                    }
+                    for c in m.tool_calls
+                )
+                messages.append({"role": "assistant", "content": blocks})
+            else:
+                messages.append({"role": m.role, "content": m.content})
         return messages

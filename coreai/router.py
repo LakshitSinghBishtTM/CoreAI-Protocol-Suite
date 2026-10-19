@@ -386,7 +386,7 @@ class Router:
 
         # Cache lookup — key includes provider_name so explicit-provider
         # requests are never satisfied from a different provider's cache.
-        if self.cache and not request.stream:
+        if self.cache and not request.stream and request.cacheable:
             messages_dict = [
                 {"role": m.role, "content": m.content} for m in request.messages
             ]
@@ -913,7 +913,7 @@ class Router:
             pass
 
     async def _cache_response(self, name: str, request, response) -> None:
-        if self.cache and not request.stream:
+        if self.cache and not request.stream and request.cacheable:
             messages_dict = [
                 {"role": m.role, "content": m.content} for m in request.messages
             ]
@@ -1106,9 +1106,16 @@ class Router:
     def _model_problem(self, req: CompletionRequest, name: str) -> Optional[str]:
         """Why the catalogued model can't serve *req*, or None. Unknown
         models are not blocked: the catalogue may lag behind new releases."""
+        if req.tools:
+            if req.stream:
+                return "Tool calling is not supported with streaming yet."
+            if not getattr(self.providers[name], "supports_tools", False):
+                return f"Provider '{name}' does not support tool calling."
         profile = self._resolve_model_profile(name, req.model)
         if profile is None:
             return None
+        if req.tools and not profile.supports_function_calling:
+            return f"{profile.model_id} does not support tool calling."
         estimated_input = self._estimate_tokens(req)
         out = req.max_tokens or 0
         if not profile.fits_context(estimated_input + out):
@@ -1668,6 +1675,7 @@ class Router:
             "system_prompt": request.system_prompt,
             "temperature": request.temperature,
             "max_tokens": request.max_tokens,
+            "response_format": request.response_format,
         }
 
     @staticmethod

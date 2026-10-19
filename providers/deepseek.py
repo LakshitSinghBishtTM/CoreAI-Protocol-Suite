@@ -15,13 +15,24 @@ from loguru import logger
 # providers.openai submodule which shares the same short name.
 AsyncOpenAI = importlib.import_module("openai").AsyncOpenAI
 
-from .base import SDK_TIMEOUT_S, BaseProvider, CompletionRequest, CompletionResponse, normalize_finish_reason, split_system
+from .base import (
+    SDK_TIMEOUT_S,
+    BaseProvider,
+    CompletionRequest,
+    CompletionResponse,
+    json_instruction,
+    normalize_finish_reason,
+    openai_extract_tool_calls,
+    openai_messages,
+    openai_tool_kwargs,
+)
 
 DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
 
 
 class DeepSeekProvider(BaseProvider):
     name = "deepseek"
+    supports_tools = True
     default_model = "deepseek-chat"
 
     def __init__(self, api_key: str):
@@ -42,6 +53,7 @@ class DeepSeekProvider(BaseProvider):
             response = await self.client.chat.completions.create(
                 model=model,
                 messages=messages,
+                **openai_tool_kwargs(request, native_schema=False),
                 max_tokens=request.max_tokens,
                 temperature=request.temperature,
                 stream=False,
@@ -64,7 +76,7 @@ class DeepSeekProvider(BaseProvider):
             output_tokens=output_tokens,
             cost_usd=cost,
             latency_ms=latency_ms,
-            metadata={"finish_reason": normalize_finish_reason(response.choices[0].finish_reason)},
+            metadata=self._metadata(response.choices[0]),
         )
         self._track(result)
         logger.debug(
@@ -81,6 +93,7 @@ class DeepSeekProvider(BaseProvider):
             stream = await self.client.chat.completions.create(
                 model=model,
                 messages=messages,
+                **openai_tool_kwargs(request, native_schema=False),
                 max_tokens=request.max_tokens,
                 temperature=request.temperature,
                 stream=True,
@@ -106,11 +119,17 @@ class DeepSeekProvider(BaseProvider):
             logger.error(f"[deepseek] stream failed: {e}")
             raise
 
+    @staticmethod
+    def _metadata(choice) -> dict:
+        meta = {"finish_reason": normalize_finish_reason(choice.finish_reason)}
+        calls = openai_extract_tool_calls(choice.message)
+        if calls:
+            meta["tool_calls"] = calls
+            meta["finish_reason"] = "tool_calls"
+        return meta
+
     def count_tokens(self, text: str, model: str) -> int:
         return max(1, len(text) // 4)
 
     def _build_messages(self, request: CompletionRequest) -> list[dict]:
-        system, rest = split_system(request)
-        messages = [{"role": "system", "content": system}] if system else []
-        messages.extend({"role": m.role, "content": m.content} for m in rest)
-        return messages
+        return openai_messages(request, json_instruction(request.response_format))

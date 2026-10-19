@@ -70,9 +70,9 @@ class ModelProfile:
     modalities: list[Modality] = field(default_factory=lambda: [Modality.TEXT])
     pricing: Optional[TokenPricing] = None
     supports_streaming: bool = True
-    # The gateway does not execute tool calls (Kernel.complete drops them and
-    # the OpenAI-compatible API rejects them), so don't advertise it.
-    supports_function_calling: bool = False
+    # The gateway normalises tool calls across providers (providers.base);
+    # it does not execute them. Set False for models that cannot take tools.
+    supports_function_calling: bool = True
     supports_system_prompt: bool = True
     knowledge_cutoff: Optional[str] = None
     deprecated: bool = False
@@ -233,6 +233,7 @@ MODEL_CATALOGUE: dict[str, ModelProfile] = {
         pricing=TokenPricing(0.55, 2.19),
         knowledge_cutoff="2024-07",
         notes="Chain-of-thought reasoning — slower but higher accuracy on complex tasks",
+        supports_function_calling=False,
     ),
     "claude-haiku-4-5": ModelProfile(
         model_id="claude-haiku-4-5",

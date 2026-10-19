@@ -6,9 +6,12 @@ Supported: text messages (system, developer, user, assistant), ``model``,
 ``max_tokens`` / ``max_completion_tokens``, ``temperature``, ``stream`` and
 ``stream_options.include_usage``. Accepted and ignored: ``top_p``, ``seed``,
 ``user``, ``presence_penalty``, ``frequency_penalty``, ``logit_bias``.
-Anything else that would change the answer (tools, ``response_format``,
-``stop``, ``n`` above 1, image parts) is refused with a 400 rather than
-silently dropped. Extension field: ``provider`` pins a provider.
+Tool calling (``tools``, ``tool_choice``, assistant ``tool_calls`` and
+``tool`` messages) and ``response_format`` (``json_object``, ``json_schema``)
+work without streaming; the gateway returns tool calls and never runs them.
+Anything else that would change the answer (``stop``, ``n`` above 1, image
+parts, tools with ``stream=true``) is refused with a 400 rather than silently
+dropped. Extension field: ``provider`` pins a provider.
 
 Errors use OpenAI's envelope: ``{"error": {"message", "type", "code", "param"}}``.
 A stream that fails after output has started ends with an error event and
@@ -38,8 +41,6 @@ _IGNORED = {
     "logit_bias", "metadata", "store", "service_tier", "parallel_tool_calls",
 }  # fmt: skip
 _REFUSED = {
-    "tools": "tool calling",
-    "tool_choice": "tool calling",
     "functions": "function calling",
     "function_call": "function calling",
     "stop": "stop sequences",
@@ -63,6 +64,8 @@ class ChatRequest(BaseModel):
     stream_options: Optional[dict[str, Any]] = None
     n: Optional[int] = None
     response_format: Optional[dict[str, Any]] = None
+    tools: Optional[list[dict[str, Any]]] = None
+    tool_choice: Optional[Any] = None
     provider: Optional[str] = None
     metadata: Optional[dict[str, Any]] = None
     policy: Optional[str] = None
@@ -133,6 +136,67 @@ def _text_of(content: Any, index: int) -> str:
     )  # fmt: skip
 
 
+def _bad(message, param, code="invalid_value") -> CompatError:
+    return CompatError(400, message, "invalid_request_error", code, param)
+
+
+def _check_tools(body: ChatRequest) -> None:
+    for i, t in enumerate(body.tools or []):
+        fn = t.get("function") if isinstance(t, dict) else None
+        if (
+            not isinstance(fn, dict)
+            or t.get("type") != "function"
+            or not fn.get("name")
+        ):
+            raise _bad(
+                "Each tool must be {'type': 'function', 'function': {'name': ...}}.",
+                f"tools[{i}]",
+            )
+    if body.tools and body.stream:
+        raise CompatError(
+            400, "Tool calling with stream=true is not supported yet.",
+            "invalid_request_error", "unsupported_parameter", "tools",
+        )  # fmt: skip
+    choice = body.tool_choice
+    if choice is None:
+        return
+    if not body.tools:
+        raise _bad("tool_choice needs tools.", "tool_choice")
+    if isinstance(choice, str):
+        if choice not in ("auto", "none", "required"):
+            raise _bad(
+                "tool_choice must be auto, none, required or a function.", "tool_choice"
+            )
+    elif isinstance(choice, dict):
+        name = (choice.get("function") or {}).get("name")
+        if choice.get("type") != "function" or name not in {
+            t["function"]["name"] for t in body.tools
+        }:
+            raise _bad("tool_choice must name one of the given tools.", "tool_choice")
+    else:
+        raise _bad("tool_choice must be a string or an object.", "tool_choice")
+
+
+def _check_response_format(rf: Optional[dict]) -> None:
+    if not rf or rf.get("type") in (None, "text"):
+        return
+    kind = rf.get("type")
+    if kind == "json_object":
+        return
+    if kind == "json_schema":
+        js = rf.get("json_schema")
+        if not isinstance(js, dict) or not isinstance(js.get("schema"), dict):
+            raise _bad(
+                "response_format.json_schema.schema must be an object.",
+                "response_format",
+            )
+        return
+    raise CompatError(
+        400, f"response_format type '{kind}' is not supported.",
+        "invalid_request_error", "unsupported_parameter", "response_format",
+    )  # fmt: skip
+
+
 def _convert(body: ChatRequest):
     """OpenAI request -> provider CompletionRequest."""
     from providers import CompletionRequest as PCR
@@ -149,11 +213,8 @@ def _convert(body: ChatRequest):
             400, "Only n=1 is supported.", "invalid_request_error",
             "unsupported_parameter", "n",
         )  # fmt: skip
-    if body.response_format and body.response_format.get("type") not in (None, "text"):
-        raise CompatError(
-            400, "response_format other than 'text' is not supported yet.",
-            "invalid_request_error", "unsupported_parameter", "response_format",
-        )  # fmt: skip
+    _check_response_format(body.response_format)
+    _check_tools(body)
 
     system: list[str] = []
     messages = []
@@ -162,6 +223,22 @@ def _convert(body: ChatRequest):
         text = _text_of(m.get("content"), i)
         if role in ("system", "developer"):
             system.append(text)
+        elif role == "tool":
+            if not m.get("tool_call_id"):
+                raise _bad(
+                    "A tool message needs tool_call_id.", f"messages[{i}].tool_call_id"
+                )
+            messages.append(
+                PM(role="tool", content=text, tool_call_id=str(m["tool_call_id"]))
+            )
+        elif role == "assistant" and m.get("tool_calls"):
+            messages.append(
+                PM(
+                    role=role,
+                    content=text,
+                    tool_calls=_request_calls(m["tool_calls"], i),
+                )
+            )
         elif role in ("user", "assistant"):
             messages.append(PM(role=role, content=text))
         else:
@@ -182,7 +259,35 @@ def _convert(body: ChatRequest):
         system_prompt="\n\n".join(system) or None,
         stream=body.stream,
         metadata=_policy_metadata(body),
+        tools=body.tools or None,
+        tool_choice=body.tool_choice,
+        response_format=(
+            body.response_format
+            if (body.response_format or {}).get("type") != "text"
+            else None
+        ),
     )
+
+
+def _request_calls(raw: Any, index: int) -> list[dict]:
+    """An assistant message's ``tool_calls`` in normalised form."""
+    param = f"messages[{index}].tool_calls"
+    if not isinstance(raw, list):
+        raise _bad("tool_calls must be a list.", param)
+    calls = []
+    for c in raw:
+        fn = c.get("function") if isinstance(c, dict) else None
+        if not isinstance(fn, dict) or not c.get("id") or not fn.get("name"):
+            raise _bad("Each tool call needs an id and a function name.", param)
+        args = fn.get("arguments")
+        calls.append(
+            {
+                "id": str(c["id"]),
+                "name": fn["name"],
+                "arguments": args if isinstance(args, str) else json.dumps(args or {}),
+            }
+        )
+    return calls
 
 
 def _policy_metadata(body) -> dict:
@@ -206,6 +311,24 @@ def _chunk(cid, created, model, delta, finish=None, usage=None) -> str:
     if usage is not None:
         data["usage"] = usage
     return f"data: {json.dumps(data, separators=(',', ':'))}\n\n"
+
+
+def _assistant_message(resp) -> dict:
+    calls = (resp.metadata or {}).get("tool_calls")
+    if not calls:
+        return {"role": "assistant", "content": resp.content}
+    return {
+        "role": "assistant",
+        "content": resp.content or None,
+        "tool_calls": [
+            {
+                "id": c["id"],
+                "type": "function",
+                "function": {"name": c["name"], "arguments": c["arguments"]},
+            }
+            for c in calls
+        ],
+    }
 
 
 @router.post("/chat/completions", summary="Chat completion (OpenAI-compatible)")
@@ -245,7 +368,7 @@ async def chat_completions(
                     "choices": [
                         {
                             "index": 0,
-                            "message": {"role": "assistant", "content": resp.content},
+                            "message": _assistant_message(resp),
                             "finish_reason": (resp.metadata or {}).get("finish_reason")
                             or "stop",
                         }

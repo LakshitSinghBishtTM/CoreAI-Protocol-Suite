@@ -30,6 +30,7 @@ dev = [
     "pytest>=8.2.0",
     "pytest-asyncio>=0.23.0",
     "pytest-cov>=5.0.0",
+    "mypy>=1.10.0",
     "ruff>=0.6.0",
     "black>=24.0.0",
     "build>=1.2.0",
@@ -66,6 +67,13 @@ extend-exclude = ["build", "dist"]
 [tool.ruff.lint]
 select = ["E", "F", "W", "I"]
 ignore = ["E203"]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+follow_imports = "silent"
+# Ratchet: CI type-checks the files listed in .github/workflows/ci.yml. Add a
+# file there once it is clean; the rest of the code base is not checked yet.
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

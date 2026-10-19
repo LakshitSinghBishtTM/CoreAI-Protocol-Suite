@@ -14,11 +14,21 @@ from loguru import logger
 # providers.openai submodule which shares the same short name.
 AsyncOpenAI = importlib.import_module("openai").AsyncOpenAI
 
-from .base import SDK_TIMEOUT_S, BaseProvider, CompletionRequest, CompletionResponse, normalize_finish_reason, split_system
+from .base import (
+    SDK_TIMEOUT_S,
+    BaseProvider,
+    CompletionRequest,
+    CompletionResponse,
+    normalize_finish_reason,
+    openai_extract_tool_calls,
+    openai_messages,
+    openai_tool_kwargs,
+)
 
 
 class GrokProvider(BaseProvider):
     name = "grok"
+    supports_tools = True
     default_model = "grok-3-mini"
     base_url = "https://api.x.ai/v1"
 
@@ -40,6 +50,7 @@ class GrokProvider(BaseProvider):
             response = await self.client.chat.completions.create(
                 model=model,
                 messages=messages,
+                **openai_tool_kwargs(request),
                 max_tokens=request.max_tokens,
                 temperature=request.temperature,
             )
@@ -51,7 +62,7 @@ class GrokProvider(BaseProvider):
         input_tokens = response.usage.prompt_tokens
         output_tokens = response.usage.completion_tokens
         cost = self._bill(input_tokens, output_tokens, model)
-        content = response.choices[0].message.content
+        content = response.choices[0].message.content or ""
 
         result = CompletionResponse(
             content=content,
@@ -61,7 +72,7 @@ class GrokProvider(BaseProvider):
             output_tokens=output_tokens,
             cost_usd=cost,
             latency_ms=latency_ms,
-            metadata={"finish_reason": normalize_finish_reason(response.choices[0].finish_reason)},
+            metadata=self._metadata(response.choices[0]),
         )
         self._track(result)
         logger.debug(
@@ -78,6 +89,7 @@ class GrokProvider(BaseProvider):
             stream = await self.client.chat.completions.create(
                 model=model,
                 messages=messages,
+                **openai_tool_kwargs(request),
                 max_tokens=request.max_tokens,
                 temperature=request.temperature,
                 stream=True,
@@ -103,11 +115,17 @@ class GrokProvider(BaseProvider):
             logger.error(f"[grok] stream failed: {e}")
             raise
 
+    @staticmethod
+    def _metadata(choice) -> dict:
+        meta = {"finish_reason": normalize_finish_reason(choice.finish_reason)}
+        calls = openai_extract_tool_calls(choice.message)
+        if calls:
+            meta["tool_calls"] = calls
+            meta["finish_reason"] = "tool_calls"
+        return meta
+
     def count_tokens(self, text: str, model: str) -> int:
         return len(text) // 4
 
     def _build_messages(self, request: CompletionRequest) -> list[dict]:
-        system, rest = split_system(request)
-        messages = [{"role": "system", "content": system}] if system else []
-        messages.extend({"role": m.role, "content": m.content} for m in rest)
-        return messages
+        return openai_messages(request)

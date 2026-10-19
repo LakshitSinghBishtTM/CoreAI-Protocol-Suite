@@ -37,11 +37,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Runtime-only system deps: curl for the healthcheck
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        curl \
-    && rm -rf /var/lib/apt/lists/* \
-    && useradd --create-home --uid 1000 --shell /usr/sbin/nologin coreai
+# No apt packages: the healthcheck uses Python, which keeps the image small.
+RUN useradd --create-home --uid 1000 --shell /usr/sbin/nologin coreai
 
 COPY --from=builder /opt/venv /opt/venv
 
@@ -63,6 +60,6 @@ USER coreai
 EXPOSE 8743
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD curl -f http://localhost:8743/health || exit 1
+    CMD python -c "import urllib.request as u; u.urlopen('http://localhost:8743/health', timeout=4)" || exit 1
 
 CMD ["uvicorn", "api.server:app", "--host", "0.0.0.0", "--port", "8743"]

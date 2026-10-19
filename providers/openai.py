@@ -15,7 +15,16 @@ from loguru import logger
 # submodule (providers.openai) which shares the same short name.
 AsyncOpenAI = importlib.import_module("openai").AsyncOpenAI
 
-from .base import SDK_TIMEOUT_S, BaseProvider, CompletionRequest, CompletionResponse, normalize_finish_reason, split_system
+from .base import (
+    SDK_TIMEOUT_S,
+    BaseProvider,
+    CompletionRequest,
+    CompletionResponse,
+    normalize_finish_reason,
+    openai_extract_tool_calls,
+    openai_messages,
+    openai_tool_kwargs,
+)
 
 # tiktoken.encoding_for_model() downloads its BPE rank file over the network
 # on first use if it isn't already cached locally. In offline/sandboxed/
@@ -27,6 +36,7 @@ TIKTOKEN_TIMEOUT_S = 2.0
 
 class OpenAIProvider(BaseProvider):
     name = "openai"
+    supports_tools = True
     default_model = "gpt-4o-mini"
 
     def __init__(self, api_key: str):
@@ -64,6 +74,7 @@ class OpenAIProvider(BaseProvider):
             response = await self.client.chat.completions.create(
                 model=model,
                 messages=messages,
+                **openai_tool_kwargs(request),
                 **self._sampling_kwargs(model, request),
             )
         except Exception as e:
@@ -74,7 +85,7 @@ class OpenAIProvider(BaseProvider):
         input_tokens = response.usage.prompt_tokens
         output_tokens = response.usage.completion_tokens
         cost = self._bill(input_tokens, output_tokens, model)
-        content = response.choices[0].message.content
+        content = response.choices[0].message.content or ""
 
         result = CompletionResponse(
             content=content,
@@ -84,7 +95,7 @@ class OpenAIProvider(BaseProvider):
             output_tokens=output_tokens,
             cost_usd=cost,
             latency_ms=latency_ms,
-            metadata={"finish_reason": normalize_finish_reason(response.choices[0].finish_reason)},
+            metadata=self._metadata(response.choices[0]),
         )
         self._track(result)
         logger.debug(
@@ -101,6 +112,7 @@ class OpenAIProvider(BaseProvider):
             stream = await self.client.chat.completions.create(
                 model=model,
                 messages=messages,
+                **openai_tool_kwargs(request),
                 **self._sampling_kwargs(model, request),
                 stream=True,
                 stream_options={"include_usage": True},
@@ -124,6 +136,15 @@ class OpenAIProvider(BaseProvider):
         except Exception as e:
             logger.error(f"[openai] stream failed: {e}")
             raise
+
+    @staticmethod
+    def _metadata(choice) -> dict:
+        meta = {"finish_reason": normalize_finish_reason(choice.finish_reason)}
+        calls = openai_extract_tool_calls(choice.message)
+        if calls:
+            meta["tool_calls"] = calls
+            meta["finish_reason"] = "tool_calls"
+        return meta
 
     def count_tokens(self, text: str, model: str) -> int:
         result_q: queue.Queue = queue.Queue(maxsize=1)
@@ -159,10 +180,7 @@ class OpenAIProvider(BaseProvider):
         return len(text) // 4
 
     def _build_messages(self, request: CompletionRequest) -> list[dict]:
-        system, rest = split_system(request)
-        messages = [{"role": "system", "content": system}] if system else []
-        messages.extend({"role": m.role, "content": m.content} for m in rest)
-        return messages
+        return openai_messages(request)
 
     def fine_tuning_client(self) -> "OpenAIFineTuningClient":
         return OpenAIFineTuningClient(self.client)
