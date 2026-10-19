@@ -42,9 +42,7 @@ class RequestContextMiddleware:
             await self.app(scope, receive, send)
             return
 
-        supplied = dict(scope.get("headers") or []).get(HEADER, b"").decode(
-            "latin-1"
-        )
+        supplied = dict(scope.get("headers") or []).get(HEADER, b"").decode("latin-1")
         rid = supplied if _SAFE.match(supplied) else new_request_id()
         token = _request_id.set(rid)
         started = time.perf_counter()

@@ -9,7 +9,6 @@ from loguru import logger
 
 from coreai import tracing
 from coreai.pricing import get_pricing
-
 from neural.model import get_registry
 from providers import (
     BaseProvider,
@@ -17,7 +16,6 @@ from providers import (
     CompletionResponse,
     StreamUsage,
 )
-
 from providers.base import validate_conversation
 
 from .budgets import BudgetExceeded
@@ -682,9 +680,7 @@ class Router:
                 continue
 
             # Stream is open and the first chunk (if any) is in hand.
-            usage.opened_model = (
-                req.model or self.providers[name].default_model or ""
-            )
+            usage.opened_model = req.model or self.providers[name].default_model or ""
             try:
                 if first is not _END:
                     started = True
@@ -946,11 +942,18 @@ class Router:
         policy = self.alias_policy(request.model)
         if policy is None:
             return
-        request.metadata = {**(request.metadata or {}), "policy": policy, "alias": request.model}
+        request.metadata = {
+            **(request.metadata or {}),
+            "policy": policy,
+            "alias": request.model,
+        }
         request.model = None
 
     async def embed(
-        self, texts: list[str], model: Optional[str] = None, preferred: Optional[str] = None
+        self,
+        texts: list[str],
+        model: Optional[str] = None,
+        preferred: Optional[str] = None,
     ):
         """Embed *texts* on the first healthy provider that supports it.
         Returns ``(vectors, input_tokens, model, provider)``."""
@@ -988,7 +991,9 @@ class Router:
         if last is not None and len(errors) == 1:
             raise last
         if errors:
-            raise AllProvidersUnavailable(errors, retry_after=self._soonest_retry_after())
+            raise AllProvidersUnavailable(
+                errors, retry_after=self._soonest_retry_after()
+            )
         raise ValueError("No configured provider supports embeddings")
 
     def _owner_of(self, model: Optional[str]) -> Optional[str]:
@@ -1121,9 +1126,7 @@ class Router:
             return f"{profile.model_id} does not support streaming."
         return None
 
-    def _policy_models(
-        self, policy: Policy, order: list[str]
-    ) -> list[Optional[str]]:
+    def _policy_models(self, policy: Policy, order: list[str]) -> list[Optional[str]]:
         """Model per candidate: the policy's ``model`` for the first, its
         ``fallback_model`` for later ones, when the provider owns it."""
         models: list[Optional[str]] = []
@@ -1766,7 +1769,12 @@ class Router:
                 for name, s in self.provider_stats.items()
             },
             "model_stats": [
-                {"provider": p, "model": m, **e, "latency_buckets": list(e["latency_buckets"])}
+                {
+                    "provider": p,
+                    "model": m,
+                    **e,
+                    "latency_buckets": list(e["latency_buckets"]),
+                }
                 for (p, m), e in self.model_stats.items()
             ],
             "latency_bucket_bounds_ms": list(LATENCY_BUCKETS_MS),

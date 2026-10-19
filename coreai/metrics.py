@@ -163,7 +163,10 @@ def render_prometheus(stats: dict, *, accepting: bool = True, in_flight: int = 0
         "counter",
         "Tokens processed, by provider, model and direction.",
         [
-            ({"provider": r["provider"], "model": r["model"], "type": t}, r[f"{t}_tokens"])
+            (
+                {"provider": r["provider"], "model": r["model"], "type": t},
+                r[f"{t}_tokens"],
+            )
             for r in stats.get("model_stats") or []
             for t in ("input", "output")
         ],
@@ -173,7 +176,10 @@ def render_prometheus(stats: dict, *, accepting: bool = True, in_flight: int = 0
         "caips_stream_usage_estimated_total",
         "counter",
         "Streams whose token counts were estimated (the provider reported none).",
-        [({"provider": p}, n) for p, n in (stats.get("streams_estimated") or {}).items()],
+        [
+            ({"provider": p}, n)
+            for p, n in (stats.get("streams_estimated") or {}).items()
+        ],
     )
     w.metric(
         "caips_unpriced_requests_total",

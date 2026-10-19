@@ -146,7 +146,7 @@ See `.env.example` for a template. The main variables:
 ```bash
 pip install -e .[dev]
 pytest
-flake8 coreai/ api/ agents/ && black --check coreai/ api/ agents/ && isort --check-only coreai/ api/ agents/
+ruff check coreai/ api/ agents/ && black --check coreai/ api/ agents/
 ```
 
 CI runs lint, tests on Python 3.11 and 3.12, a wheel build-and-import check, and a Docker build with a health check.

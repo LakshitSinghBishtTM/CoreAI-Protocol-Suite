@@ -5,17 +5,16 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 from loguru import logger
 
 from agents.agent_manager import init_agent_manager
-from coreai.task_runner import TaskRunner
 from api import openai_compat, routes
 from api.auth import AuthContext, require_scope
 from api.middleware import RateLimitMiddleware
-from coreai import Orchestrator, Router, RoutingConfig, RoutingStrategy
+from coreai import Orchestrator, Router, RoutingConfig, RoutingStrategy, tracing
 from coreai.drain import DrainController, DrainMiddleware
 from coreai.kernel import init_kernel
 from coreai.logging_setup import configure_logging
 from coreai.metrics import CONTENT_TYPE, render_prometheus
-from coreai import tracing
 from coreai.request_context import RequestContextMiddleware
+from coreai.task_runner import TaskRunner
 from providers import (
     load_providers,
 )

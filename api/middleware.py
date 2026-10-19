@@ -102,7 +102,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         return don't accumulate. Runs at most once a minute unless the table
         is oversized."""
         last = getattr(self, "_last_sweep", 0.0)
-        if now - last < self.SWEEP_INTERVAL_S and len(self._windows) <= self.MAX_CLIENTS:
+        if (
+            now - last < self.SWEEP_INTERVAL_S
+            and len(self._windows) <= self.MAX_CLIENTS
+        ):
             return
         self._last_sweep = now
         for key in [k for k, w in self._windows.items() if not w or w[-1] <= cutoff]:

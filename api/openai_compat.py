@@ -246,7 +246,8 @@ async def chat_completions(
                         {
                             "index": 0,
                             "message": {"role": "assistant", "content": resp.content},
-                            "finish_reason": (resp.metadata or {}).get("finish_reason") or "stop",
+                            "finish_reason": (resp.metadata or {}).get("finish_reason")
+                            or "stop",
                         }
                     ],
                     "usage": {
@@ -309,7 +310,10 @@ async def chat_completions(
         if ok:
             u0 = preq.stream_usage
             yield _chunk(
-                cid, created, model_name, {},
+                cid,
+                created,
+                model_name,
+                {},
                 finish=(u0.finish_reason if u0 is not None else None) or "stop",
             )
             u = preq.stream_usage
@@ -365,7 +369,9 @@ async def create_embeddings(
     try:
         r = get_router()
         routes._budget_check(ctx, body.model)
-        vectors, tokens, used, provider = await r.embed(texts, body.model, body.provider)
+        vectors, tokens, used, provider = await r.embed(
+            texts, body.model, body.provider
+        )
     except HTTPException as exc:
         return _error_response(_from_http(exc))
     except ValueError as exc:
@@ -376,7 +382,9 @@ async def create_embeddings(
         logger.error("Embeddings error for %s: %s", ctx.subject, exc)
         kind = classify(exc).kind.value
         return _error_response(
-            CompatError(502, f"The upstream provider failed ({kind}).", "server_error", kind)
+            CompatError(
+                502, f"The upstream provider failed ({kind}).", "server_error", kind
+            )
         )
     cost = r.providers[provider]._bill(tokens, 0, used)
     routes._budget_record(ctx, cost, tokens, model=used)
@@ -421,5 +429,7 @@ async def list_models_openai(
     r = get_router()
     for alias in sorted(r.aliases):
         if r.alias_policy(alias):
-            data.append({"id": alias, "object": "model", "created": 0, "owned_by": "caips"})
+            data.append(
+                {"id": alias, "object": "model", "created": 0, "owned_by": "caips"}
+            )
     return {"object": "list", "data": data}

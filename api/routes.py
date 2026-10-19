@@ -583,7 +583,6 @@ async def terminate_agent(
     ctx: AuthContext = Depends(require_scope("agents:write")),
 ):
     from agents.agent_manager import get_agent_manager
-
     from coreai.task_runner import get_task_runner
 
     # Stop the agent's worker and wait for its running task to end *before*

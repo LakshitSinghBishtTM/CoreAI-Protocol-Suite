@@ -19,13 +19,20 @@ DEFAULT_TASK_TIMEOUT_S = 120.0
 
 
 class TaskRunner:
-    def __init__(self, orchestrator: Orchestrator, agent_manager, timeout_s: float = DEFAULT_TASK_TIMEOUT_S):
+    def __init__(
+        self,
+        orchestrator: Orchestrator,
+        agent_manager,
+        timeout_s: float = DEFAULT_TASK_TIMEOUT_S,
+    ):
         self.orch = orchestrator
         self.manager = agent_manager
         self.timeout_s = timeout_s
         self._queues: dict[str, asyncio.PriorityQueue] = {}
         self._workers: dict[str, asyncio.Task] = {}
-        self._current: dict[str, tuple[str, asyncio.Task]] = {}  # agent -> (task_id, run)
+        self._current: dict[str, tuple[str, asyncio.Task]] = (
+            {}
+        )  # agent -> (task_id, run)
         self._seq = itertools.count()
 
     def submit(self, task_id: str) -> None:
@@ -34,7 +41,9 @@ class TaskRunner:
         q.put_nowait((-task.priority, next(self._seq), task_id))
         worker = self._workers.get(task.agent_id)
         if worker is None or worker.done():
-            self._workers[task.agent_id] = asyncio.create_task(self._work(task.agent_id))
+            self._workers[task.agent_id] = asyncio.create_task(
+                self._work(task.agent_id)
+            )
 
     async def _work(self, agent_id: str) -> None:
         q = self._queues[agent_id]

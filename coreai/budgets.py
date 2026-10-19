@@ -192,7 +192,12 @@ def _parse(raw: Any, where: str, base: BudgetLimits, errors: list[str]) -> Budge
     for key in ("max_cost_usd", "warn_cost_usd"):
         if key in raw:
             v = raw[key]
-            if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or v < 0:
+            if (
+                isinstance(v, bool)
+                or not isinstance(v, (int, float))
+                or not math.isfinite(v)
+                or v < 0
+            ):
                 errors.append(f"{where}.{key}: must be a finite number >= 0")
             else:
                 out = replace(out, **{key: float(v)})
