@@ -117,6 +117,16 @@ class BudgetManager:
         u.cost += max(0.0, cost_usd or 0.0)
         u.tokens += max(0, tokens or 0)
 
+    def add_usage(self, subject: str, cost_usd: float = 0.0, tokens: int = 0) -> None:
+        """Add cost and tokens to a request already counted by ``record``
+        (streams only know their usage once they finish)."""
+        limits = self.limits_for(subject)
+        if limits is None:
+            return
+        u = self._current(subject, limits)
+        u.cost += max(0.0, cost_usd or 0.0)
+        u.tokens += max(0, tokens or 0)
+
     def status(self, subject: str) -> dict[str, Any] | None:
         limits = self.limits_for(subject)
         if limits is None:

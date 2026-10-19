@@ -10,7 +10,13 @@ from loguru import logger
 # Explicit submodule imports so patch("providers.openai.OpenAIProvider") works
 from . import anthropic, deepseek, gemini, grok, openai
 from .anthropic import AnthropicProvider
-from .base import BaseProvider, CompletionRequest, CompletionResponse, Message
+from .base import (
+    BaseProvider,
+    CompletionRequest,
+    CompletionResponse,
+    Message,
+    StreamUsage,
+)
 from .deepseek import DeepSeekProvider
 from .gemini import GeminiProvider
 from .grok import GrokProvider
@@ -19,6 +25,7 @@ from .openai import OpenAIProvider
 __all__ = [
     "BaseProvider",
     "CompletionRequest",
+    "StreamUsage",
     "CompletionResponse",
     "Message",
     "OpenAIProvider",

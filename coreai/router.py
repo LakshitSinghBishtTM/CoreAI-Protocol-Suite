@@ -9,7 +9,12 @@ from loguru import logger
 from coreai.pricing import get_pricing
 
 from neural.model import get_registry
-from providers import BaseProvider, CompletionRequest, CompletionResponse
+from providers import (
+    BaseProvider,
+    CompletionRequest,
+    CompletionResponse,
+    StreamUsage,
+)
 
 from .cache import ResponseCache
 from .circuit_breaker import CircuitBreaker
@@ -277,6 +282,8 @@ class Router:
         self._rr_index = 0  # only used by round-robin
         # (provider, model) -> request/token counters and a latency histogram.
         self.model_stats: dict[tuple[str, str], dict] = {}
+        # Streams whose token counts the router had to estimate, by provider.
+        self.streams_estimated: dict[str, int] = {}
         self.provider_stats: dict[str, dict] = {
             name: {
                 "requests": 0,
@@ -510,6 +517,10 @@ class Router:
 
             timeout = self._timeout_for(name)
             started = False
+            completed = False
+            chars = 0  # text delivered, to estimate tokens if none are reported
+            usage = StreamUsage()
+            request.stream_usage = usage
             gen = None
             try:
                 gen, first = await self._open_stream(
@@ -535,6 +546,7 @@ class Router:
             try:
                 if first is not _END:
                     started = True
+                    chars += len(first)
                     yield first
                     while True:
                         try:
@@ -545,6 +557,7 @@ class Router:
                             break
                         except asyncio.TimeoutError:
                             raise ProviderTimeout(name, timeout)
+                        chars += len(chunk)
                         yield chunk
             except Exception as exc:
                 info = classify(exc)
@@ -564,10 +577,12 @@ class Router:
                 breaker.release()
                 raise
             else:
+                completed = True
                 breaker.record_success()
                 self.provider_stats[name]["requests"] += 1
                 return
             finally:
+                self._settle_stream(name, request, usage, chars, started, completed)
                 self.limiter.release(name)
                 await self._close_stream(gen)
 
@@ -1215,6 +1230,55 @@ class Router:
         except KeyError:
             return None
 
+    def _settle_stream(
+        self,
+        name: str,
+        request: CompletionRequest,
+        usage: StreamUsage,
+        chars: int,
+        delivered: bool,
+        completed: bool,
+    ) -> None:
+        """Price a stream once it has ended, however it ended.
+
+        Output that reached the client was generated and billed even if the
+        stream later failed or the client left, so it counts. Never raises:
+        the stream's own outcome must not depend on accounting.
+        """
+        if not delivered:
+            return
+        try:
+            provider = self.providers[name]
+            usage.provider = name
+            usage.completed = completed
+            usage.model = usage.model or request.model or provider.default_model
+            if not usage.reported:
+                prompt_chars = sum(len(m.content) for m in request.messages)
+                prompt_chars += len(request.system_prompt or "")
+                usage.input_tokens = max(1, prompt_chars // 4)
+                usage.output_tokens = max(1, chars // 4)
+                usage.estimated = True
+                self.streams_estimated[name] = self.streams_estimated.get(name, 0) + 1
+            usage.cost_usd = provider._bill(
+                usage.input_tokens, usage.output_tokens, usage.model
+            )
+            self.provider_stats[name]["total_cost"] += usage.cost_usd
+            # No latency: a long generation is not a slow provider.
+            self._record_usage(
+                name, usage.model, None, usage.input_tokens, usage.output_tokens
+            )
+            logger.bind(
+                provider=name,
+                model=usage.model,
+                input_tokens=usage.input_tokens,
+                output_tokens=usage.output_tokens,
+                cost_usd=usage.cost_usd,
+                estimated=usage.estimated,
+                completed=completed,
+            ).log("INFO" if completed else "WARNING", "stream settled")
+        except Exception:
+            logger.exception(f"[{name}] could not settle stream usage")
+
     def _estimate_tokens(self, request: CompletionRequest) -> int:
         total_chars = sum(len(m.content) for m in request.messages)
         return max(100, total_chars // 4)
@@ -1240,12 +1304,19 @@ class Router:
         return entry
 
     def _record_usage(
-        self, name: str, model: str, latency_ms: float, in_tok: int, out_tok: int
+        self,
+        name: str,
+        model: str,
+        latency_ms: Optional[float],
+        in_tok: int,
+        out_tok: int,
     ) -> None:
         entry = self._model_entry(name, model or "unknown")
         entry["requests"] += 1
         entry["input_tokens"] += max(0, in_tok or 0)
         entry["output_tokens"] += max(0, out_tok or 0)
+        if latency_ms is None:  # streams: tokens count, latency does not
+            return
         entry["latency_sum_ms"] += latency_ms
         for i, bound in enumerate(LATENCY_BUCKETS_MS):
             if latency_ms <= bound:
@@ -1306,6 +1377,7 @@ class Router:
             ],
             "latency_bucket_bounds_ms": list(LATENCY_BUCKETS_MS),
             "unpriced_models": get_pricing().unpriced_stats(),
+            "streams_estimated": dict(self.streams_estimated),
             "cache_stats": self.cache.stats() if self.cache else None,
             "retry_stats": self.retry_manager.stats() if self.retry_manager else None,
             "limiter_stats": self.limiter.stats(),

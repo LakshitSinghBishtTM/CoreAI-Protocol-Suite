@@ -77,6 +77,15 @@ class GeminiProvider(BaseProvider):
             )
             stream = await chat.send_message_stream(last_message)
             async for chunk in stream:
+                meta = getattr(chunk, "usage_metadata", None)
+                if meta is not None and request.stream_usage is not None:
+                    out = getattr(meta, "candidates_token_count", None)
+                    thoughts = getattr(meta, "thoughts_token_count", None)
+                    if isinstance(out, int) and isinstance(thoughts, int):
+                        out += thoughts  # thinking tokens are billed as output
+                    request.stream_usage.report(
+                        getattr(meta, "prompt_token_count", None), out
+                    )
                 if chunk.text:
                     yield chunk.text
         except Exception as e:

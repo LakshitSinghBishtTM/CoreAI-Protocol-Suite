@@ -78,6 +78,16 @@ def _budget_record(ctx, cost_usd=0.0, tokens=0) -> None:
         budgets.record(ctx.subject, cost_usd, tokens)
 
 
+def _budget_record_stream(ctx, usage) -> None:
+    from api.server import get_budgets
+
+    budgets = get_budgets()
+    if budgets is not None and usage is not None and usage.provider:
+        budgets.add_usage(
+            ctx.subject, usage.cost_usd, usage.input_tokens + usage.output_tokens
+        )
+
+
 def _http_error(exc: Exception) -> HTTPException:
     """Translate a router/provider exception into the right HTTP response."""
     if isinstance(exc, ValueError):  # our own validation (unknown provider, context)
@@ -330,7 +340,8 @@ async def completions_stream(
         logger.error("Stream error for %s: %s", ctx.subject, exc)
         raise _http_error(exc)
 
-    # Streams report no usage, so only the request itself is counted.
+    # The request is counted now; its cost and tokens are added when the
+    # stream ends (see _generate), because they are only known then.
     _budget_record(ctx)
 
     async def _generate():
@@ -343,7 +354,10 @@ async def completions_stream(
             logger.error("Stream error for %s: %s", ctx.subject, exc)
             yield f"[stream_error] {classify(exc).kind.value}"
         finally:
+            # Closing the stream lets the router settle it, even if the client
+            # left early, so usage is read afterwards.
             await stream.aclose()  # frees the provider's rate-limit slot
+            _budget_record_stream(ctx, preq.stream_usage)
 
     return StreamingResponse(_generate(), media_type="text/event-stream")
 

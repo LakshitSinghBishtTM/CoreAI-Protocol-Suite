@@ -11,6 +11,42 @@ class Message:
     content: str
 
 
+def _count(value) -> int | None:
+    """A real, non-negative token count, or None (mocks, missing, junk)."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return int(value) if value >= 0 else None
+
+
+@dataclass
+class StreamUsage:
+    """Usage for one streamed request.
+
+    Providers call ``report()`` when the SDK gives token counts. The router
+    fills in the rest when the stream ends: an estimate if nothing was
+    reported (``estimated``), then ``cost_usd`` and the serving ``provider``.
+    """
+
+    input_tokens: int = 0
+    output_tokens: int = 0
+    model: str = ""
+    reported: bool = False  # the provider's SDK supplied the token counts
+    estimated: bool = False  # the router estimated them from text length
+    completed: bool = False  # the stream ended normally
+    cost_usd: float = 0.0
+    provider: str = ""
+
+    def report(self, input_tokens, output_tokens, model=None) -> None:
+        i, o = _count(input_tokens), _count(output_tokens)
+        if i is None and o is None:
+            return
+        self.input_tokens = i if i is not None else self.input_tokens
+        self.output_tokens = o if o is not None else self.output_tokens
+        if isinstance(model, str) and model:
+            self.model = model
+        self.reported = True
+
+
 @dataclass
 class CompletionRequest:
     messages: list[Message]
@@ -20,6 +56,8 @@ class CompletionRequest:
     stream: bool = False
     system_prompt: Optional[str] = None
     metadata: dict = field(default_factory=dict)
+    # Set by the router for streams so providers can report token usage.
+    stream_usage: Optional[StreamUsage] = field(default=None, repr=False, compare=False)
 
 
 @dataclass

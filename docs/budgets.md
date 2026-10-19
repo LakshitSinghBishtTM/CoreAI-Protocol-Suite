@@ -15,12 +15,18 @@ requests and tokens. Off by default; create `config/budgets.yml` (see
 - `0` blocks everything for that field; leaving a field out means no limit.
 - An invalid file stops startup with every problem listed, so a typo never
   silently removes a limit.
-- Failed calls are not billed. Streams report no usage, so each stream counts
-  as one request and zero cost or tokens.
+- Failed calls that delivered nothing are not billed.
+- **Streams are metered.** A stream counts as one request when it starts; its
+  cost and tokens are added when it ends, including when it fails midway or the
+  client disconnects, because the provider billed for the output already
+  generated. Token counts come from the provider's SDK when it reports them;
+  otherwise they are estimated (about 4 characters per token) and counted in
+  `caips_stream_usage_estimated_total`.
 
 ## Known limits
 
-- Limits are checked before a call and usage recorded after, so one request
+- Limits are checked before a call and usage recorded after (for a stream,
+  after it ends), so one request
   can finish over the cap and concurrent requests can overshoot by what is in
   flight. The next request is refused.
 - Usage is in memory, per process, and resets on restart. Subjects tracked are

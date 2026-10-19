@@ -4,6 +4,13 @@
 
 The previous `1.0.0` label did not match the project's state; versions now start at 0.1.0 (alpha).
 
+### Added (Phase 3, part 8: streamed responses are metered)
+- Streams now have token counts and cost. Providers report usage from their SDKs (OpenAI, Grok and DeepSeek via `stream_options.include_usage`; Anthropic from the final message; Gemini from usage metadata, thinking tokens included). If a provider reports nothing, the router estimates from text length and flags it (`caips_stream_usage_estimated_total`).
+- The router settles every stream that delivered output, however it ended (finished, failed midway, client left): provider spend, tokens in `caips_tokens_total`, and a `stream settled` log line.
+- Stream cost and tokens count toward per-key budgets (the request itself is still counted once, at the start). Streams are not added to the latency histogram, so a long generation cannot trip the latency alert.
+- New `StreamUsage` type and `CompletionRequest.stream_usage` field; `BudgetManager.add_usage`.
+- The streaming request options and usage fields were written from the SDKs' documented behaviour and tested against fakes. They have not been run against the live provider APIs.
+
 ### Changed (Phase 3, part 7: cost tracking)
 - **One price table** (`config/pricing.yml`, loaded and validated by `coreai/pricing.py`) replaces five per-provider copies and a sixth, diverging, one in `utils/cost.py` (for example `gemini-1.5-pro` was $1.25/$5 in one and $3.50/$10.50 in another). Prices are per million tokens. Values were carried over unchanged from the provider modules and are marked `reviewed: null`; they have not been re-checked against vendor price pages.
 - Unlisted models are still billed at the provider default, but now log a warning once and are counted in `caips_unpriced_requests_total`. Routing estimates are not counted, only billed responses.
@@ -32,7 +39,7 @@ The previous `1.0.0` label did not match the project's state; versions now start
 ### Added (Phase 3, part 4: latency histograms and token counts)
 - `/metrics` now exposes `caips_request_duration_seconds` (a real Prometheus histogram: buckets from 50ms to 30s plus `+Inf`, `_sum` and `_count`) and `caips_tokens_total` (input and output), both labelled by `provider` and `model`. The router keeps these counters (`Router.model_stats`, also in `stats()` as `model_stats`).
 - Model labels are capped at 50 per provider; further models share `model="other"`, so a stream of odd model names can't grow memory or metric cardinality.
-- Not yet: streamed responses (they report no usage), per-model cost, error and cache metrics per model.
+- Not yet: per-model cost, error and cache metrics per model.
 
 ### Added (Phase 3, part 3: audit log)
 - **Audit log** (`coreai/audit.py`): records kill-switch triggers, routing policy loads and hot reloads (accepted and rejected) and budget config loads, with actor, target and outcome. `GET /v1/admin/audit` (admin scope) reads it. Bounded in memory; optional JSONL file via `COREAI_AUDIT_FILE` with size-capped rotation; secret-looking fields are redacted. See `docs/operations.md`.
@@ -41,7 +48,7 @@ The previous `1.0.0` label did not match the project's state; versions now start
 
 ### Added (Phase 3, part 2: budgets and quotas)
 - **Per-subject budgets** (`coreai/budgets.py`): hard limits on cost, requests and tokens per window, plus a soft cost warning. Over-limit requests get `429` with `Retry-After`. Configure with `config/budgets.yml` or `COREAI_BUDGET_FILE` (example in `config/budgets.example.yml`; off without a file; an invalid file stops startup). `GET /v1/usage` shows the caller's usage. See `docs/budgets.md`.
-- Not yet: per-team and per-model budgets, persistence across restarts, and cost for streamed responses.
+- Not yet: per-team and per-model budgets and persistence across restarts.
 
 ### Added (Phase 3, part 1: probes and metrics)
 - `GET /healthz` (liveness, no dependency checks) and `GET /readyz` (readiness: 503 while draining, before the router exists, or when every provider's circuit is open). Both stay reachable during a drain.

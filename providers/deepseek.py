@@ -83,8 +83,18 @@ class DeepSeekProvider(BaseProvider):
                 max_tokens=request.max_tokens,
                 temperature=request.temperature,
                 stream=True,
+                stream_options={"include_usage": True},
             )
             async for chunk in stream:
+                usage = getattr(chunk, "usage", None)
+                if usage is not None and request.stream_usage is not None:
+                    request.stream_usage.report(
+                        getattr(usage, "prompt_tokens", None),
+                        getattr(usage, "completion_tokens", None),
+                        getattr(chunk, "model", None),
+                    )
+                if not chunk.choices:  # the final usage-only chunk has none
+                    continue
                 delta = chunk.choices[0].delta.content
                 if delta:
                     yield delta

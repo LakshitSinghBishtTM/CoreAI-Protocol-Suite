@@ -45,7 +45,8 @@ class _Writer:
 
 def _histogram(w: "_Writer", stats: dict) -> None:
     bounds = stats.get("latency_bucket_bounds_ms") or []
-    rows = stats.get("model_stats") or []
+    # Rows with no recorded latency are streamed-only: tokens count, latency does not.
+    rows = [r for r in stats.get("model_stats") or [] if sum(r["latency_buckets"])]
     if not rows or not bounds:
         return
     name = "caips_request_duration_seconds"
@@ -168,6 +169,12 @@ def render_prometheus(stats: dict, *, accepting: bool = True, in_flight: int = 0
         ],
     )
 
+    w.metric(
+        "caips_stream_usage_estimated_total",
+        "counter",
+        "Streams whose token counts were estimated (the provider reported none).",
+        [({"provider": p}, n) for p, n in (stats.get("streams_estimated") or {}).items()],
+    )
     w.metric(
         "caips_unpriced_requests_total",
         "counter",

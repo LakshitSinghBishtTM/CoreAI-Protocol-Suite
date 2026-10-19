@@ -73,6 +73,16 @@ class AnthropicProvider(BaseProvider):
             ) as stream:
                 async for text in stream.text_stream:
                     yield text
+                if request.stream_usage is not None:
+                    try:
+                        final = await stream.get_final_message()
+                        request.stream_usage.report(
+                            final.usage.input_tokens,
+                            final.usage.output_tokens,
+                            final.model,
+                        )
+                    except Exception as exc:  # usage is best effort
+                        logger.debug(f"[anthropic] no stream usage: {exc}")
         except Exception as e:
             logger.error(f"[anthropic] stream failed: {e}")
             raise

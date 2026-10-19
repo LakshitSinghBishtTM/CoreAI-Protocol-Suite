@@ -47,6 +47,7 @@ def make_provider(name: str, cost: float = 0.001, behaviour=None):
     p.name = name
     p.default_model = f"{name}-model"
     p.estimate_cost = MagicMock(return_value=cost)
+    p._bill = MagicMock(return_value=cost)
 
     if behaviour is None:
         p.complete = AsyncMock(return_value=response(name, cost))
