@@ -104,6 +104,7 @@ class AutonomousAgent:
         self._paused = asyncio.Event()
         self._paused.set()  # not paused by default
         self._last_active = time.monotonic()
+        self._active = 0  # in-flight execute() calls
 
         self.system_prompt = self.config.get(
             "system_prompt",
@@ -157,7 +158,8 @@ class AutonomousAgent:
 
     async def health_check(self) -> bool:
         idle_for = time.monotonic() - self._last_active
-        if idle_for > self.IDLE_TIMEOUT:
+        # Never wipe the context under a task that is still executing.
+        if self._active == 0 and idle_for > self.IDLE_TIMEOUT:
             logger.warning(
                 "Agent %s idle for %.0fs, clearing context", self.agent_id, idle_for
             )
@@ -172,8 +174,17 @@ class AutonomousAgent:
     async def execute(self, task: Dict) -> Any:
         """
         Run an autonomous task loop until completion or step limit.
-        task = {"instruction": str, "context": dict, "constraints": list}
+        task = {"instruction": str, "context": dict, "constraints": list,
+                "max_steps": int (optional), "on_step": callable(int) (optional)}
         """
+        self._active += 1
+        try:
+            return await self._execute(task)
+        finally:
+            self._active -= 1
+            self._last_active = time.monotonic()
+
+    async def _execute(self, task: Dict) -> Any:
         await self._paused.wait()
         self._last_active = time.monotonic()
 
@@ -189,10 +200,18 @@ class AutonomousAgent:
 
         steps = 0
         result = None
+        limit = int(task.get("max_steps") or self.STEP_LIMIT)
+        on_step = task.get("on_step")
 
-        while steps < self.STEP_LIMIT:
+        while steps < limit:
             await self._paused.wait()
             steps += 1
+            self._last_active = time.monotonic()
+            if on_step is not None:
+                try:
+                    on_step(steps)
+                except Exception:  # progress reporting must not break the task
+                    pass
 
             response = await retry_with_backoff(
                 self.kernel.complete,
@@ -214,10 +233,8 @@ class AutonomousAgent:
                 )
                 self.context.append("user", f"[tool_result] {tool_result}")
 
-        if steps >= self.STEP_LIMIT:
-            logger.warning(
-                "Agent %s hit step limit (%d)", self.agent_id, self.STEP_LIMIT
-            )
+        if result is None and steps >= limit:
+            logger.warning("Agent %s hit step limit (%d)", self.agent_id, limit)
 
         self._last_active = time.monotonic()
         return result

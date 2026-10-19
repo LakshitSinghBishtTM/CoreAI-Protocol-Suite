@@ -209,6 +209,7 @@ async def chat_completions(
         preq = _convert(body)
         routes._budget_check(ctx, body.model)
         _router = get_router()
+        routes._bind_model_gate(_router)
         cid = "chatcmpl-" + uuid.uuid4().hex[:24]
         created = int(time.time())
 

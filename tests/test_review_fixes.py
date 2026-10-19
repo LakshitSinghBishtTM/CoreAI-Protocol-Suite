@@ -69,13 +69,22 @@ class _Agent:
 
     async def execute(self, task):
         self.ran.append(task["instruction"])
+        self.max_steps = task.get("max_steps")
+        if task.get("on_step"):
+            task["on_step"](3)
         await asyncio.sleep(self.delay)
         return self.result
 
 
 def _setup(agent, timeout=5.0):
     orch = Orchestrator()
-    mgr = SimpleNamespace(agents={"a1": SimpleNamespace(agent=agent)})
+    class _Mgr:
+        agents = {"a1": SimpleNamespace(agent=agent)}
+
+        async def dispatch_task(self, agent_id, task):
+            return await agent.execute(task)
+
+    mgr = _Mgr()
     orch.register_agent("a1")
     return orch, TaskRunner(orch, mgr, timeout_s=timeout)
 
@@ -158,5 +167,72 @@ def test_cache_hit_reports_current_latency():
         assert first_cached.cached and first_cached.cost_usd == 0.0
         assert first_cached.latency_ms < 1000
         assert "original_latency_ms" in first_cached.metadata
+
+    asyncio.run(run())
+
+
+def test_max_iterations_is_passed_and_iterations_recorded():
+    async def run():
+        agent = _Agent()
+        orch, runner = _setup(agent)
+        t = orch.assign_task("a1", "x")
+        t.max_iterations = 7
+        runner.submit(t.task_id)
+        await _wait(orch, t.task_id, "completed")
+        assert agent.max_steps == 7 and orch.get_task(t.task_id).iterations == 3
+        await runner.shutdown()
+
+    asyncio.run(run())
+
+
+def test_dropping_an_agent_with_a_running_task_stops_the_worker():
+    async def run():
+        orch, runner = _setup(_Agent(delay=5))
+        t = orch.assign_task("a1", "long")
+        runner.submit(t.task_id)
+        await _wait(orch, t.task_id, "running")
+        worker = runner._workers["a1"]
+        await runner.drop_agent("a1")
+        assert worker.done() and "a1" not in runner._workers
+        assert orch.get_task(t.task_id).status.value == "cancelled"
+
+    asyncio.run(run())
+
+
+def test_health_check_keeps_context_while_a_task_is_running():
+    from agents.autonomous_agent import AutonomousAgent
+
+    class K:
+        async def ping(self, _):
+            return True
+
+    a = AutonomousAgent.__new__(AutonomousAgent)
+    a.agent_id, a.kernel, a.system_prompt = "x", K(), "sys"
+    a.context = SimpleNamespace(clear=lambda: setattr(a, "cleared", True), append=lambda *x: None)
+    a._last_active = time.monotonic() - 10_000
+    a._active = 1
+    asyncio.run(a.health_check())
+    assert not getattr(a, "cleared", False)
+    a._active = 0
+    asyncio.run(a.health_check())
+    assert a.cleared
+
+
+def test_auto_routed_model_cap_blocks_in_the_router():
+    from coreai.budgets import BudgetExceeded
+    from tests.helpers import make_provider, make_router
+
+    async def run():
+        router = make_router({"a": make_provider("a")})
+        seen = []
+
+        def gate(model):
+            seen.append(model)
+            raise BudgetExceeded("requests", 1, 1, 5.0)
+
+        router.model_gate = gate
+        with pytest.raises(BudgetExceeded):
+            await router.route(CompletionRequest(messages=[Message("user", "hi")]))
+        assert seen and seen[0]  # gate saw the provider's default model
 
     asyncio.run(run())

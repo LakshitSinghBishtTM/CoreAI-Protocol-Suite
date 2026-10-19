@@ -194,11 +194,18 @@ class AgentManager:
             result = await record.agent.execute(task)
             record.status = AgentStatus.IDLE
             return result
+        except asyncio.CancelledError:
+            record.status = AgentStatus.IDLE  # cancelled/timed out, agent is fine
+            raise
         except Exception as exc:
             record.error_count += 1
-            record.status = AgentStatus.FAILED
+            # A failed task is not a failed agent; FAILED is reserved for
+            # init/health failures, otherwise one bad task blocks all later ones.
+            record.status = AgentStatus.IDLE
             logger.error("Agent %s task failed: %s", agent_id, exc)
             raise
+        finally:
+            record.last_active = datetime.now(timezone.utc)
 
     # ------------------------------------------------------------------
     # Health monitoring

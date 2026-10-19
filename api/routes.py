@@ -72,6 +72,14 @@ def _budget_check(ctx, model: Optional[str] = None) -> None:
             raise _budget_error(exc)
 
 
+def _bind_model_gate(_router) -> None:
+    """Let the router enforce per-model caps on the model it actually picks."""
+    from api.server import get_budgets
+
+    budgets = get_budgets()
+    _router.model_gate = budgets.check_model if budgets is not None else None
+
+
 def _budget_record(ctx, cost_usd=0.0, tokens=0, model=None) -> None:
     from api.server import get_budgets
 
@@ -114,6 +122,8 @@ def _budget_record_stream(ctx, usage) -> None:
 
 def _http_error(exc: Exception) -> HTTPException:
     """Translate a router/provider exception into the right HTTP response."""
+    if isinstance(exc, BudgetExceeded):  # a per-model cap hit while routing
+        return _budget_error(exc)
     if isinstance(exc, ValueError):  # our own validation (unknown provider, context)
         return HTTPException(status_code=400, detail=str(exc))
 
@@ -263,6 +273,7 @@ async def completions(
 
     _budget_check(ctx, request.model)
     _router = _get_router()
+    _bind_model_gate(_router)
     messages = [PM(role=m.role, content=m.content) for m in request.messages]
     preq = PCR(
         messages=messages,
@@ -362,6 +373,7 @@ async def completions_stream(
 
     _budget_check(ctx, request.model)
     _router = _get_router()
+    _bind_model_gate(_router)
     messages = [PM(role=m.role, content=m.content) for m in request.messages]
     preq = PCR(
         messages=messages,

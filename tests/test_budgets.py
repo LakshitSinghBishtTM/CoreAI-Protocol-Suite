@@ -249,5 +249,8 @@ def test_model_cap_enforced_over_http(api):
     r = client.post("/v1/completions", json=body)
     assert r.status_code == 429
     assert r.json()["detail"]["limit"] == "requests"
+    # auto routing onto the capped model is enforced too (no ``model`` sent)
+    assert client.post("/v1/completions", json=BODY).status_code == 429
     # a request naming a different model is unaffected
-    assert client.post("/v1/completions", json=BODY).status_code == 200
+    other = {**BODY, "model": "other-model"}
+    assert client.post("/v1/completions", json=other).status_code == 200

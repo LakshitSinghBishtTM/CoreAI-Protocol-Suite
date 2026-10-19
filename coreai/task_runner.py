@@ -46,10 +46,13 @@ class TaskRunner:
             run = asyncio.create_task(self._run(task_id, agent_id))
             self._current[agent_id] = (task_id, run)
             try:
-                await run
+                # wait() does not raise when ``run`` alone is cancelled (a task
+                # cancel); it raises only if this worker is cancelled.
+                await asyncio.wait({run})
             except asyncio.CancelledError:
-                if not run.cancelled():
-                    raise  # the worker itself was cancelled
+                run.cancel()
+                await asyncio.gather(run, return_exceptions=True)
+                raise
             finally:
                 self._current.pop(agent_id, None)
 
@@ -60,9 +63,18 @@ class TaskRunner:
             if record is None:
                 raise RuntimeError(f"Agent {agent_id} is no longer available")
             self.orch.start_task(task_id)
+            def _progress(n: int, _t=task) -> None:
+                _t.iterations = n
+
             result = await asyncio.wait_for(
-                record.agent.execute(
-                    {"instruction": task.objective, "context": task.context}
+                self.manager.dispatch_task(
+                    agent_id,
+                    {
+                        "instruction": task.objective,
+                        "context": task.context,
+                        "max_steps": task.max_iterations,
+                        "on_step": _progress,
+                    },
                 ),
                 timeout=self.timeout_s,
             )
@@ -107,6 +119,7 @@ class TaskRunner:
         worker = self._workers.pop(agent_id, None)
         if worker:
             worker.cancel()
+            await asyncio.gather(worker, return_exceptions=True)
         self._queues.pop(agent_id, None)
         self.orch.unregister_agent(agent_id)
 

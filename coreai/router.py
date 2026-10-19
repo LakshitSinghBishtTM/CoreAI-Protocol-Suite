@@ -240,6 +240,9 @@ class Router:
         self._clock = clock
 
         # Supporting components
+        # Optional ``callable(model)`` that raises when a model's shared budget
+        # is spent (set by the API). Called with the model actually chosen.
+        self.model_gate = None
         self.cache = (
             ResponseCache(max_entries=self.config.cache_max_entries)
             if self.config.enable_cache
@@ -416,6 +419,7 @@ class Router:
             if name in skip:
                 continue
             is_last = index == len(candidates) - 1
+            self._admit_model(request, name)
             if not self.breakers[name].allow():
                 last_exc = CircuitOpenError(name, self.breakers[name].retry_after())
                 failures.append((name, ErrorKind.CIRCUIT_OPEN))
@@ -619,6 +623,7 @@ class Router:
 
         for index, name in enumerate(candidates):
             is_last = index == len(candidates) - 1
+            self._admit_model(request, name)
             breaker = self.breakers[name]
             if not breaker.allow():
                 last_exc = CircuitOpenError(name, breaker.retry_after())
@@ -1429,6 +1434,12 @@ class Router:
             ).log("INFO" if completed else "WARNING", "stream settled")
         except Exception:
             logger.exception(f"[{name}] could not settle stream usage")
+
+    def _admit_model(self, request, name: str) -> None:
+        """Enforce per-model caps on the model this candidate will use. This
+        covers requests that omit ``model`` (auto routing) and failover."""
+        if self.model_gate is not None:
+            self.model_gate(request.model or self.providers[name].default_model)
 
     @staticmethod
     def _cache_options(request: CompletionRequest) -> dict:
