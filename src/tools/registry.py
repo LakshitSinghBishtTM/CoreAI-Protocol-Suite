@@ -11,6 +11,7 @@ Layering: tools depend on nothing above them; the gateway and agents call in.
 import asyncio
 import inspect
 import time
+from collections import deque
 from dataclasses import dataclass, field
 from enum import IntEnum
 from typing import Any, Awaitable, Callable, Iterable, Optional
@@ -50,6 +51,7 @@ class Tool:
     owner: str = "builtin"
     timeout_s: float = 30.0
     permission: Permission = Permission.READ_ONLY
+    rate_per_minute: int = 0  # per caller; 0 = unlimited
 
     def openai_spec(self) -> dict:
         """The tool in the shape models and the gateway already use."""
@@ -86,6 +88,8 @@ class ToolRegistry:
     # Optional hook: called with (caller, tool, arguments, result_or_error,
     # duration_ms) for every call, for the audit log and traces.
     on_call: Optional[Callable[..., None]] = None
+    clock: Callable[[], float] = time.monotonic
+    _hits: dict = field(default_factory=dict)
 
     def register(self, tool: Tool, replace: bool = False) -> None:
         if not tool.name or not tool.name.replace("_", "").replace("-", "").isalnum():
@@ -125,7 +129,7 @@ class ToolRegistry:
         start = time.monotonic()
         try:
             result = await self._call(
-                name, arguments, allowed, approved, max_permission, start
+                name, arguments, allowed, approved, max_permission, start, caller
             )
         except Exception as exc:
             self._audit(caller, name, arguments, exc, start)
@@ -133,7 +137,9 @@ class ToolRegistry:
         self._audit(caller, name, arguments, result, start)
         return result
 
-    async def _call(self, name, arguments, allowed, approved, max_permission, start):
+    async def _call(
+        self, name, arguments, allowed, approved, max_permission, start, caller="unknown"
+    ):
         tool = self._tools.get(name)
         if tool is None:
             raise ToolError("unknown_tool", f"No such tool '{name}'.")
@@ -153,6 +159,7 @@ class ToolRegistry:
             raise ToolError("invalid_arguments", exc.message) from exc
         if tool.permission is Permission.DESTRUCTIVE and not approved:
             raise ApprovalRequired(name)
+        self._check_rate(tool, caller)
         try:
             out = tool.handler(**arguments)
             if inspect.isawaitable(out):
@@ -168,6 +175,25 @@ class ToolRegistry:
         if truncated:
             text = text[:MAX_OUTPUT_CHARS] + "\n[output truncated]"
         return ToolResult(name, text, (time.monotonic() - start) * 1000, truncated)
+
+    def _check_rate(self, tool: Tool, caller: str) -> None:
+        """Sliding one-minute window per (caller, tool). Bounded in size."""
+        if not tool.rate_per_minute:
+            return
+        now = self.clock()
+        key = (caller, tool.name)
+        hits = self._hits.setdefault(key, deque())
+        while hits and now - hits[0] >= 60:
+            hits.popleft()
+        if len(hits) >= tool.rate_per_minute:
+            raise ToolError(
+                "rate_limited",
+                f"Tool '{tool.name}' is limited to {tool.rate_per_minute} calls/minute.",
+            )
+        hits.append(now)
+        if len(self._hits) > 10_000:  # drop idle keys instead of growing forever
+            for k in [k for k, d in self._hits.items() if not d or now - d[-1] >= 60]:
+                del self._hits[k]
 
     def _audit(self, caller, name, arguments, outcome, start) -> None:
         if self.on_call is None:

@@ -145,11 +145,11 @@ CaiPS becomes the place tools live: registered once, permissioned, and usable by
 **Core**
 
 - **Tool registry:** each tool has a name, JSON schema, description, version, owner, timeout and permission level (read-only, write, destructive). *Status: done (`src/tools/registry.py`), including allow lists (deny by default), schema validation, approval gate, output cap and audit hook. Not yet wired into the gateway, API or audit log.*
-- **MCP server:** expose the registry so any MCP client (editors, other agents, desktop apps) can use CaiPS tools.
+- **MCP server:** expose the registry so any MCP client (editors, other agents, desktop apps) can use CaiPS tools. *Status: done (`POST /mcp` and `python -m tools` stdio; `src/tools/mcp.py`).*
 - **MCP client:** connect to external MCP servers over stdio and HTTP and add their tools to the registry, with per-server allow lists.
-- **Tool-call execution in the gateway:** when a model returns a tool call, CaiPS can run it and continue the conversation, or hand it back to the client. Selectable per request. *Status: loop done (`src/tools/executor.py`: step and cost limits, approval pause, errors fed back to the model, deny-by-default offering). Not yet exposed through the HTTP API; needs server-side per-key allow lists, not client-supplied ones.*
-- **Permissions and policy:** per-key and per-agent tool allow lists, argument validation against the schema, and rate limits per tool.
-- **Approvals:** destructive tools pause for human approval through an API and webhook.
+- **Tool-call execution in the gateway:** when a model returns a tool call, CaiPS can run it and continue the conversation, or hand it back to the client. Selectable per request. *Status: done. `run_tools: true` on `/v1/chat/completions` runs the caller's server-side granted tools (`src/tools/executor.py`; step and cost limits, approval pause). See `docs/tools.md`.*
+- **Permissions and policy:** per-key and per-agent tool allow lists, argument validation against the schema, and rate limits per tool. *Status: done for per-subject allow lists (`config/tools.yml`), schema validation and per-tool rate limits; per-agent lists wait for Phase 7.*
+- **Approvals:** destructive tools pause for human approval through an API and webhook. *Status: API done (single-use, exact-call, expiring); webhook open.*
 
 **Built-in tools**
 
@@ -160,7 +160,7 @@ CaiPS becomes the place tools live: registered once, permissioned, and usable by
 **Quality and safety**
 
 - Treat tool output as untrusted input: label it, cap its size, and strip or flag instruction-like content to limit prompt injection.
-- Record every tool call (arguments, result, duration, caller) in the audit log and traces.
+- Record every tool call (arguments, result, duration, caller) in the audit log and traces. *Status: audit log done (caller, tool, outcome, duration, argument names only, by design not values); traces open.*
 - Tool test harness: replay recorded calls against a tool to catch regressions.
 - Capability negotiation so tools aren't offered to local models that can't call them reliably.
 

@@ -103,3 +103,18 @@ def test_registration_rules():
     with pytest.raises(Exception):
         r.register(Tool("badschema", "x", {"type": "nope"}, lambda: 0))
     assert r.specs(["add"])[0]["function"]["name"] == "add"
+
+
+async def test_per_tool_rate_limit_is_per_caller_and_slides():
+    clock = {"t": 0.0}
+    r = ToolRegistry(clock=lambda: clock["t"])
+    r.register(Tool("add", "a", ADD, lambda a, b: a + b, rate_per_minute=2))
+    ok = {"a": 1, "b": 1}
+    await r.call("add", ok, allowed=["*"], caller="k1")
+    await r.call("add", ok, allowed=["*"], caller="k1")
+    with pytest.raises(ToolError) as e:
+        await r.call("add", ok, allowed=["*"], caller="k1")
+    assert e.value.code == "rate_limited"
+    await r.call("add", ok, allowed=["*"], caller="k2")  # other caller unaffected
+    clock["t"] = 61.0
+    await r.call("add", ok, allowed=["*"], caller="k1")  # window slid

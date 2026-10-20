@@ -70,6 +70,9 @@ class ChatRequest(BaseModel):
     provider: Optional[str] = None
     metadata: Optional[dict[str, Any]] = None
     policy: Optional[str] = None
+    # CaiPS extension: let the gateway run the tools this caller is granted
+    # server-side and continue the conversation. Off by default.
+    run_tools: bool = False
 
 
 class CompatError(Exception):
@@ -431,6 +434,42 @@ def _schema_error(content: str, schema: dict) -> Optional[str]:
     return None
 
 
+async def _route_with_tools(_router, preq, body, ctx):
+    """Run the request with gateway-side tool execution. The tools offered
+    come from server config for this subject, never from the request."""
+    from api.server import app_state
+    from tools.executor import run_tool_loop
+
+    rt = app_state.get("tools")
+    allowed = rt.allowed_for(ctx.subject) if rt is not None and rt.enabled else []
+    if not allowed:
+        raise CompatError(
+            400, "Tool execution is not enabled for this key.",
+            "invalid_request_error", "tools_not_enabled", "run_tools",
+        )  # fmt: skip
+
+    async def route(r):
+        return await _router.route(r, preferred_provider=body.provider)
+
+    out = await run_tool_loop(
+        route, rt.registry, preq, allowed=allowed, caller=ctx.subject,
+        approved=rt.approvals.consume, max_permission=rt.max_permission,
+    )  # fmt: skip
+    if out.stop_reason == "needs_approval":
+        step = out.pending_approval
+        a = rt.approvals.request(ctx.subject, step.tool, step.arguments)
+        raise CompatError(
+            409, f"Tool '{step.tool}' needs approval (id {a.id}). Approve it, then repeat the request.",
+            "invalid_request_error", "approval_required", "run_tools",
+        )  # fmt: skip
+    resp = out.response
+    resp.cost_usd = out.total_cost_usd
+    resp.input_tokens, resp.output_tokens = out.input_tokens, out.output_tokens
+    if out.stop_reason in ("max_steps", "cost_limit"):
+        resp.metadata = {**(resp.metadata or {}), "tool_loop_stopped": out.stop_reason}
+    return resp, out.steps
+
+
 async def _route_validated(_router, preq, body):
     from providers import Message as PM
 
@@ -491,10 +530,18 @@ async def chat_completions(
         # Tool calls and schema-validated output need the whole reply before
         # anything can be emitted, so those streams are buffered, then sent as
         # SSE chunks (complete tool calls, validated JSON).
-        buffered = bool(body.tools) or _schema_of(body.response_format) is not None
+        buffered = (
+            bool(body.tools)
+            or body.run_tools
+            or _schema_of(body.response_format) is not None
+        )
+        tool_steps = None
         if not body.stream or buffered:
             try:
-                resp = await _route_validated(_router, preq, body)
+                if body.run_tools:
+                    resp, tool_steps = await _route_with_tools(_router, preq, body, ctx)
+                else:
+                    resp = await _route_validated(_router, preq, body)
             except CompatError:
                 raise
             except Exception as exc:
@@ -509,8 +556,16 @@ async def chat_completions(
             finish = (resp.metadata or {}).get("finish_reason") or "stop"
             if body.stream:
                 return _buffered_stream(cid, created, resp, finish, body, tokens)
+            extra = {}
+            if tool_steps is not None:
+                extra["caips_tool_steps"] = [
+                    {"tool": st.tool, "ok": st.ok, "error": st.error_code,
+                     "duration_ms": round(st.duration_ms, 1)}
+                    for st in tool_steps
+                ]  # fmt: skip
             return JSONResponse(
                 {
+                    **extra,
                     "id": cid,
                     "object": "chat.completion",
                     "created": created,

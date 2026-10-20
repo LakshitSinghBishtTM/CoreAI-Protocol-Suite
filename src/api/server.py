@@ -6,7 +6,7 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 from loguru import logger
 
 from agents.agent_manager import init_agent_manager
-from api import anthropic_compat, openai_compat, routes
+from api import anthropic_compat, openai_compat, routes, tools_api
 from api.auth import AuthContext, require_scope
 from api.middleware import RateLimitMiddleware
 from coreai import Orchestrator, Router, RoutingConfig, RoutingStrategy, tracing
@@ -33,6 +33,7 @@ app_state = {
     "task_runner": None,
     "budgets": None,
     "audit": None,
+    "tools": None,
 }
 
 
@@ -61,6 +62,11 @@ async def lifespan(app: FastAPI):
             await p.refresh_models()  # never raises; a dead server is skipped
 
     app_state["providers"] = providers
+    from tools.config import load_tools_runtime
+
+    app_state["tools"] = load_tools_runtime()  # None unless config/tools.yml exists
+    if app_state["tools"] is not None:
+        app_state["tools"].registry.on_call = tool_audit_hook
     from providers.local import monitor_local
 
     app_state["local_monitor"] = asyncio.create_task(monitor_local(providers))
@@ -124,6 +130,7 @@ app.add_middleware(RequestContextMiddleware)
 app.include_router(routes.router)
 app.include_router(openai_compat.router)
 app.include_router(anthropic_compat.router)
+app.include_router(tools_api.router)
 
 
 def _load_rate_limits():
@@ -206,6 +213,22 @@ def get_router():
     if not app_state["router"]:
         raise HTTPException(status_code=503, detail="Router not initialized")
     return app_state["router"]
+
+
+def tool_audit_hook(caller, tool, arguments, outcome, duration_ms) -> None:
+    """Audit every tool call. Argument *names* are recorded, not values, so
+    prompts, file contents and secrets passed to tools never reach the log."""
+    ok = not isinstance(outcome, Exception)
+    get_audit().record(
+        "tool.call",
+        actor=caller,
+        target=tool,
+        outcome="ok" if ok else getattr(outcome, "code", "error"),
+        details={
+            "arguments": sorted(arguments) if isinstance(arguments, dict) else [],
+            "duration_ms": round(duration_ms, 1),
+        },
+    )
 
 
 def get_audit():

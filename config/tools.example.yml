@@ -1,0 +1,12 @@
+# Copy to config/tools.yml to enable the tools layer. Without that file
+# there is no tools endpoint and run_tools is refused.
+enabled: true
+# workspace: ./workspace              # enables file_read / file_write
+# http_allowed_domains: [example.com] # enables http_fetch
+max_permission: write                 # read_only | write | destructive
+rate_per_minute:
+  calculator: 120
+grants:                               # subject -> tool names; deny by default
+  default: [calculator]
+  # admin: ["*"]
+  # stdio: [calculator]               # caller used by `python -m tools`
