@@ -147,7 +147,7 @@ CaiPS becomes the place tools live: registered once, permissioned, and usable by
 - **Tool registry:** each tool has a name, JSON schema, description, version, owner, timeout and permission level (read-only, write, destructive). *Status: done (`src/tools/registry.py`), including allow lists (deny by default), schema validation, approval gate, output cap and audit hook. Not yet wired into the gateway, API or audit log.*
 - **MCP server:** expose the registry so any MCP client (editors, other agents, desktop apps) can use CaiPS tools.
 - **MCP client:** connect to external MCP servers over stdio and HTTP and add their tools to the registry, with per-server allow lists.
-- **Tool-call execution in the gateway:** when a model returns a tool call, CaiPS can run it and continue the conversation, or hand it back to the client. Selectable per request.
+- **Tool-call execution in the gateway:** when a model returns a tool call, CaiPS can run it and continue the conversation, or hand it back to the client. Selectable per request. *Status: loop done (`src/tools/executor.py`: step and cost limits, approval pause, errors fed back to the model, deny-by-default offering). Not yet exposed through the HTTP API; needs server-side per-key allow lists, not client-supplied ones.*
 - **Permissions and policy:** per-key and per-agent tool allow lists, argument validation against the schema, and rate limits per tool.
 - **Approvals:** destructive tools pause for human approval through an API and webhook.
 
