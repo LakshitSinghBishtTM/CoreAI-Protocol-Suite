@@ -274,3 +274,7 @@ __pycache__/
 build/
 dist/
 *patch
+.env
+.env.production
+.kube/*secrets*
+config/secrets.json

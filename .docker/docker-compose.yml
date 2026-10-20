@@ -6,9 +6,9 @@ services:
     ports:
       - "8743:8743"
     environment:
-      - OPENAI_API_KEY=sk-proj-yaNiYo7GxBJiFWLLc38eT3BlbkFJ9dwjoo0zikoQaKYTG6Kf
-      - ANTHROPIC_API_KEY=sk-ant-api03-mr6YlP5DDCsfcw61st3IXpWkWFbWjYQK7Drr5rPGM245q1deeG0MNW5WvENq4F7SiN3A6rohPwSreeo4_xAjuXMXaZa-w
-      - GEMINI_API_KEY=AIzaSyo_zxz62yevOZL8FHVS8VCr_82p7IUo5vI
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
       - DATABASE_URL=postgresql://coreai_user:IU858%jhrx77ZW@postgres:5432/coreai_dev
       - REDIS_URL=redis://:RZ629@bwwd95LJ@redis:6379
       - SECRET_KEY=JBoOmfdLQxWTDXefTGv53kZHpwZhVB_wYjbJskhe-nHhDYDvkFzfl2vvBx6LPYAK
