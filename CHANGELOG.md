@@ -4,6 +4,11 @@
 
 The previous `1.0.0` label did not match the project's state; versions now start at 0.1.0 (alpha).
 
+### Added (Phase 7: agent harness)
+- `src/harness/`: tool-use loop with step, cost, token and deadline limits, context compaction with a pinned task, sqlite checkpoints after every step, human approvals, stall detection, kill switch and a per-run trace. Local-model agents get tighter caps.
+- Run API (`api/runs_api.py`): `POST /v1/runs`, `GET /v1/runs[/{id}[/events|/stream]]`, `cancel`, `pause`, `resume`, and admin-only `POST /v1/runs/kill`. Opt-in: enabled by `config/agents.yml` (see `config/agents.example.yml`). Callers can only start agents whose tools they are granted; model calls count against the owner's budget; runs interrupted by a restart resume at startup.
+- Not yet: Postgres run storage, agent memory, sub-agents, scheduled runs, removal of `agents/emergency_shutdown.py`.
+
 ### Added (Phase 4, part 1: OpenAI-compatible chat and models)
 - `POST /v1/chat/completions` (`api/openai_compat.py`): OpenAI request and response shapes, SSE streaming with `stream_options.include_usage`, OpenAI error envelope, and an error event plus `[DONE]` (no `finish_reason`) when a stream fails midway. Budgets, usage ledger and metering apply as for `/v1/completions`. Verified with the official OpenAI Python SDK in tests, not against a live provider.
 - Parameters that would change the answer (tools, `stop`, JSON mode, `n` above 1, images) are refused with `400 unsupported_parameter` instead of ignored; see `docs/api.md`.

@@ -1,0 +1,14 @@
+# Copy to config/agents.yml to enable the run API (/v1/runs).
+# Agents are defined here, never in a request. A caller can only start an
+# agent whose allowed_tools are all granted to it in config/tools.yml.
+db: data/runs.db
+agents:
+  helper:
+    system_prompt: You are a careful assistant. Use tools when they help, then answer briefly.
+    # model: gpt-4o-mini            # or leave unset to use routing
+    allowed_tools: [calculator]
+    max_steps: 10
+    max_cost_usd: 0.25
+    deadline_s: 120
+    # approval_tools: [shell]       # always ask a human first
+    # local: true                   # small local model: tighter limits

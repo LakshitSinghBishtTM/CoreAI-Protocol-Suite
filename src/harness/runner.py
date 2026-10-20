@@ -153,7 +153,9 @@ class HarnessRunner:
                 if self._stalled(msgs, agent):
                     return self._end(rid, msgs, state, "stalled")
         except asyncio.CancelledError:
-            self._checkpoint(rid, msgs, state, status="paused")  # resumable
+            self._checkpoint(
+                rid, msgs, state, status="paused", stop_reason="shutdown"
+            )  # resumable
             raise
         except Exception as exc:  # model/gateway failure: keep state, report why
             self.store.event(
@@ -178,7 +180,11 @@ class HarnessRunner:
                 messages=len(ctx),
                 tokens=context.count(ctx, agent.system_prompt),
             )
-        meta = {"run_id": rid, "agent": agent.name}
+        meta = {
+            "run_id": rid,
+            "agent": agent.name,
+            "owner": self.store.get(rid)["owner"],
+        }
         if agent.max_cost_usd is not None:
             meta["budget_remaining_usd"] = max(
                 0.0, agent.max_cost_usd - state["cost_usd"]

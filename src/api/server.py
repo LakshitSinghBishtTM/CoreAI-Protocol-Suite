@@ -6,7 +6,7 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 from loguru import logger
 
 from agents.agent_manager import init_agent_manager
-from api import anthropic_compat, openai_compat, routes, tools_api
+from api import anthropic_compat, openai_compat, routes, runs_api, tools_api
 from api.auth import AuthContext, require_scope
 from api.middleware import RateLimitMiddleware
 from coreai import Orchestrator, Router, RoutingConfig, RoutingStrategy, tracing
@@ -95,6 +95,17 @@ async def lifespan(app: FastAPI):
     app_state["agent_manager"] = agent_manager
     app_state["task_runner"] = TaskRunner(app_state["orchestrator"], agent_manager)
 
+    from harness.runtime import load_harness_runtime
+    from tools import ToolRegistry
+
+    tools_rt = app_state.get("tools")
+    app_state["harness"] = load_harness_runtime(
+        runs_api.gateway_route(app_state["router"]),
+        tools_rt.registry if tools_rt is not None else ToolRegistry(),
+    )  # None unless config/agents.yml exists
+    if app_state["harness"] is not None:
+        logger.info("Agent harness enabled; resumed %d interrupted run(s)", app_state["harness"].start())
+
     logger.info("CoreAI server ready")
 
     yield
@@ -105,6 +116,8 @@ async def lifespan(app: FastAPI):
         app_state["local_monitor"].cancel()
     for client in app_state.get("mcp_clients") or []:
         await client.close()
+    if app_state.get("harness"):
+        await app_state["harness"].stop()
     if app_state.get("task_runner"):
         await app_state["task_runner"].shutdown()
     if app_state["agent_manager"]:
@@ -138,6 +151,7 @@ app.include_router(routes.router)
 app.include_router(openai_compat.router)
 app.include_router(anthropic_compat.router)
 app.include_router(tools_api.router)
+app.include_router(runs_api.router)
 
 
 def _load_rate_limits():
