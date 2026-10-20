@@ -153,7 +153,7 @@ CaiPS becomes the place tools live: registered once, permissioned, and usable by
 
 **Built-in tools**
 
-- HTTP fetch with domain allow lists, file read and write inside a scoped workspace, web search through a configurable provider, and a calculator.
+- HTTP fetch with domain allow lists, file read and write inside a scoped workspace, web search through a configurable provider, and a calculator. *Status: calculator, scoped files and HTTP fetch done (`src/tools/builtin.py`; files and HTTP only registered when configured; fetch blocks non-public hosts and redirects). Web search open.*
 - Sandboxed code execution (container or microVM) with no network by default and CPU, memory and time limits.
 - Database query tool with read-only mode, and a shell tool disabled by default.
 
