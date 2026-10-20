@@ -172,27 +172,27 @@ Rebuild `agents/` as a small, inspectable harness on top of the gateway and tool
 
 **The loop**
 
-- Plan, call the model, run tools, observe, repeat, until done or a limit is hit.
-- Hard limits per run: max steps, token and cost budget, and wall-clock deadline. Budgets are enforced by the gateway, not just the agent.
-- Agent definitions as config: system prompt, model or routing policy, allowed tools, limits, and memory settings.
-- Run API: start, status, cancel, pause, resume, and stream events.
+- Plan, call the model, run tools, observe, repeat, until done or a limit is hit. *Status: done (`src/harness/runner.py`; no separate planning step yet, the model plans in-loop).*
+- Hard limits per run: max steps, token and cost budget, and wall-clock deadline. Budgets are enforced by the gateway, not just the agent. *Status: done in harness (steps, cost, tokens, deadline); the budget is also passed to the gateway in request metadata, but gateway-side enforcement of it is still open.*
+- Agent definitions as config: system prompt, model or routing policy, allowed tools, limits, and memory settings. *Status: done (`harness/config.py`, `AgentDef.from_dict`); memory settings still open.*
+- Run API: start, status, cancel, pause, resume, and stream events. *Status: core done (`HarnessRunner`: create/run, status, cancel, pause, resume, stream); HTTP endpoints still open.*
 
 **Context and state**
 
-- Context management: token counting, truncation and summarization when the window fills, with pinned instructions that never drop.
-- Checkpointing after every step so a crashed or paused run resumes where it stopped.
-- Durable run storage (database) with the full message and tool history.
+- Context management: token counting, truncation and summarization when the window fills, with pinned instructions that never drop. *Status: done (`harness/context.py`; pinned task and system prompt, optional model summaries).*
+- Checkpointing after every step so a crashed or paused run resumes where it stopped. *Status: done (one sqlite transaction per step).*
+- Durable run storage (database) with the full message and tool history. *Status: done (`harness/store.py`, sqlite; Postgres still open).*
 
 **Control**
 
-- Human-in-the-loop approvals for destructive tools and for steps the agent flags as uncertain.
-- Loop and stall detection (same tool call repeated, no progress) that stops the run with a clear reason.
-- Tighter default limits and shorter plans when the backing model is a small local model.
-- Kill switch: stop all runs for a key, team or the whole instance. This replaces `emergency_shutdown.py`.
+- Human-in-the-loop approvals for destructive tools and for steps the agent flags as uncertain. *Status: done for destructive tools and per-agent `approval_tools`; agent-flagged uncertainty still open.*
+- Loop and stall detection (same tool call repeated, no progress) that stops the run with a clear reason. *Status: done (repeated identical tool calls).*
+- Tighter default limits and shorter plans when the backing model is a small local model. *Status: done (`AgentDef.local`).*
+- Kill switch: stop all runs for a key, team or the whole instance. This replaces `emergency_shutdown.py`. *Status: done in `HarnessRunner.kill`; `emergency_shutdown.py` not yet removed and no API route.*
 
 **Visibility**
 
-- A full trace per run (every model call, tool call, token count, cost) that can be replayed and diffed.
+- A full trace per run (every model call, tool call, token count, cost) that can be replayed and diffed. *Status: done (events table, `diff_traces`); replay of a trace against a model is still open.*
 - Run viewer in the API first, UI later (Phase 10).
 
 **Later patterns, only after the loop is solid**
