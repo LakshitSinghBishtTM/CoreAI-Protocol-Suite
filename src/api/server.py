@@ -55,6 +55,9 @@ async def lifespan(app: FastAPI):
         raise RuntimeError("No providers available")
 
     logger.info(f"Loaded providers: {list(providers.keys())}")
+    for p in providers.values():
+        if getattr(p, "is_local", False):
+            await p.refresh_models()  # never raises; a dead server is skipped
 
     app_state["providers"] = providers
     app_state["router"] = Router(

@@ -127,7 +127,33 @@ def load_providers(
             logger.warning(f"  [FAIL] {name} — {reason}")
             result.failed[name] = reason
 
+    if enabled is None:
+        _load_local(result)
     return result
+
+
+def _load_local(result: "ProviderLoadResult") -> None:
+    """Add self-hosted servers from config/local.yml (or $COREAI_LOCAL_FILE)."""
+    path = os.getenv("COREAI_LOCAL_FILE", "config/local.yml")
+    if not os.path.exists(path):
+        return
+    try:
+        import yaml
+
+        from .local import build_local_providers
+
+        with open(path) as fh:
+            built = build_local_providers(yaml.safe_load(fh) or {})
+    except Exception as e:
+        logger.warning(f"  [FAIL] local servers ({path}) — {e}")
+        result.failed["local"] = str(e)
+        return
+    for name, provider in built.items():
+        if name in result.providers:
+            result.failed[name] = "name clashes with a cloud provider"
+            continue
+        result.providers[name] = provider
+        logger.info(f"  [OK]   {name} (local, {provider.base_url})")
 
 
 def load_providers_or_raise(

@@ -107,6 +107,7 @@ files = [
     "src/middleware/validator.py",
     "src/providers/__init__.py",
     "src/providers/base.py",
+    "src/providers/local.py",
     "src/providers/deepseek.py",
     "src/providers/grok.py",
     "src/providers/openai.py",

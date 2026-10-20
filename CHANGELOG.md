@@ -164,3 +164,4 @@ The previous `1.0.0` label did not match the project's state; versions now start
 - `src/` layout, `py.typed`, mypy ratchet in `pyproject.toml`, pre-commit hooks.
 - Separate `migrations/postgres` and `migrations/sqlite` with down scripts; roundtrip tests.
 - OpenAI SDK compatibility tests, `docker-compose.yml`, quickstart CI job, PyPI publish workflow.
+- Phase 5: local OpenAI-compatible servers (`providers/local.py`, `config/local.yml`), model discovery, capability flags, `private` routing.

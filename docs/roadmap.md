@@ -129,11 +129,11 @@ This phase makes CaiPS a drop-in gateway: existing SDKs and tools work by changi
 
 The fastest route to local GGUF support is a provider for any OpenAI-compatible server. The user runs the model; CaiPS routes to it. This also proves the provider abstraction is clean.
 
-- A generic `openai-compatible` provider with a configurable base URL, optional key and model list.
+- A generic `openai-compatible` provider with a configurable base URL, optional key and model list. *Status: done (`providers/local.py`).*
 - Presets for LM Studio, Ollama, `llama-server` (llama.cpp) and vLLM, with auto-discovery of loaded models through `/v1/models`.
-- Per-model capability flags (tool calling, vision, JSON mode, context length) so the router and tools layer never assume what a local model can't do.
-- Local usage recorded with tokens and latency at zero dollar cost, with an optional hardware or electricity cost estimate.
-- Routing rules for local models: keep requests tagged `private` on local only, try local first and fall back to cloud on timeout or queue depth, send small tasks local and hard ones to a frontier model.
+- Per-model capability flags (tool calling, vision, JSON mode, context length) so the router and tools layer never assume what a local model can't do. *Status: done.*
+- Local usage recorded with tokens and latency at zero dollar cost, with an optional hardware or electricity cost estimate. *Status: done.*
+- Routing rules for local models: keep requests tagged `private` on local only, try local first and fall back to cloud on timeout or queue depth, send small tasks local and hard ones to a frontier model. *Status: private and local-first fallback done; queue-depth and difficulty rules open.*
 - Health checks that mark a local server down quickly, since desktop servers come and go.
 
 **Exit criteria:** a request to a model name configured against LM Studio or Ollama works through the same API as a cloud model, with failover to a cloud model when the local server is down.

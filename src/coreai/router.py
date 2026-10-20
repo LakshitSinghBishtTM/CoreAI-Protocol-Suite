@@ -1002,7 +1002,12 @@ class Router:
     def _owner_of(self, model: Optional[str]) -> Optional[str]:
         """Provider that owns a catalogued model, or None if unknown."""
         profile = self._model_registry.get(model) if model else None
-        return profile.provider if profile is not None else None
+        if profile is not None:
+            return profile.provider
+        for name, p in self.providers.items():  # self-hosted servers list their models
+            if model and getattr(p, "is_local", False) is True and model in p.models:
+                return name
+        return None
 
     def _candidates(
         self, request: CompletionRequest, preferred: Optional[str]
@@ -1011,6 +1016,26 @@ class Router:
         return self._plan(request, preferred)[0]
 
     def _plan(
+        self, request: CompletionRequest, preferred: Optional[str]
+    ) -> tuple[list[str], list[Optional[str]]]:
+        """Candidates and models, with privacy applied: a request tagged
+        ``private`` (``metadata.private``) is only ever sent to local servers."""
+        order, models = self._plan_any(request, preferred)
+        if not (request.metadata or {}).get("private"):
+            return order, models
+        kept = [
+            (n, m)
+            for n, m in zip(order, models)
+            if getattr(self.providers[n], "is_local", False) is True
+        ]
+        if not kept:
+            raise ValueError(
+                "Request is private but no local provider can serve it; "
+                "it was not sent to a cloud provider."
+            )
+        return [n for n, _ in kept], [m for _, m in kept]
+
+    def _plan_any(
         self, request: CompletionRequest, preferred: Optional[str]
     ) -> tuple[list[str], list[Optional[str]]]:
         """Candidate providers and, in parallel, the model each should use
@@ -1117,6 +1142,11 @@ class Router:
                 return "Tool calling is not supported with streaming yet."
             if not getattr(self.providers[name], "supports_tools", False):
                 return f"Provider '{name}' does not support tool calling."
+        hook = getattr(self.providers[name], "capability_problem", None)
+        if hook is not None:
+            problem = hook(req)
+            if isinstance(problem, str):
+                return problem
         profile = self._resolve_model_profile(name, req.model)
         if profile is None:
             return None

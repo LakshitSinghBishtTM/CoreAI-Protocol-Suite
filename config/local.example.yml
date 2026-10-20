@@ -1,0 +1,14 @@
+# Copy to config/local.yml (or point COREAI_LOCAL_FILE at a file). See docs/local-models.md.
+# Each server becomes a provider named after its key. Capabilities default to OFF
+# (except json_mode): turn on only what the model really does.
+servers:
+  lmstudio:                       # preset URL: http://localhost:1234/v1
+    capabilities:
+      default: {tools: false, vision: false, context_length: 8192}
+      "qwen2.5-7b-instruct": {tools: true, context_length: 32768}
+  ollama:                         # preset URL: http://localhost:11434/v1
+    models: [llama3.2]            # optional; also discovered from /v1/models at startup
+  gpu-box:
+    base_url: http://192.168.1.50:8000/v1    # e.g. vLLM
+    api_key_env: GPU_BOX_KEY                 # optional
+    cost_per_hour_usd: 0.35                  # optional hardware/electricity estimate

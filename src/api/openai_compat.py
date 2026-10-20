@@ -338,7 +338,10 @@ def _policy_metadata(body) -> dict:
     ``policy`` field), so OpenAI-compatible clients can pick one."""
     raw = body.metadata if isinstance(getattr(body, "metadata", None), dict) else {}
     name = raw.get("policy") or getattr(body, "policy", None)
-    return {"policy": name} if isinstance(name, str) and name else {}
+    meta: dict = {"policy": name} if isinstance(name, str) and name else {}
+    if raw.get("private") is True:
+        meta["private"] = True  # local providers only
+    return meta
 
 
 def _chunk(cid, created, model, delta, finish=None, usage=None) -> str:
