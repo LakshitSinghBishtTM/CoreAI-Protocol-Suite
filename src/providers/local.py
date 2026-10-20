@@ -69,6 +69,7 @@ class LocalProvider(BaseProvider):
         capabilities: Optional[dict[str, Any]] = None,
         default_model: str = "",
         cost_per_hour_usd: float = 0.0,
+        max_queue: int = 0,
     ):
         super().__init__(api_key or "not-needed")
         self.name = name
@@ -78,6 +79,8 @@ class LocalProvider(BaseProvider):
             sorted(self.models)[0] if self.models else ""
         )
         self.cost_per_hour_usd = float(cost_per_hour_usd or 0.0)
+        self.max_queue = int(max_queue or 0)  # 0 = unlimited
+        self.inflight = 0
         self.up = True  # optimistic until a probe says otherwise
         caps = dict(capabilities or {})
         self._default_caps = _caps(caps.pop("default", {}), Capabilities())
@@ -99,6 +102,11 @@ class LocalProvider(BaseProvider):
         model = request.model or self.default_model
         if not self.up:
             return f"Local server '{self.name}' is down (failed its last health check)."
+        if self.max_queue and self.inflight >= self.max_queue:
+            return (
+                f"Local server '{self.name}' is busy "
+                f"({self.inflight} requests in flight, limit {self.max_queue})."
+            )
         cap = self.capabilities(model)
         if request.tools and not cap.tools:
             return f"Local model '{model}' on '{self.name}' is not configured for tool calling."
@@ -194,6 +202,7 @@ class LocalProvider(BaseProvider):
     async def complete(self, request: CompletionRequest) -> CompletionResponse:
         model = self._need_model(request)
         start = time.monotonic()
+        self.inflight += 1
         try:
             response = await self.client.chat.completions.create(
                 model=model,
@@ -206,6 +215,8 @@ class LocalProvider(BaseProvider):
         except Exception as e:
             logger.error(f"[{self.name}] completion failed: {e}")
             raise
+        finally:
+            self.inflight -= 1
         elapsed = time.monotonic() - start
         choice = response.choices[0]
         content = choice.message.content or ""
@@ -242,6 +253,7 @@ class LocalProvider(BaseProvider):
     async def stream(self, request: CompletionRequest) -> AsyncGenerator[str, None]:
         model = self._need_model(request)
         start = time.monotonic()
+        self.inflight += 1
         try:
             stream = await self.client.chat.completions.create(
                 model=model,
@@ -272,6 +284,7 @@ class LocalProvider(BaseProvider):
             logger.error(f"[{self.name}] stream failed: {e}")
             raise
         finally:
+            self.inflight -= 1
             logger.debug(
                 f"[{self.name}] stream {model} {time.monotonic() - start:.2f}s"
             )
@@ -318,6 +331,7 @@ def build_local_providers(config: dict) -> dict[str, LocalProvider]:
             capabilities=cfg.get("capabilities"),
             default_model=cfg.get("default_model", ""),
             cost_per_hour_usd=cfg.get("cost_per_hour_usd", 0.0),
+            max_queue=cfg.get("max_queue", 0),
         )
     return out
 

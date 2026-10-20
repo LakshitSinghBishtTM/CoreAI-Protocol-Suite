@@ -236,3 +236,20 @@ async def test_probe_marks_down_and_recovers(monkeypatch):
     state["ok"] = True
     assert await p.probe() is True and p.up is True
     assert "qwen" in p.models and p.capability_problem(req()) is None
+
+
+def test_busy_server_is_refused_so_router_can_fall_back():
+    p = LocalProvider("lmstudio", PRESETS["lmstudio"], max_queue=2)
+    assert p.capability_problem(req()) is None
+    p.inflight = 2
+    assert "busy" in p.capability_problem(req())
+
+
+async def test_inflight_is_released_after_completion_and_failure():
+    p = local(lambda r: httpx.Response(200, json=chat_reply()), max_queue=1)
+    await p.complete(req())
+    assert p.inflight == 0
+    bad = local(lambda r: httpx.Response(500, json={"error": "x"}), max_queue=1)
+    with pytest.raises(Exception):
+        await bad.complete(req())
+    assert bad.inflight == 0

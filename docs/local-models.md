@@ -24,7 +24,9 @@ hardware/electricity estimate (`latency x rate`).
   serve it, it fails. It is never sent to a cloud provider, including on failover.
 - **Local first, cloud fallback:** use a policy fallback chain in `config/routing.yml`, e.g.
   `fallback_chain: [ollama, openai]`. Timeout or a down server fails over to the cloud.
-- Not built yet: routing by queue depth and by task difficulty.
+- **Queue depth:** set `max_queue: N` on a server. At N requests in flight it is skipped, so a
+  fallback chain sends the overflow to the next provider.
+- Not built yet: routing by task difficulty.
 
 ## Limits
 Streaming works. Tool calls with `stream=true` are buffered by the gateway. A background probe checks every local server each 10 s: a dead one is marked down and skipped

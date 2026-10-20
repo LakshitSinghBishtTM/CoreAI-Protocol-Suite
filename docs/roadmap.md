@@ -111,15 +111,15 @@ This phase makes CaiPS a drop-in gateway: existing SDKs and tools work by changi
 - Normalized tool calling and structured output (JSON mode, JSON schema) across OpenAI, Anthropic and Gemini formats. *Status: done for all four providers. Streamed tool calls are buffered (complete calls sent as SSE chunks); `json_schema` output is validated with one retry. Local models are open.*
 - Vision and image inputs where the provider supports them, with capability flags per model. *Status: done for image URLs and base64 on OpenAI, Grok, Anthropic and Gemini.*
 - Optional Anthropic-compatible `/v1/messages` endpoint for clients that expect it. *Status: done (no streamed tool use, no `count_tokens`).*
-- Model aliases and virtual models (for example `fast`, `cheap`, `best`) mapped to routing policies.
+- Model aliases and virtual models (for example `fast`, `cheap`, `best`) mapped to routing policies. *Status: done (`DEFAULT_ALIASES`, listed in `/v1/models`).*
 
 **Packaging and developer experience**
 
 - `src/` layout, one `pyproject.toml`, single-source versioning, and PyPI releases through trusted publishing.
 - Type hints everywhere, `mypy` or `pyright` in CI, `ruff`, and `pre-commit` hooks.
 - Slim multi-stage Docker image (non-root, pinned base) with SQLite as the default storage (Postgres optional, migrations tested on both) and a minimal `docker-compose.yml`.
-- A five-minute quickstart tested in CI: install, set one key, run, send one `curl`.
-- `examples/` for basic routing, fallback chains, budgets and adding a custom provider.
+- A five-minute quickstart tested in CI: install, set one key, run, send one `curl`. *Status: done (`scripts/quickstart_check.sh`).*
+- `examples/` for basic routing, fallback chains, budgets and adding a custom provider. *Status: done.*
 - `CONTRIBUTING.md`, an architecture doc, and a "how to add a provider" guide built on `providers/base.py`.
 - Fewer issue and PR templates, placed where GitHub reads them (`.github/ISSUE_TEMPLATE/`).
 
@@ -133,7 +133,7 @@ The fastest route to local GGUF support is a provider for any OpenAI-compatible 
 - Presets for LM Studio, Ollama, `llama-server` (llama.cpp) and vLLM, with auto-discovery of loaded models through `/v1/models`.
 - Per-model capability flags (tool calling, vision, JSON mode, context length) so the router and tools layer never assume what a local model can't do. *Status: done.*
 - Local usage recorded with tokens and latency at zero dollar cost, with an optional hardware or electricity cost estimate. *Status: done.*
-- Routing rules for local models: keep requests tagged `private` on local only, try local first and fall back to cloud on timeout or queue depth, send small tasks local and hard ones to a frontier model. *Status: private and local-first fallback done; queue-depth and difficulty rules open.*
+- Routing rules for local models: keep requests tagged `private` on local only, try local first and fall back to cloud on timeout or queue depth, send small tasks local and hard ones to a frontier model. *Status: private, local-first fallback and queue-depth (`max_queue`) done; difficulty rule open.*
 - Health checks that mark a local server down quickly, since desktop servers come and go. *Status: done (10 s background probe, `LocalProvider.probe`).*
 
 **Exit criteria:** a request to a model name configured against LM Studio or Ollama works through the same API as a cloud model, with failover to a cloud model when the local server is down.
