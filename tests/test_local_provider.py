@@ -215,3 +215,24 @@ def test_private_flag_reaches_the_request_from_the_api():
         _policy_metadata(SimpleNamespace(metadata={"private": "yes"}, policy=None))
         == {}
     )
+
+
+async def test_probe_marks_down_and_recovers(monkeypatch):
+    p = LocalProvider("lmstudio", PRESETS["lmstudio"])
+    state = {"ok": False}
+    real = httpx.AsyncClient
+
+    def handler(r):
+        if not state["ok"]:
+            raise httpx.ConnectError("refused")
+        return httpx.Response(200, json={"data": [{"id": "qwen"}]})
+
+    monkeypatch.setattr(
+        httpx, "AsyncClient",
+        lambda **kw: real(transport=httpx.MockTransport(handler), **kw),
+    )  # fmt: skip
+    assert await p.probe() is False and p.up is False
+    assert "down" in p.capability_problem(req())
+    state["ok"] = True
+    assert await p.probe() is True and p.up is True
+    assert "qwen" in p.models and p.capability_problem(req()) is None

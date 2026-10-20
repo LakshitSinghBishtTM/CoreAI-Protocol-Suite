@@ -78,6 +78,7 @@ class LocalProvider(BaseProvider):
             sorted(self.models)[0] if self.models else ""
         )
         self.cost_per_hour_usd = float(cost_per_hour_usd or 0.0)
+        self.up = True  # optimistic until a probe says otherwise
         caps = dict(capabilities or {})
         self._default_caps = _caps(caps.pop("default", {}), Capabilities())
         self._caps = {m: _caps(c, self._default_caps) for m, c in caps.items()}
@@ -96,6 +97,8 @@ class LocalProvider(BaseProvider):
     def capability_problem(self, request: CompletionRequest) -> Optional[str]:
         """Why this server's model can't serve ``request``, or None."""
         model = request.model or self.default_model
+        if not self.up:
+            return f"Local server '{self.name}' is down (failed its last health check)."
         cap = self.capabilities(model)
         if request.tools and not cap.tools:
             return f"Local model '{model}' on '{self.name}' is not configured for tool calling."
@@ -135,6 +138,31 @@ class LocalProvider(BaseProvider):
             self.default_model = sorted(found)[0]
         logger.info(f"[{self.name}] discovered models: {', '.join(found) or 'none'}")
         return found
+
+    async def probe(self) -> bool:
+        """Health check: mark the server up or down from ``GET /v1/models``.
+        On recovery, models are re-discovered. Never raises."""
+        was_up = self.up
+        try:
+            async with httpx.AsyncClient(timeout=CONNECT_TIMEOUT_S + 1) as http:
+                r = await http.get(
+                    f"{self.base_url}/models",
+                    headers={"Authorization": f"Bearer {self.api_key}"},
+                )
+                r.raise_for_status()
+                found = [m["id"] for m in r.json().get("data", []) if m.get("id")]
+            self.up = True
+            self.models |= set(found)
+            if not self.default_model and found:
+                self.default_model = sorted(found)[0]
+        except Exception as exc:
+            self.up = False
+            if was_up:
+                logger.warning(f"[{self.name}] marked down: {exc}")
+            return False
+        if not was_up:
+            logger.info(f"[{self.name}] back up")
+        return True
 
     # --------------------------------------------------------------- billing
 
@@ -292,3 +320,13 @@ def build_local_providers(config: dict) -> dict[str, LocalProvider]:
             cost_per_hour_usd=cfg.get("cost_per_hour_usd", 0.0),
         )
     return out
+
+
+async def monitor_local(providers: dict, interval_s: float = 10.0) -> None:
+    """Probe every local server forever; cancel the task to stop."""
+    import asyncio
+
+    local = [p for p in providers.values() if getattr(p, "is_local", False)]
+    while local:
+        await asyncio.gather(*(p.probe() for p in local))
+        await asyncio.sleep(interval_s)

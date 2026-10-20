@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, HTTPException
@@ -60,6 +61,9 @@ async def lifespan(app: FastAPI):
             await p.refresh_models()  # never raises; a dead server is skipped
 
     app_state["providers"] = providers
+    from providers.local import monitor_local
+
+    app_state["local_monitor"] = asyncio.create_task(monitor_local(providers))
     app_state["router"] = Router(
         providers,
         RoutingConfig.from_env(
@@ -86,6 +90,8 @@ async def lifespan(app: FastAPI):
 
     # Shutdown
     logger.info("Shutting down CoreAI...")
+    if app_state.get("local_monitor"):
+        app_state["local_monitor"].cancel()
     if app_state.get("task_runner"):
         await app_state["task_runner"].shutdown()
     if app_state["agent_manager"]:

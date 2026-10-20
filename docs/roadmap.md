@@ -134,7 +134,7 @@ The fastest route to local GGUF support is a provider for any OpenAI-compatible 
 - Per-model capability flags (tool calling, vision, JSON mode, context length) so the router and tools layer never assume what a local model can't do. *Status: done.*
 - Local usage recorded with tokens and latency at zero dollar cost, with an optional hardware or electricity cost estimate. *Status: done.*
 - Routing rules for local models: keep requests tagged `private` on local only, try local first and fall back to cloud on timeout or queue depth, send small tasks local and hard ones to a frontier model. *Status: private and local-first fallback done; queue-depth and difficulty rules open.*
-- Health checks that mark a local server down quickly, since desktop servers come and go.
+- Health checks that mark a local server down quickly, since desktop servers come and go. *Status: done (10 s background probe, `LocalProvider.probe`).*
 
 **Exit criteria:** a request to a model name configured against LM Studio or Ollama works through the same API as a cloud model, with failover to a cloud model when the local server is down.
 

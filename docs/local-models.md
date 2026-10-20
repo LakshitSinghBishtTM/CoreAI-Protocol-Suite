@@ -27,5 +27,5 @@ hardware/electricity estimate (`latency x rate`).
 - Not built yet: routing by queue depth and by task difficulty.
 
 ## Limits
-Streaming works. Tool calls with `stream=true` are buffered by the gateway. Discovery runs at
-startup only; restart (or list models in `local.yml`) after loading a new model.
+Streaming works. Tool calls with `stream=true` are buffered by the gateway. A background probe checks every local server each 10 s: a dead one is marked down and skipped
+(failing over per policy), and its models are re-discovered when it returns.
