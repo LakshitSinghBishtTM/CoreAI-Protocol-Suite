@@ -16,6 +16,9 @@ permission level (`read_only`, `write`, `destructive`) for everyone.
 | `calculator` | always | arithmetic only, no `eval`, bounded exponents |
 | `file_read`, `file_write` | `workspace:` | stays inside the folder (no `..`, no symlink escape), size capped |
 | `http_fetch` | `http_allowed_domains:` | allow-listed domains, public addresses only, no redirects, size capped |
+| `web_search` | `web_search:` | queries one configured JSON endpoint (e.g. SearXNG); at most 10 results, snippets capped |
+| `db_query` | `databases:` | one SELECT only; file opened read-only plus SQLite authorizer; 200 rows; runaway queries cut off |
+| `shell_run` | `shell:` | allow-listed programs only, no shell (no pipes or substitution), empty environment, 20 s timeout, **always needs approval** and `max_permission: destructive` |
 
 ## Every call is checked
 Allow list, argument schema, permission cap, approval (destructive tools), per-tool rate limit
@@ -42,6 +45,33 @@ lists steps in `caips_tool_steps`. Streaming is buffered. A request that needs a
   `tools/list`, `tools/call`.
 - stdio: `python -m tools` (caller subject `stdio`).
 
+## Approval webhook
+Set `approval_webhook` (`url`, `secret_env`, optional `include_arguments`) to be notified when a
+destructive call is waiting. The body is signed: `X-CaiPS-Signature` is
+`HMAC-SHA256(secret, "<X-CaiPS-Timestamp>.<body>")`. Argument values are left out unless
+`include_arguments: true`; reviewers read them from `GET /v1/tools/approvals`. A missing secret is a
+startup error (no unsigned webhooks), and a failed delivery never blocks approvals.
+
+## Tracing and replay
+Each call runs in a `caips.tool` span (tool, caller, permission, owner, outcome, duration; never
+argument values or output). For regression tests, set `registry.on_call = Recorder("calls.jsonl")`
+in development and later run `await replay(registry, "calls.jsonl")`; it returns the calls whose
+result changed. Recordings contain argument values and output, so do not enable them in production.
+
+## Using external MCP servers
+List them under `mcp_servers:` (stdio `command` or HTTP `url`). Their tools join the registry as
+`<server>__<tool>`, so they can never replace a built-in. Rules:
+- **Deny by default:** only tools in the server's `allow` list are registered (`"*"` for all).
+- **Grants still apply:** a subject needs `server__tool` (or `"*"`) in `grants` to use one.
+- **Untrusted metadata:** descriptions are flattened and capped at 500 characters; bad names and
+  invalid schemas are skipped. Arguments are validated locally before they reach the server.
+- **Permission:** remote tools default to `write` (not `read_only`) unless config says otherwise.
+- **Clean child environment:** a stdio server gets `PATH`/`HOME` and the `env:` you list, so
+  provider keys in the gateway's environment are not passed on.
+- A server that fails to connect is logged and skipped; startup continues. Servers are connected
+  at startup only.
+
 ## Not built yet
-MCP client (using external servers' tools), web search, sandboxed code execution, database and
-shell tools, tool-call replay harness, tracing spans for tool calls, approval webhooks.
+Sandboxed code execution (needs a container or microVM design), reconnecting MCP servers that
+drop, and a CLI wrapper for replay. `shell_run` is not a sandbox: it limits what can start, not what
+an allowed program can do, so allow only programs you would let the approver run themselves.

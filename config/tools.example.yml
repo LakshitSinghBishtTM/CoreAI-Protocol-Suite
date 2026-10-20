@@ -10,3 +10,19 @@ grants:                               # subject -> tool names; deny by default
   default: [calculator]
   # admin: ["*"]
   # stdio: [calculator]               # caller used by `python -m tools`
+mcp_servers: {}                       # external MCP servers; see docs/tools.md
+  # files:
+  #   command: ["npx", "some-mcp-server"]   # or: url: https://host/mcp
+  #   allow: [read_file]                    # deny by default; "*" allows all
+  #   permission: write                     # default; remote tools are not trusted as read_only
+# approval_webhook:                   # notify when a destructive call is waiting
+#   url: https://example.com/hook
+#   secret_env: TOOLS_WEBHOOK_SECRET  # signing secret, from the environment
+#   include_arguments: false          # default: argument names only
+# web_search:                         # one JSON search endpoint (e.g. SearXNG)
+#   url: https://search.example/search
+#   params: {format: json}
+#   results_path: results
+# databases: {app: ./data/app.db}     # db_query: read-only SELECT only
+# shell:                              # shell_run: allow-listed programs, needs approval
+#   allowed_commands: [git, ls]       # also needs max_permission: destructive

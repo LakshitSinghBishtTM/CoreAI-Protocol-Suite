@@ -18,6 +18,8 @@ from typing import Any, Awaitable, Callable, Iterable, Optional
 
 import jsonschema
 
+from coreai import tracing
+
 MAX_OUTPUT_CHARS = 20_000
 
 
@@ -127,13 +129,34 @@ class ToolRegistry:
         max_permission: Permission = Permission.DESTRUCTIVE,
     ) -> ToolResult:
         start = time.monotonic()
-        try:
-            result = await self._call(
-                name, arguments, allowed, approved, max_permission, start, caller
+        tool = self._tools.get(name)
+        # Spans carry names and outcomes, never argument values or output.
+        with tracing.start_span(
+            "caips.tool",
+            {
+                "caips.tool": name,
+                "caips.tool.caller": caller,
+                "caips.tool.permission": tool.permission.name.lower() if tool else "unknown",
+                "caips.tool.owner": tool.owner if tool else "unknown",
+            },
+        ) as span:
+            try:
+                result = await self._call(
+                    name, arguments, allowed, approved, max_permission, start, caller
+                )
+            except Exception as exc:
+                code = getattr(exc, "code", "error")
+                span.set_attribute("caips.tool.outcome", code)
+                span.mark_error(code)
+                self._audit(caller, name, arguments, exc, start)
+                raise
+            span.set_attributes(
+                {
+                    "caips.tool.outcome": "ok",
+                    "caips.tool.duration_ms": result.duration_ms,
+                    "caips.tool.truncated": result.truncated,
+                }
             )
-        except Exception as exc:
-            self._audit(caller, name, arguments, exc, start)
-            raise
         self._audit(caller, name, arguments, result, start)
         return result
 

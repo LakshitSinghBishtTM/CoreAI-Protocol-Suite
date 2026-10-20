@@ -67,6 +67,11 @@ async def lifespan(app: FastAPI):
     app_state["tools"] = load_tools_runtime()  # None unless config/tools.yml exists
     if app_state["tools"] is not None:
         app_state["tools"].registry.on_call = tool_audit_hook
+        from tools.mcp_client import connect_servers
+
+        app_state["mcp_clients"] = await connect_servers(
+            app_state["tools"].registry, app_state["tools"].mcp_servers
+        )
     from providers.local import monitor_local
 
     app_state["local_monitor"] = asyncio.create_task(monitor_local(providers))
@@ -98,6 +103,8 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down CoreAI...")
     if app_state.get("local_monitor"):
         app_state["local_monitor"].cancel()
+    for client in app_state.get("mcp_clients") or []:
+        await client.close()
     if app_state.get("task_runner"):
         await app_state["task_runner"].shutdown()
     if app_state["agent_manager"]:

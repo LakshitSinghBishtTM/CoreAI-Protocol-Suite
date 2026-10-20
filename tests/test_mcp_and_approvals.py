@@ -124,3 +124,22 @@ def test_stdio_server_end_to_end(tmp_path):
     assert [r["id"] for r in replies] == [1, 2, 3]  # the notification got no reply
     assert replies[1]["result"]["tools"][0]["name"] == "calculator"
     assert "81" in replies[2]["result"]["content"][0]["text"]
+
+
+def test_webhook_config_needs_secret(monkeypatch):
+    monkeypatch.delenv("TOOLS_WEBHOOK_SECRET", raising=False)
+    with pytest.raises(ValueError):
+        build_runtime({"approval_webhook": {"url": "http://h/x"}})
+    monkeypatch.setenv("TOOLS_WEBHOOK_SECRET", "k")
+    assert build_runtime({"approval_webhook": {"url": "http://h/x"}}).approvals.on_request
+
+
+def test_extra_tools_register_only_when_configured(tmp_path):
+    cfg = {
+        "web_search": {"url": "https://s.example/search"},
+        "databases": {"app": str(tmp_path / "a.db")},
+        "shell": {"allowed_commands": ["echo"], "cwd": str(tmp_path)},
+    }
+    names = [t.name for t in build_runtime(cfg).registry.visible(["*"])]
+    assert names == ["calculator", "db_query", "shell_run", "web_search"]
+    assert [t.name for t in build_runtime({}).registry.visible(["*"])] == ["calculator"]

@@ -146,22 +146,22 @@ CaiPS becomes the place tools live: registered once, permissioned, and usable by
 
 - **Tool registry:** each tool has a name, JSON schema, description, version, owner, timeout and permission level (read-only, write, destructive). *Status: done (`src/tools/registry.py`), including allow lists (deny by default), schema validation, approval gate, output cap and audit hook. Not yet wired into the gateway, API or audit log.*
 - **MCP server:** expose the registry so any MCP client (editors, other agents, desktop apps) can use CaiPS tools. *Status: done (`POST /mcp` and `python -m tools` stdio; `src/tools/mcp.py`).*
-- **MCP client:** connect to external MCP servers over stdio and HTTP and add their tools to the registry, with per-server allow lists.
+- **MCP client:** connect to external MCP servers over stdio and HTTP and add their tools to the registry, with per-server allow lists. *Status: done (`src/tools/mcp_client.py`; connects at startup, no reconnect yet).*
 - **Tool-call execution in the gateway:** when a model returns a tool call, CaiPS can run it and continue the conversation, or hand it back to the client. Selectable per request. *Status: done. `run_tools: true` on `/v1/chat/completions` runs the caller's server-side granted tools (`src/tools/executor.py`; step and cost limits, approval pause). See `docs/tools.md`.*
 - **Permissions and policy:** per-key and per-agent tool allow lists, argument validation against the schema, and rate limits per tool. *Status: done for per-subject allow lists (`config/tools.yml`), schema validation and per-tool rate limits; per-agent lists wait for Phase 7.*
-- **Approvals:** destructive tools pause for human approval through an API and webhook. *Status: API done (single-use, exact-call, expiring); webhook open.*
+- **Approvals:** destructive tools pause for human approval through an API and webhook. *Status: done (API plus signed webhook).*
 
 **Built-in tools**
 
-- HTTP fetch with domain allow lists, file read and write inside a scoped workspace, web search through a configurable provider, and a calculator. *Status: calculator, scoped files and HTTP fetch done (`src/tools/builtin.py`; files and HTTP only registered when configured; fetch blocks non-public hosts and redirects). Web search open.*
-- Sandboxed code execution (container or microVM) with no network by default and CPU, memory and time limits.
-- Database query tool with read-only mode, and a shell tool disabled by default.
+- HTTP fetch with domain allow lists, file read and write inside a scoped workspace, web search through a configurable provider, and a calculator. *Status: calculator, scoped files and HTTP fetch done (`src/tools/builtin.py`; files and HTTP only registered when configured; fetch blocks non-public hosts and redirects). Web search, read-only database query and an allow-listed approval-gated shell also done (`src/tools/extra.py`).*
+- Sandboxed code execution (container or microVM) with no network by default and CPU, memory and time limits. *Status: open.*
+- Database query tool with read-only mode, and a shell tool disabled by default. *Status: done for SQLite (Postgres open).*
 
 **Quality and safety**
 
 - Treat tool output as untrusted input: label it, cap its size, and strip or flag instruction-like content to limit prompt injection.
-- Record every tool call (arguments, result, duration, caller) in the audit log and traces. *Status: audit log done (caller, tool, outcome, duration, argument names only, by design not values); traces open.*
-- Tool test harness: replay recorded calls against a tool to catch regressions.
+- Record every tool call (arguments, result, duration, caller) in the audit log and traces. *Status: done (audit log and `caips.tool` spans; argument names only, by design not values).*
+- Tool test harness: replay recorded calls against a tool to catch regressions. *Status: done (`src/tools/replay.py`).*
 - Capability negotiation so tools aren't offered to local models that can't call them reliably.
 
 **Exit criteria:** an external MCP client can list and call CaiPS tools, and a model request can use a registered tool end to end with permissions enforced and the call visible in traces.

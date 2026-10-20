@@ -7,11 +7,30 @@ tool names it may use, and anything not granted is denied.
     enabled: true
     workspace: ./workspace          # enables file_read / file_write
     http_allowed_domains: [example.com]   # enables http_fetch
+    web_search:                     # enables web_search (one JSON endpoint, e.g. SearXNG)
+      url: https://search.example/search
+      params: {format: json}
+      results_path: results
+      api_key_env: SEARCH_API_KEY   # optional bearer token from the environment
+    databases: {app: ./data/app.db}   # enables db_query (read-only SELECT)
+    shell:                          # enables shell_run (always needs human approval)
+      allowed_commands: [git, ls]
     max_permission: write           # read_only | write | destructive
     rate_per_minute: {file_write: 30}
     grants:
       default: [calculator]         # subjects with no entry of their own
       alice: ["*"]
+    approval_webhook:               # optional: notify when a destructive call waits
+      url: https://example.com/hook
+      secret_env: TOOLS_WEBHOOK_SECRET   # signing secret, from the environment
+      include_arguments: false      # default: names only, no values
+    mcp_servers:                    # external MCP servers whose tools to use
+      files:
+        command: ["npx", "some-mcp-server"]   # or  url: https://host/mcp
+        allow: [read_file]          # deny by default; "*" for all
+        permission: write           # default write; set read_only only if you trust it
+        env: {}                     # child gets only PATH/HOME plus this
+      # grant subjects the namespaced name: grants: {alice: [files__read_file]}
 """
 
 import os
@@ -30,12 +49,34 @@ class ToolsRuntime:
     approvals: ApprovalStore
     mcp: McpServer
     grants: dict = field(default_factory=dict)
+    mcp_servers: dict = field(default_factory=dict)
     max_permission: Permission = Permission.WRITE
     enabled: bool = True
 
     def allowed_for(self, subject: str) -> list[str]:
         g = self.grants.get(subject, self.grants.get("default", []))
         return list(g or [])
+
+
+def _register_extras(registry: ToolRegistry, cfg: dict) -> None:
+    from .extra import ShellRunner, SqliteReader, WebSearch, register_extras
+
+    search = db = shell = None
+    ws = cfg.get("web_search") or {}
+    if ws.get("url"):
+        headers = dict(ws.get("headers") or {})
+        if ws.get("api_key_env"):  # key from the environment, sent as a bearer token
+            headers["Authorization"] = "Bearer " + os.getenv(ws["api_key_env"], "")
+        search = WebSearch(
+            ws["url"], ws.get("query_param", "q"), ws.get("params"), headers,
+            ws.get("results_path", "results"), int(ws.get("max_results", 5)),
+        )  # fmt: skip
+    if cfg.get("databases"):
+        db = SqliteReader(cfg["databases"])
+    sh = cfg.get("shell") or {}
+    if sh.get("allowed_commands"):
+        shell = ShellRunner(sh["allowed_commands"], sh.get("cwd") or cfg.get("workspace") or ".")
+    register_extras(registry, search, db, shell)
 
 
 def build_runtime(config: Optional[dict]) -> ToolsRuntime:
@@ -45,6 +86,7 @@ def build_runtime(config: Optional[dict]) -> ToolsRuntime:
     domains = cfg.get("http_allowed_domains") or []
     fetcher = HttpFetcher(domains) if domains else None
     register_builtins(registry, workspace, fetcher)
+    _register_extras(registry, cfg)
     for name, per_min in (cfg.get("rate_per_minute") or {}).items():
         tool = registry.get(name)
         if tool is not None:
@@ -55,9 +97,17 @@ def build_runtime(config: Optional[dict]) -> ToolsRuntime:
         raise ValueError("max_permission must be read_only, write or destructive")
     grants = {str(k): list(v or []) for k, v in (cfg.get("grants") or {}).items()}
     approvals = ApprovalStore()
+    hook = cfg.get("approval_webhook") or {}
+    if hook.get("url"):
+        from .webhook import ApprovalWebhook
+
+        secret = os.getenv(hook.get("secret_env", "TOOLS_WEBHOOK_SECRET"), "")
+        approvals.on_request = ApprovalWebhook(
+            hook["url"], secret, bool(hook.get("include_arguments", False))
+        )  # raises if the secret is missing: no unsigned webhooks
     rt = ToolsRuntime(
         registry=registry, approvals=approvals, mcp=None,  # type: ignore[arg-type]
-        grants=grants, max_permission=max_perm, enabled=bool(cfg.get("enabled", True)),
+        grants=grants, mcp_servers=dict(cfg.get("mcp_servers") or {}), max_permission=max_perm, enabled=bool(cfg.get("enabled", True)),
     )  # fmt: skip
     rt.mcp = McpServer(registry, rt.allowed_for, approvals, max_perm)
     return rt
