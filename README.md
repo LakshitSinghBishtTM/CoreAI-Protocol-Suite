@@ -65,6 +65,8 @@ export OPENAI_API_KEY="sk-..."   # set at least one provider key
 uvicorn api.server:app --port 8743
 ```
 
+The wheel contains the code only. `config/` and `migrations/` are read from the checkout (or from `$COREAI_HOME`).
+
 The server refuses to start if no provider key is set. It reads real environment variables and does **not** load `.env` files itself. To keep settings in a file, copy `.env.example` to `.env`, fill it in, and run `set -a; source .env; set +a` before starting (Docker users can pass `--env-file .env`).
 
 There is no token-issuing endpoint yet, so mint a token yourself with the same `SECRET_KEY`:
@@ -84,6 +86,8 @@ curl -X POST localhost:8743/v1/completions \
 ```bash
 docker build -t caips .
 docker run -p 8743:8743 --env-file .env caips
+# or, with SQLite on a named volume:
+cp .env.example .env && docker compose up
 ```
 
 ## API

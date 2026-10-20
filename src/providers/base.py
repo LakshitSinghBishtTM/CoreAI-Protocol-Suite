@@ -260,7 +260,7 @@ def openai_messages(request: "CompletionRequest", extra_system: Optional[str] = 
                 }
             )
         elif m.images:
-            parts = [{"type": "text", "text": m.content}] if m.content else []
+            parts: list[dict] = [{"type": "text", "text": m.content}] if m.content else []
             parts.extend({"type": "image_url", "image_url": {"url": image_url(i)}} for i in m.images)
             out.append({"role": m.role, "content": parts})
         else:
@@ -332,8 +332,9 @@ class BaseProvider(ABC):
         raise NotImplementedError(f"{self.name} does not support embeddings")
 
     @abstractmethod
-    async def stream(self, request: CompletionRequest) -> AsyncGenerator[str, None]:
-        pass
+    def stream(self, request: CompletionRequest) -> AsyncGenerator[str, None]:
+        """Async generator of text chunks (implement as ``async def`` with ``yield``)."""
+        raise NotImplementedError
 
     def estimate_cost(self, input_tokens: int, output_tokens: int, model: str) -> float:
         """Estimated USD for a call (routing, pre-flight checks). Does not count

@@ -63,7 +63,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             # Hash, not a prefix: every JWT starts with the same header bytes.
             digest = hashlib.sha256(auth[7:].strip().encode()).hexdigest()[:16]
             return f"bearer:{digest}"
-        return f"ip:{request.client.host}"
+        return f"ip:{request.client.host if request.client else 'unknown'}"
 
     def _check_rate_limit(self, client_key: str) -> Tuple[bool, float]:
         """

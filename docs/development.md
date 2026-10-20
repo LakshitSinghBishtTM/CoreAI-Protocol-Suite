@@ -652,3 +652,11 @@ CoreAI is designed as a long-lived infrastructure platform rather than a collect
 Contributors should optimize for system integrity, operational reliability, and architectural consistency.
 
 Every change should strengthen the separation between orchestration, execution, communication, and persistence while preserving the platform's core principles of provider independence, protocol-oriented design, distributed execution, and operational visibility.
+
+
+## Layout and type checking
+
+Code lives in `src/`. `pip install -e .[dev]` then `pytest`. `mypy` (no arguments) checks the
+files listed in `pyproject.toml`; when you make a file clean, add it to that list.
+Files not yet clean: `api/routes.py`, `api/server.py`, `coreai/{budgets,cache,core_final,logging_setup,orchestrator,router,task_runner}.py`,
+`database/db.py`, `providers/{anthropic,gemini}.py`.

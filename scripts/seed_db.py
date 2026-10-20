@@ -18,7 +18,7 @@ import sys
 import uuid
 from datetime import datetime, timedelta
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), "src"))
 
 from database.db import get_session, init_db
 from database.migrations import create_all_tables

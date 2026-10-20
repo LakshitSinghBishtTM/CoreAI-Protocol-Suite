@@ -1,0 +1,6 @@
+# Merge into config/routing.yml. Try deepseek, then openai, then anthropic.
+policies:
+  resilient:
+    strategy: cost_aware
+    weights: {cost: 0.5, latency: 0.5}
+    fallback_chain: [deepseek, openai, anthropic]

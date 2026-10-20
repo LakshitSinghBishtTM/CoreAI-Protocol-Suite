@@ -16,12 +16,13 @@ import math
 import os
 import threading
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
 from loguru import logger
 
-DEFAULT_PATH = Path(__file__).resolve().parent.parent / "config" / "pricing.yml"
+from coreai._paths import data_dir  # noqa: E402
+
+DEFAULT_PATH = data_dir("config") / "pricing.yml"
 _MAX_UNPRICED_TRACKED = 200
 _RATE_FIELDS = {"input", "output", "note"}
 

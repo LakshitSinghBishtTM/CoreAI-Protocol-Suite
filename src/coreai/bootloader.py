@@ -1,5 +1,6 @@
 import os
 from dataclasses import dataclass, field
+from typing import Optional
 
 from loguru import logger
 
@@ -63,7 +64,7 @@ def _validate_env(strict: bool = False) -> None:
                 logger.warning(f"  WARNING: {msg}")
 
 
-def boot(config: BootConfig = None) -> tuple[Router, Orchestrator]:
+def boot(config: Optional[BootConfig] = None) -> tuple[Router, Orchestrator]:
     """
     Full system boot sequence.  Returns (Router, Orchestrator).
 

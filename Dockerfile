@@ -11,7 +11,7 @@
 # ---------------------------------------------------------------------------
 # Stage 1: build dependencies into a virtualenv
 # ---------------------------------------------------------------------------
-FROM python:3.11-slim AS builder
+FROM python:3.11.9-slim-bookworm AS builder
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -29,29 +29,23 @@ RUN pip install --no-cache-dir -r requirements.txt
 # ---------------------------------------------------------------------------
 # Stage 2: runtime image
 # ---------------------------------------------------------------------------
-FROM python:3.11-slim AS runtime
+FROM python:3.11.9-slim-bookworm AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PATH="/opt/venv/bin:$PATH"
+    PATH="/opt/venv/bin:$PATH" \
+    PYTHONPATH=/app/src
 
 WORKDIR /app
 
 # No apt packages: the healthcheck uses Python, which keeps the image small.
 RUN useradd --create-home --uid 1000 --shell /usr/sbin/nologin coreai
+RUN mkdir /data && chown coreai:coreai /data
 
 COPY --from=builder /opt/venv /opt/venv
 
-# App code
-COPY --chown=coreai:coreai api/ ./api/
-COPY --chown=coreai:coreai coreai/ ./coreai/
-COPY --chown=coreai:coreai providers/ ./providers/
-COPY --chown=coreai:coreai agents/ ./agents/
-COPY --chown=coreai:coreai middleware/ ./middleware/
-COPY --chown=coreai:coreai protocols/ ./protocols/
-COPY --chown=coreai:coreai database/ ./database/
-COPY --chown=coreai:coreai neural/ ./neural/
-COPY --chown=coreai:coreai utils/ ./utils/
+# App code (src/ layout; config/ and migrations/ stay beside the app)
+COPY --chown=coreai:coreai src/ ./src/
 COPY --chown=coreai:coreai config/ ./config/
 COPY --chown=coreai:coreai migrations/ ./migrations/
 

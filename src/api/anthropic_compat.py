@@ -234,7 +234,7 @@ def _tool_choice(choice: Optional[dict], tools: Optional[list]):
         if choice.get("name") not in {t.get("name") for t in tools}:
             raise _bad("tool_choice must name one of the given tools.", "tool_choice")
         return {"type": "function", "function": {"name": choice["name"]}}
-    mapped = {"auto": "auto", "any": "required", "none": "none"}.get(kind)
+    mapped = {"auto": "auto", "any": "required", "none": "none"}.get(kind or "")
     if mapped is None:
         raise _bad("tool_choice type must be auto, any, none or tool.", "tool_choice")
     return mapped

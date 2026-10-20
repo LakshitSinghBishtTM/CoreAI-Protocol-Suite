@@ -10,17 +10,19 @@ Usage:
 """
 
 import asyncio
-import os
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
 from loguru import logger
 from sqlalchemy import text
 
+from coreai._paths import data_dir  # noqa: E402
+
 from .db import get_session, init_db, ping
 
-MIGRATIONS_DIR = Path(__file__).parent.parent / "migrations"
+MIGRATIONS_DIR = data_dir("migrations")
 
 CREATE_MIGRATIONS_TABLE = """
 CREATE TABLE IF NOT EXISTS _schema_migrations (
@@ -65,26 +67,70 @@ async def _get_applied(session) -> set[str]:
         return set()
 
 
+def split_statements(sql: str) -> list[str]:
+    """Split a SQL script on ``;`` outside of quotes, comments and
+    ``$$`` bodies. BEGIN/COMMIT are dropped: the session owns the transaction."""
+    out, buf, i, n = [], [], 0, len(sql)
+    quote = None
+    while i < n:
+        ch = sql[i]
+        if quote:
+            buf.append(ch)
+            if sql.startswith(quote, i) and quote != "'" and quote != '"':
+                buf.append(sql[i + 1 : i + len(quote)])
+                i += len(quote) - 1
+                quote = None
+            elif ch == quote:
+                quote = None
+        elif sql.startswith("--", i):
+            j = sql.find("\n", i)
+            i = n if j < 0 else j
+            continue
+        elif sql.startswith("$$", i):
+            quote = "$$"
+            buf.append("$$")
+            i += 1
+        elif ch in ("'", '"'):
+            quote = ch
+            buf.append(ch)
+        elif ch == ";":
+            out.append("".join(buf).strip())
+            buf = []
+        else:
+            buf.append(ch)
+        i += 1
+    out.append("".join(buf).strip())
+    return [s for s in out if s and s.upper() not in ("BEGIN", "COMMIT")]
+
+
+def _dialect_dir() -> Path:
+    from .db import get_engine
+
+    name = get_engine().dialect.name
+    return MIGRATIONS_DIR / ("postgres" if name == "postgresql" else "sqlite")
+
+
 def _discover_migrations(direction: str = "up") -> list[Path]:
     """
     Discover migration files.
     Up migrations:   NNN_name.sql
     Down migrations: NNN_name.down.sql
     """
-    if not MIGRATIONS_DIR.exists():
-        logger.warning(f"Migrations directory not found: {MIGRATIONS_DIR}")
+    mdir = _dialect_dir()
+    if not mdir.exists():
+        logger.warning(f"Migrations directory not found: {mdir}")
         return []
 
     pattern = "*.down.sql" if direction == "down" else "*.sql"
     files = sorted(
         f
-        for f in MIGRATIONS_DIR.glob(pattern)
+        for f in mdir.glob(pattern)
         if direction == "down" or not f.name.endswith(".down.sql")
     )
     return files
 
 
-async def migrate_up(target: str = None):
+async def migrate_up(target: Optional[str] = None):
     """Apply all pending up migrations, or up to target filename."""
     async with get_session() as session:
         await _ensure_migrations_table(session)
@@ -107,7 +153,7 @@ async def migrate_up(target: str = None):
 
             try:
                 # Execute each statement separately
-                statements = [s.strip() for s in sql.split(";") if s.strip()]
+                statements = split_statements(sql)
                 for stmt in statements:
                     await session.execute(text(stmt))
 
@@ -158,7 +204,7 @@ async def migrate_down(steps: int = 1):
             sql = down_files[down_name].read_text()
             logger.info(f"  ← {down_name}")
 
-            statements = [s.strip() for s in sql.split(";") if s.strip()]
+            statements = split_statements(sql)
             for stmt in statements:
                 await session.execute(text(stmt))
 

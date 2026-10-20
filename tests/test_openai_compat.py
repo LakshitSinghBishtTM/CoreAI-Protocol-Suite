@@ -16,8 +16,8 @@ BODY = {"model": "a-model", "messages": [{"role": "user", "content": "hi"}]}
 def make_client(monkeypatch):
     monkeypatch.setenv("SECRET_KEY", "openai-compat-test-secret")
     import api.server as server
-    from api.auth import create_access_token
     from api.anthropic_compat import router as anthropic_compat
+    from api.auth import create_access_token
     from api.openai_compat import router as compat
     from api.routes import router as api_router
 
@@ -92,7 +92,6 @@ def test_system_and_text_parts_are_mapped(make_client):
         ({"stop": ["x"]}, "stop"),
         ({"n": 2}, "n"),
         ({"response_format": {"type": "xml"}}, "response_format"),
-        ({"tools": [{"type": "function", "function": {"name": "f"}}], "stream": True}, "tools"),
     ],
 )
 def test_unsupported_parameters_are_refused_not_dropped(make_client, extra, param):

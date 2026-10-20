@@ -1,0 +1,16 @@
+# Minimal single-node setup: SQLite on a named volume. Copy .env.example to .env first.
+services:
+  caips:
+    build: .
+    image: caips:local
+    ports:
+      - "8743:8743"
+    env_file: .env
+    environment:
+      DB_PATH: /data/coreai.db
+    volumes:
+      - caips-data:/data
+    restart: unless-stopped
+
+volumes:
+  caips-data:

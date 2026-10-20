@@ -10,6 +10,7 @@ import json
 import httpx
 import pytest
 from anthropic import AsyncAnthropic
+from anthropic import _base_client as _anthropic_http
 from openai import AsyncOpenAI
 
 from coreai.errors import ErrorKind, classify
@@ -18,10 +19,8 @@ from providers.base import CompletionRequest, Message
 from providers.openai import OpenAIProvider
 from tests.helpers import make_router, request
 
-from anthropic import _base_client as _anthropic_http
-
 # Use the HTTP module the installed Anthropic SDK type-checks against.
-httpx2 = _anthropic_http.httpx
+httpx2 = getattr(_anthropic_http, "httpx", None) or _anthropic_http.httpx2
 
 ANTHROPIC_OK = {
     "id": "msg_1",

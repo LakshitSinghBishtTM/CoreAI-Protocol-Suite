@@ -55,10 +55,8 @@ Issues = "https://github.com/LakshitSinghBishtTM/CoreAI-Protocol-Suite/issues"
 version = { attr = "coreai._version.__version__" }
 dependencies = { file = ["requirements.txt"] }
 
-# The code is currently laid out as several top-level packages (src/ layout
-# is planned). List them explicitly so wheels contain everything.
 [tool.setuptools.packages.find]
-include = ["agents*", "api*", "coreai*", "database*", "middleware*", "neural*", "protocols*", "providers*", "utils*"]
+where = ["src"]
 
 [tool.ruff]
 line-length = 120
@@ -72,8 +70,50 @@ ignore = ["E203"]
 python_version = "3.11"
 ignore_missing_imports = true
 follow_imports = "silent"
-# Ratchet: CI type-checks the files listed in .github/workflows/ci.yml. Add a
-# file there once it is clean; the rest of the code base is not checked yet.
+mypy_path = "src"
+explicit_package_bases = true
+# Ratchet: `mypy` (no arguments) checks the clean files below. When you fix a
+# file, add it here; never remove one.
+files = [
+    "src/api/__init__.py",
+    "src/api/anthropic_compat.py",
+    "src/api/auth.py",
+    "src/api/middleware.py",
+    "src/api/openai_compat.py",
+    "src/coreai/__init__.py",
+    "src/coreai/_paths.py",
+    "src/coreai/_version.py",
+    "src/coreai/audit.py",
+    "src/coreai/circuit_breaker.py",
+    "src/coreai/deadline.py",
+    "src/coreai/drain.py",
+    "src/coreai/errors.py",
+    "src/coreai/health.py",
+    "src/coreai/kernel.py",
+    "src/coreai/limiter.py",
+    "src/coreai/memory_manager.py",
+    "src/coreai/metrics.py",
+    "src/coreai/policy.py",
+    "src/coreai/pricing.py",
+    "src/coreai/request_context.py",
+    "src/coreai/retry.py",
+    "src/coreai/scheduler.py",
+    "src/coreai/tracing.py",
+    "src/coreai/usage.py",
+    "src/database/migrations.py",
+    "src/database/models.py",
+    "src/middleware/__init__.py",
+    "src/middleware/logger.py",
+    "src/middleware/validator.py",
+    "src/providers/__init__.py",
+    "src/providers/base.py",
+    "src/providers/deepseek.py",
+    "src/providers/grok.py",
+    "src/providers/openai.py",
+    "src/utils/__init__.py",
+    "src/utils/cost.py",
+    "src/utils/tokens.py",
+]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

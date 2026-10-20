@@ -153,11 +153,6 @@ def _check_tools(body: ChatRequest) -> None:
                 "Each tool must be {'type': 'function', 'function': {'name': ...}}.",
                 f"tools[{i}]",
             )
-    if body.tools and body.stream:
-        raise CompatError(
-            400, "Tool calling with stream=true is not supported yet.",
-            "invalid_request_error", "unsupported_parameter", "tools",
-        )  # fmt: skip
     choice = body.tool_choice
     if choice is None:
         return
@@ -361,6 +356,37 @@ def _chunk(cid, created, model, delta, finish=None, usage=None) -> str:
     return f"data: {json.dumps(data, separators=(',', ':'))}\n\n"
 
 
+def _buffered_stream(cid, created, resp, finish, body, tokens) -> StreamingResponse:
+    msg = _assistant_message(resp)
+
+    def _gen():
+        yield _chunk(cid, created, resp.model, {"role": "assistant", "content": ""})
+        if msg.get("tool_calls"):
+            for i, c in enumerate(msg["tool_calls"]):
+                yield _chunk(cid, created, resp.model, {"tool_calls": [{
+                    "index": i, "id": c["id"], "type": "function",
+                    "function": {"name": c["function"]["name"], "arguments": ""},
+                }]})  # fmt: skip
+                yield _chunk(cid, created, resp.model, {"tool_calls": [{
+                    "index": i, "function": {"arguments": c["function"]["arguments"]},
+                }]})  # fmt: skip
+        if msg.get("content"):
+            yield _chunk(cid, created, resp.model, {"content": msg["content"]})
+        yield _chunk(cid, created, resp.model, {}, finish=finish)
+        if (body.stream_options or {}).get("include_usage"):
+            yield _chunk(cid, created, resp.model, {}, usage={
+                "prompt_tokens": resp.input_tokens or 0,
+                "completion_tokens": resp.output_tokens or 0,
+                "total_tokens": tokens,
+            })  # fmt: skip
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(
+        _gen(), media_type="text/event-stream",
+        headers={"X-CaiPS-Provider": resp.provider},
+    )  # fmt: skip
+
+
 def _assistant_message(resp) -> dict:
     calls = (resp.metadata or {}).get("tool_calls")
     if not calls:
@@ -379,6 +405,70 @@ def _assistant_message(resp) -> dict:
     }
 
 
+def _schema_of(rf: Optional[dict]) -> Optional[dict]:
+    if rf and rf.get("type") == "json_schema":
+        return rf["json_schema"]["schema"]
+    return None
+
+
+def _schema_error(content: str, schema: dict) -> Optional[str]:
+    """Return a description of why ``content`` violates ``schema``, else None."""
+    import jsonschema
+
+    try:
+        data = json.loads(content)
+    except (TypeError, ValueError) as exc:
+        return f"output is not valid JSON ({exc})"
+    try:
+        jsonschema.validate(data, schema)
+    except jsonschema.ValidationError as exc:
+        return exc.message
+    except jsonschema.SchemaError as exc:
+        return f"invalid schema: {exc.message}"
+    return None
+
+
+async def _route_validated(_router, preq, body):
+    from providers import Message as PM
+
+    """Route once; if a json_schema was requested, validate the output and
+    retry once with the validation error before giving up."""
+    preq.stream = False  # buffered: the reply is validated before it is sent
+    resp = await _router.route(preq, preferred_provider=body.provider)
+    schema = _schema_of(body.response_format)
+    if schema is None or (resp.metadata or {}).get("tool_calls"):
+        return resp
+    err = _schema_error(resp.content, schema)
+    if err is None:
+        return resp
+    retry = _convert(body)
+    retry.stream = False
+    retry.messages.append(PM(role="assistant", content=resp.content))
+    retry.messages.append(
+        PM(
+            role="user",
+            content=f"Your last reply did not match the JSON schema: {err}. "
+            "Reply again with only JSON that matches the schema.",
+        )
+    )
+    resp2 = await _router.route(retry, preferred_provider=body.provider)
+    err2 = _schema_error(resp2.content, schema)
+    if err2 is not None:
+        raise CompatError(
+            502, f"Model output did not match response_format schema: {err2}",
+            "server_error", "schema_validation_failed", "response_format",
+        )  # fmt: skip
+    resp2.metadata = {
+        **(resp.metadata or {}),
+        **(resp2.metadata or {}),
+        "schema_retried": True,
+    }
+    resp2.cost_usd += resp.cost_usd
+    resp2.input_tokens = (resp2.input_tokens or 0) + (resp.input_tokens or 0)
+    resp2.output_tokens = (resp2.output_tokens or 0) + (resp.output_tokens or 0)
+    return resp2
+
+
 @router.post("/chat/completions", summary="Chat completion (OpenAI-compatible)")
 async def chat_completions(
     body: ChatRequest,
@@ -395,9 +485,15 @@ async def chat_completions(
         cid = "chatcmpl-" + uuid.uuid4().hex[:24]
         created = int(time.time())
 
-        if not body.stream:
+        # Tool calls and schema-validated output need the whole reply before
+        # anything can be emitted, so those streams are buffered, then sent as
+        # SSE chunks (complete tool calls, validated JSON).
+        buffered = bool(body.tools) or _schema_of(body.response_format) is not None
+        if not body.stream or buffered:
             try:
-                resp = await _router.route(preq, preferred_provider=body.provider)
+                resp = await _route_validated(_router, preq, body)
+            except CompatError:
+                raise
             except Exception as exc:
                 logger.error("Chat completion error for %s: %s", ctx.subject, exc)
                 raise routes._http_error(exc)
@@ -407,6 +503,9 @@ async def chat_completions(
                 ctx, resp.provider, resp.model,
                 resp.input_tokens, resp.output_tokens, resp.cost_usd,
             )  # fmt: skip
+            finish = (resp.metadata or {}).get("finish_reason") or "stop"
+            if body.stream:
+                return _buffered_stream(cid, created, resp, finish, body, tokens)
             return JSONResponse(
                 {
                     "id": cid,

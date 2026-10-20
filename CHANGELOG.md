@@ -155,3 +155,12 @@ The previous `1.0.0` label did not match the project's state; versions now start
   listed by `/v1/models`.
 - Untracked `.env`, `.env.production` and `config/secrets.json`; CI now runs gitleaks
   and `pip-audit`.
+
+## Unreleased
+- Add CONTRIBUTING.md and examples/ (Phase 4 developer experience).
+- Make `tests/test_provider_contracts.py` work with SDK versions exposing `httpx2`.
+- Streaming requests with tools or a JSON schema are buffered and sent as SSE chunks.
+- `response_format: json_schema` output is validated; one retry, then 502 `schema_validation_failed`.
+- `src/` layout, `py.typed`, mypy ratchet in `pyproject.toml`, pre-commit hooks.
+- Separate `migrations/postgres` and `migrations/sqlite` with down scripts; roundtrip tests.
+- OpenAI SDK compatibility tests, `docker-compose.yml`, quickstart CI job, PyPI publish workflow.

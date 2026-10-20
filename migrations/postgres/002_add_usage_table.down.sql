@@ -1,0 +1,6 @@
+-- down
+DROP MATERIALIZED VIEW IF EXISTS mv_user_cost_summary;
+DROP TABLE IF EXISTS billing_events CASCADE;
+DROP TABLE IF EXISTS provider_health CASCADE;
+DROP TABLE IF EXISTS usage_daily CASCADE;
+DROP TABLE IF EXISTS api_requests CASCADE;

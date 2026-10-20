@@ -1,0 +1,23 @@
+# Copy to config/budgets.yml (or point COREAI_BUDGET_FILE at a file) to turn
+# budgets on. With no file, nothing is limited. See docs/budgets.md.
+#
+# Fields: max_cost_usd, warn_cost_usd, max_requests, max_tokens, window
+# window: minute | hour | day | week | a number of seconds (default: day)
+default:
+  max_cost_usd: 5.00
+  warn_cost_usd: 4.00
+  max_requests: 2000
+  window: day
+
+# Keyed by the token subject (the JWT "sub"). Unset fields inherit `default`.
+subjects:
+  "user:alice":
+    max_cost_usd: 50.00
+    warn_cost_usd: 40.00
+
+# Shared cap per model, across all subjects. Does not inherit `default`.
+# Checked before a call only when the request names the model.
+models:
+  "gpt-4o":
+    max_cost_usd: 100.00
+    window: day

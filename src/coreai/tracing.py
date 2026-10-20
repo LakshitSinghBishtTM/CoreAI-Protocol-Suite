@@ -59,8 +59,8 @@ class _NoopSpan:
     def __enter__(self) -> "_NoopSpan":
         return self
 
-    def __exit__(self, exc_type, exc, tb) -> bool:
-        return False
+    def __exit__(self, exc_type, exc, tb) -> None:
+        return None
 
 
 _NOOP = _NoopSpan()
@@ -120,7 +120,7 @@ class _Span:
     def __enter__(self) -> "_Span":
         return self
 
-    def __exit__(self, exc_type, exc, tb) -> bool:
+    def __exit__(self, exc_type, exc, tb) -> None:
         if exc is not None and not isinstance(exc, GeneratorExit):
             from coreai.errors import classify
 
@@ -130,7 +130,7 @@ class _Span:
                 kind = None
             self.record_error(exc, kind)
         self.end()
-        return False
+        return None
 
 
 def enabled() -> bool:

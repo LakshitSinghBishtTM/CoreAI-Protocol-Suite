@@ -140,7 +140,7 @@ class OpenAIProvider(BaseProvider):
 
     @staticmethod
     def _metadata(choice) -> dict:
-        meta = {"finish_reason": normalize_finish_reason(choice.finish_reason)}
+        meta: dict = {"finish_reason": normalize_finish_reason(choice.finish_reason)}
         calls = openai_extract_tool_calls(choice.message)
         if calls:
             meta["tool_calls"] = calls

@@ -1,7 +1,8 @@
 """
-providers/grok.py
+providers/deepseek.py
 
-Grok uses an OpenAI-compatible API, just a different base URL and models.
+DeepSeek uses an OpenAI-compatible API, so we use the openai SDK
+pointed at DeepSeek's base URL.
 """
 
 import importlib
@@ -19,25 +20,26 @@ from .base import (
     BaseProvider,
     CompletionRequest,
     CompletionResponse,
+    json_instruction,
     normalize_finish_reason,
     openai_extract_tool_calls,
     openai_messages,
     openai_tool_kwargs,
 )
 
+DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
 
-class GrokProvider(BaseProvider):
-    name = "grok"
+
+class DeepSeekProvider(BaseProvider):
+    name = "deepseek"
     supports_tools = True
-    supports_vision = True
-    default_model = "grok-3-mini"
-    base_url = "https://api.x.ai/v1"
+    default_model = "deepseek-chat"
 
     def __init__(self, api_key: str):
         super().__init__(api_key)
         self.client = AsyncOpenAI(
             api_key=api_key,
-            base_url=self.base_url,
+            base_url=DEEPSEEK_BASE_URL,
             timeout=SDK_TIMEOUT_S,
             max_retries=0,
         )
@@ -51,12 +53,13 @@ class GrokProvider(BaseProvider):
             response = await self.client.chat.completions.create(
                 model=model,
                 messages=messages,
-                **openai_tool_kwargs(request),
+                **openai_tool_kwargs(request, native_schema=False),
                 max_tokens=request.max_tokens,
                 temperature=request.temperature,
+                stream=False,
             )
         except Exception as e:
-            logger.error(f"[grok] completion failed: {e}")
+            logger.error(f"[deepseek] completion failed: {e}")
             raise
 
         latency_ms = (time.monotonic() - start) * 1000
@@ -77,7 +80,7 @@ class GrokProvider(BaseProvider):
         )
         self._track(result)
         logger.debug(
-            f"[grok] {model} | {input_tokens}in {output_tokens}out | "
+            f"[deepseek] {model} | {input_tokens}in {output_tokens}out | "
             f"${cost:.6f} | {latency_ms:.0f}ms"
         )
         return result
@@ -90,7 +93,7 @@ class GrokProvider(BaseProvider):
             stream = await self.client.chat.completions.create(
                 model=model,
                 messages=messages,
-                **openai_tool_kwargs(request),
+                **openai_tool_kwargs(request, native_schema=False),
                 max_tokens=request.max_tokens,
                 temperature=request.temperature,
                 stream=True,
@@ -113,12 +116,12 @@ class GrokProvider(BaseProvider):
                 if delta:
                     yield delta
         except Exception as e:
-            logger.error(f"[grok] stream failed: {e}")
+            logger.error(f"[deepseek] stream failed: {e}")
             raise
 
     @staticmethod
     def _metadata(choice) -> dict:
-        meta = {"finish_reason": normalize_finish_reason(choice.finish_reason)}
+        meta: dict = {"finish_reason": normalize_finish_reason(choice.finish_reason)}
         calls = openai_extract_tool_calls(choice.message)
         if calls:
             meta["tool_calls"] = calls
@@ -126,7 +129,7 @@ class GrokProvider(BaseProvider):
         return meta
 
     def count_tokens(self, text: str, model: str) -> int:
-        return len(text) // 4
+        return max(1, len(text) // 4)
 
     def _build_messages(self, request: CompletionRequest) -> list[dict]:
-        return openai_messages(request)
+        return openai_messages(request, json_instruction(request.response_format))
