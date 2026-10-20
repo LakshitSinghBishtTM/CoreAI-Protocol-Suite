@@ -278,3 +278,4 @@ dist/
 .env.production
 .kube/*secrets*
 config/secrets.json
+*.mbox
