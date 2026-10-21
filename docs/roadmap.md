@@ -207,7 +207,7 @@ Rebuild `agents/` as a small, inspectable harness on top of the gateway and tool
 
 With this phase, dropping a `.gguf` file into a folder is enough, as in LM Studio. CaiPS launches and supervises `llama-server` (llama.cpp) as a child process and talks to it over localhost HTTP. It does not embed inference in the gateway process, so a native crash or out-of-memory kill can't take down routing, auth or the other providers.
 
-**Model registry**
+**Model registry** *(Status: done, `src/localrt/gguf.py` and `registry.py`; API and CLI exposure open.)*
 
 - A local models directory scanned for `.gguf` files, with metadata read from each header: architecture, parameter count, quantization, trained context length and embedded chat template.
 - Capability flags per model (tools, vision, JSON mode, embeddings), detected where possible and overridable in config.
