@@ -78,10 +78,10 @@ class ToolResult:
     untrusted: bool = True
 
     def as_untrusted(self) -> str:
-        return (
-            f'<tool_output tool="{self.tool}" trust="untrusted">\n'
-            f"{self.content}\n</tool_output>"
-        )
+        """Label, escape wrapper tags, and flag instruction-like content."""
+        from guardrails.injection import wrap_untrusted
+
+        return wrap_untrusted(self.content, self.tool, "tool_output")
 
 
 @dataclass
@@ -136,7 +136,9 @@ class ToolRegistry:
             {
                 "caips.tool": name,
                 "caips.tool.caller": caller,
-                "caips.tool.permission": tool.permission.name.lower() if tool else "unknown",
+                "caips.tool.permission": (
+                    tool.permission.name.lower() if tool else "unknown"
+                ),
                 "caips.tool.owner": tool.owner if tool else "unknown",
             },
         ) as span:
@@ -161,14 +163,23 @@ class ToolRegistry:
         return result
 
     async def _call(
-        self, name, arguments, allowed, approved, max_permission, start, caller="unknown"
+        self,
+        name,
+        arguments,
+        allowed,
+        approved,
+        max_permission,
+        start,
+        caller="unknown",
     ):
         tool = self._tools.get(name)
         if tool is None:
             raise ToolError("unknown_tool", f"No such tool '{name}'.")
         allow = set(allowed or [])
         if "*" not in allow and name not in allow:
-            raise ToolError("not_allowed", f"Tool '{name}' is not allowed for this caller.")
+            raise ToolError(
+                "not_allowed", f"Tool '{name}' is not allowed for this caller."
+            )
         if tool.permission > max_permission:
             raise ToolError(
                 "permission_denied",
@@ -188,7 +199,9 @@ class ToolRegistry:
             if inspect.isawaitable(out):
                 out = await asyncio.wait_for(out, timeout=tool.timeout_s)
         except asyncio.TimeoutError as exc:
-            raise ToolError("timeout", f"Tool '{name}' timed out after {tool.timeout_s}s.") from exc
+            raise ToolError(
+                "timeout", f"Tool '{name}' timed out after {tool.timeout_s}s."
+            ) from exc
         except ToolError:
             raise
         except Exception as exc:
@@ -222,7 +235,9 @@ class ToolRegistry:
         if self.on_call is None:
             return
         try:
-            self.on_call(caller, name, arguments, outcome, (time.monotonic() - start) * 1000)
+            self.on_call(
+                caller, name, arguments, outcome, (time.monotonic() - start) * 1000
+            )
         except Exception:  # an audit hook must never break a tool call
             pass
 

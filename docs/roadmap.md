@@ -159,7 +159,7 @@ CaiPS becomes the place tools live: registered once, permissioned, and usable by
 
 **Quality and safety**
 
-- Treat tool output as untrusted input: label it, cap its size, and strip or flag instruction-like content to limit prompt injection.
+- Treat tool output as untrusted input: label it, cap its size, and strip or flag instruction-like content to limit prompt injection. *Status: done (`guardrails/injection.py`; `ToolResult.as_untrusted` labels, escapes wrapper tags, caps and flags; heuristic, so flags rather than proves).*
 - Record every tool call (arguments, result, duration, caller) in the audit log and traces. *Status: done (audit log and `caips.tool` spans; argument names only, by design not values).*
 - Tool test harness: replay recorded calls against a tool to catch regressions. *Status: done (`src/tools/replay.py`).*
 - Capability negotiation so tools aren't offered to local models that can't call them reliably.
@@ -263,7 +263,7 @@ These features only pay off once real agent runs exist to measure and protect. E
 **Guardrails**
 
 - Input and output filters: PII detection and redaction, secret detection, and configurable blocked topics. *Status: PII and secret detection/redaction done (`src/guardrails/pii.py`) and on by default in logs (`COREAI_LOG_REDACT_PII=0` disables); request/response filters and blocked topics open.*
-- Prompt-injection defenses for tool results and retrieved documents.
+- Prompt-injection defenses for tool results and retrieved documents. *Status: tool results done (`wrap_untrusted(..., kind="retrieved_document")` is ready for RAG).*
 - Output validation against JSON schemas with automatic retry.
 - Policy per key or team: which models, tools and data an agent may use.
 
