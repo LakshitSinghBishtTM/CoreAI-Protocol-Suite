@@ -47,7 +47,7 @@ def wrap_untrusted(
     """Label, escape, cap, and (if suspicious) warn. Safe to put in a model prompt."""
     truncated = len(text) > max_chars
     body = _escape(text[:max_chars]) + ("\n[truncated]" if truncated else "")
-    source = re.sub(r"[^\w.:/ -]", "", source)[:80]
+    source = re.sub(r"[^\w.:/ #-]", "", source)[:80]
     flags = scan(text)
     warn = ""
     if flags:
