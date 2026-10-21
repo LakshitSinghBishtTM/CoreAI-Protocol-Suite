@@ -1,0 +1,12 @@
+# Fine-tuning training prices, USD per 1M training tokens (tokens x epochs), per base model.
+# STATUS: UNVERIFIED placeholders (reviewed: null). Check the vendor's fine-tuning price page
+# before trusting estimates; edit here and set `reviewed` to the date you checked.
+# `inference_multiplier` is the assumed cost of serving a fine-tuned model relative to its base
+# model's per-token price; also unverified.
+reviewed: null
+inference_multiplier: 2.0
+training:
+  default: 8.0
+  gpt-4o-mini: 3.0
+  gpt-4o: 25.0
+  gpt-3.5-turbo: 8.0

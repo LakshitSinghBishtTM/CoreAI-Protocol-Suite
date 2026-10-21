@@ -63,6 +63,13 @@ class TrainingExample:
             errors.append("last message must be from 'assistant'")
         if "system" in roles and roles.index("system") != 0:
             errors.append("system message must be first")
+        for m in self.messages:
+            if m.get("role") not in ("system", "user", "assistant", "tool"):
+                errors.append(f"unknown role {m.get('role')!r}")
+            if not isinstance(m.get("content"), str) or not m["content"].strip():
+                errors.append("every message needs non-empty text content")
+        if "user" not in roles:
+            errors.append("example needs at least one 'user' message")
         return errors
 
 
@@ -175,6 +182,10 @@ class TrainingJob:
     checkpoints: list[TrainingCheckpoint] = field(default_factory=list)
     error: Optional[str] = None
     provider_job_id: Optional[str] = None
+    price_per_mtok: float = (
+        8.0  # $ per 1M trained tokens, set at submit from the price file
+    )
+    estimated_usd: Optional[float] = None  # pre-launch estimate
 
     @property
     def duration_s(self) -> Optional[float]:
@@ -184,8 +195,8 @@ class TrainingJob:
 
     @property
     def cost_estimate_usd(self) -> float:
-        # Rough: $0.008 per 1K training tokens (OpenAI-ish pricing)
-        return round(self.trained_tokens / 1000 * 0.008, 4)
+        """Actual cost so far: provider-reported trained tokens x the job's price."""
+        return round(self.trained_tokens * self.price_per_mtok / 1_000_000, 4)
 
     def to_dict(self) -> dict:
         return {
@@ -197,6 +208,7 @@ class TrainingJob:
             "trained_tokens": self.trained_tokens,
             "duration_s": self.duration_s,
             "cost_estimate_usd": self.cost_estimate_usd,
+            "estimated_usd": self.estimated_usd,
             "checkpoint_count": len(self.checkpoints),
             "error": self.error,
         }
@@ -279,15 +291,48 @@ class TrainingManager:
     Here it accepts any object with a .create_fine_tune() coroutine.
     """
 
-    def __init__(self):
+    def __init__(self, store=None, prices=None, on_succeeded=None):
+        from neural.finetune import TrainingPrices
+
         self._jobs: dict[str, TrainingJob] = {}
         self._formatter = DatasetFormatter()
+        self.store = store  # optional JobStore: jobs survive restarts
+        self.prices = prices or TrainingPrices({})
+        self.on_succeeded = on_succeeded  # called once with the job when it succeeds
+        for r in store.load_all() if store else []:
+            self._restore(r)
+
+    def _restore(self, r: dict) -> None:
+        cfg = TrainingJobConfig(
+            r["base_model"], r["provider"], TrainingDataset(), suffix=r["suffix"] or ""
+        )
+        j = TrainingJob(
+            job_id=r["job_id"], config=cfg, status=TrainingStatus(r["status"])
+        )
+        for k in ("provider_job_id", "fine_tuned_model", "trained_tokens", "created_at", "started_at",
+                  "finished_at", "error", "price_per_mtok", "estimated_usd"):  # fmt: skip
+            setattr(j, k, r[k])
+        self._jobs[j.job_id] = j
+
+    def _save(self, job: TrainingJob) -> None:
+        if self.store:
+            self.store.save(job)
+
+    def estimate(self, config: TrainingJobConfig) -> dict:
+        from neural.finetune import estimate_cost
+
+        return estimate_cost(config, self.prices)
 
     async def submit(
         self,
         config: TrainingJobConfig,
         provider_client: Any,
+        max_cost_usd: Optional[float] = None,
     ) -> TrainingJob:
+        """Validate, estimate the cost, and refuse (before anything is uploaded) if the estimate
+        exceeds ``max_cost_usd``."""
+        from neural.finetune import MAX_DATASET_BYTES
+
         validation = config.dataset.validate()
         if not validation["valid"]:
             raise DatasetValidationError(
@@ -298,8 +343,19 @@ class TrainingManager:
                 logger.warning("Dataset warning: %s", w)
 
         formatted = self._formatter.format(config.dataset, config.provider)
+        if sum(len(str(r)) for r in formatted) > MAX_DATASET_BYTES:
+            raise DatasetValidationError("Dataset exceeds the 100 MB upload limit.")
+        est = self.estimate(config)
+        if max_cost_usd is not None and est["estimated_usd"] > max_cost_usd:
+            raise TrainingError(
+                f"Estimated cost ${est['estimated_usd']} exceeds the limit ${max_cost_usd}; nothing was submitted."
+            )
 
-        job = TrainingJob(config=config)
+        job = TrainingJob(
+            config=config,
+            price_per_mtok=est["price_per_mtok"],
+            estimated_usd=est["estimated_usd"],
+        )
         self._jobs[job.job_id] = job
 
         try:
@@ -329,8 +385,10 @@ class TrainingManager:
         except Exception as exc:
             job.status = TrainingStatus.FAILED
             job.error = str(exc)
+            self._save(job)
             raise TrainingError(f"Failed to submit job {job.job_id}: {exc}") from exc
 
+        self._save(job)
         return job
 
     async def poll(self, job_id: str, provider_client: Any) -> TrainingJob:
@@ -340,6 +398,11 @@ class TrainingManager:
 
         raw = await provider_client.get_fine_tune(job.provider_job_id)
         previous = job.status
+        was_done = previous in (
+            TrainingStatus.SUCCEEDED,
+            TrainingStatus.FAILED,
+            TrainingStatus.CANCELLED,
+        )
         job.status = TrainingStatus(raw.get("status", "queued"))
         if job.started_at is None and (
             job.status == TrainingStatus.RUNNING
@@ -374,7 +437,16 @@ class TrainingManager:
                     job.status,
                     job.fine_tuned_model,
                 )
-
+            if (
+                job.status == TrainingStatus.SUCCEEDED
+                and not was_done
+                and self.on_succeeded
+            ):
+                try:
+                    self.on_succeeded(job)
+                except Exception:  # a registration problem must not lose the job state
+                    logger.exception("on_succeeded hook failed for %s", job_id)
+        self._save(job)
         return job
 
     async def cancel(self, job_id: str, provider_client: Any) -> TrainingJob:
@@ -384,6 +456,7 @@ class TrainingManager:
         await provider_client.cancel_fine_tune(job.provider_job_id)
         job.status = TrainingStatus.CANCELLED
         job.finished_at = time.time()
+        self._save(job)
         logger.info("Training job %s cancelled", job_id)
         return job
 
@@ -420,7 +493,24 @@ _manager: Optional[TrainingManager] = None
 
 
 def get_training_manager() -> TrainingManager:
+    """Process-wide manager: prices from config/finetune_pricing.yml, jobs persisted when
+    ``COREAI_FINETUNE_DB`` is set, and finished models registered in the model catalogue.
+    """
     global _manager
     if _manager is None:
-        _manager = TrainingManager()
+        import os
+
+        from neural.finetune import JobStore, load_training_prices, register_finetuned
+
+        prices = load_training_prices()
+
+        def _register(job: TrainingJob) -> None:
+            from coreai.pricing import get_pricing
+            from neural.model import get_registry
+
+            ok = register_finetuned(job, get_registry(), get_pricing(), prices)
+            logger.info("Fine-tuned model %s registered: %s", job.fine_tuned_model, ok)
+
+        db = os.getenv("COREAI_FINETUNE_DB")
+        _manager = TrainingManager(JobStore(db) if db else None, prices, _register)
     return _manager

@@ -273,10 +273,10 @@ These features only pay off once real agent runs exist to measure and protect. E
 
 **Fine-tuning**
 
-- Keep the existing OpenAI fine-tuning endpoints (`neural/training.py`) as an optional extra, with tests against recorded responses.
-- Dataset upload with format and size validation before any paid job starts.
-- Job tracking: status, logs, a cost estimate before launch, actual cost after, and cancel.
-- Finished models register in the router automatically, with aliases and budgets like any other model.
+- Keep the existing OpenAI fine-tuning endpoints (`neural/training.py`) as an optional extra, with tests against recorded responses. *Status: tests added (`tests/test_finetune.py`, mocked SDK; no recorded real responses yet). The module claims Anthropic support, but no Anthropic fine-tuning API is verified; treat it as unsupported.*
+- Dataset upload with format and size validation before any paid job starts. *Status: format checks (roles, non-empty text, a user turn) and a 100 MB cap run before upload; no dataset-upload API.*
+- Job tracking: status, logs, a cost estimate before launch, actual cost after, and cancel. *Status: done (`neural/finetune.py`: estimate before launch with `max_cost_usd` refusal, price file `config/finetune_pricing.yml` with UNVERIFIED prices, actual cost from provider-reported tokens, durable records via `COREAI_FINETUNE_DB`); no HTTP API or logs streaming yet.*
+- Finished models register in the router automatically, with aliases and budgets like any other model. *Status: catalogue and price-table registration done on success (inference price assumed at 2x base, unverified); aliases and per-model budgets not wired.*
 - Later: fine-tuning APIs from other providers, and LoRA adapters for local GGUF models where llama.cpp tooling supports it.
 
 **Exit criteria:** an eval suite runs in CI, an agent can use a document collection with citations, a fine-tuned model can be launched, tracked and routed like any other, and PII redaction is on by default for logs.
