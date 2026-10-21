@@ -20,7 +20,7 @@ import math
 import time
 from collections import OrderedDict
 from collections.abc import Callable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 WINDOWS = {"minute": 60, "hour": 3600, "day": 86400, "week": 604800}
@@ -55,6 +55,7 @@ class _Usage:
     cost: float = 0.0
     requests: int = 0
     tokens: int = 0
+    alerted: set = field(default_factory=set)  # alert kinds sent this window
 
 
 class BudgetManager:
@@ -74,6 +75,35 @@ class BudgetManager:
         self._max_subjects = max_subjects
         self._usage: OrderedDict[str, _Usage] = OrderedDict()
         self.rejections = 0
+        # Called with an event dict on the first warning / exceeded per window.
+        self.on_alert: Callable[[dict], None] | None = None
+
+    def _alert(self, key: str, kind: str, u: _Usage, **extra: Any) -> None:
+        if self.on_alert is None or kind in u.alerted:
+            return
+        u.alerted.add(kind)
+        is_model = key.startswith("\x00model:")
+        event = {
+            "event": f"budget.{kind}",
+            ("model" if is_model else "subject"): (
+                key.split(":", 1)[1] if is_model else key
+            ),
+            "used": {
+                "cost_usd": round(u.cost, 6),
+                "requests": u.requests,
+                "tokens": u.tokens,
+            },
+            "window_start": u.window_start,
+            **extra,
+        }
+        try:
+            self.on_alert(event)
+        except Exception:  # noqa: BLE001 - alerting must never break accounting
+            pass
+
+    def _warn_check(self, key: str, limits: BudgetLimits, u: _Usage) -> None:
+        if limits.warn_cost_usd is not None and u.cost >= limits.warn_cost_usd:
+            self._alert(key, "warning", u, warn_cost_usd=limits.warn_cost_usd)
 
     def limits_for(self, subject: str) -> BudgetLimits | None:
         return self.subjects.get(subject, self.default)
@@ -97,6 +127,7 @@ class BudgetManager:
         u.requests += n
         u.cost += max(0.0, cost_usd or 0.0)
         u.tokens += max(0, tokens or 0)
+        self._warn_check(self._model_key(model), limits, u)
 
     def _current(self, subject: str, limits: BudgetLimits) -> _Usage:
         now = self._clock()
@@ -133,6 +164,7 @@ class BudgetManager:
             # budget of exactly 0 left (used >= cap) also blocks.
             if used + extra > cap or (extra == 0 and used >= cap):
                 self.rejections += 1
+                self._alert(subject, "exceeded", u, limit=name, cap=cap)
                 raise BudgetExceeded(name, used, cap, retry)
 
     def record(self, subject: str, cost_usd: float = 0.0, tokens: int = 0) -> None:
@@ -143,6 +175,7 @@ class BudgetManager:
         u.requests += 1
         u.cost += max(0.0, cost_usd or 0.0)
         u.tokens += max(0, tokens or 0)
+        self._warn_check(subject, limits, u)
 
     def add_usage(self, subject: str, cost_usd: float = 0.0, tokens: int = 0) -> None:
         """Add cost and tokens to a request already counted by ``record``
@@ -153,6 +186,7 @@ class BudgetManager:
         u = self._current(subject, limits)
         u.cost += max(0.0, cost_usd or 0.0)
         u.tokens += max(0, tokens or 0)
+        self._warn_check(subject, limits, u)
 
     def status(self, subject: str) -> dict[str, Any] | None:
         limits = self.limits_for(subject)

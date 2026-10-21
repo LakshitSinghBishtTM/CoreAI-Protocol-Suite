@@ -235,3 +235,7 @@ header.
 
 Not yet: trace context is not passed on to providers, and it is not carried
 through the agent orchestrator.
+
+## Budget alerts
+
+Set `COREAI_ALERT_WEBHOOK_URL` and `COREAI_ALERT_WEBHOOK_SECRET` (the secret is required) and the gateway POSTs a JSON event the first time a subject or model crosses its `warn_cost_usd` (`budget.warning`) or hits a hard limit (`budget.exceeded`) in each budget window. Verify with `X-CaiPS-Signature = HMAC-SHA256(secret, "<X-CaiPS-Timestamp>.<body>")`. Events carry the subject or model and usage numbers, never prompts or keys. Delivery is best effort: a failed webhook is logged and never blocks requests.

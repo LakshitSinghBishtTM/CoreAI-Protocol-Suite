@@ -208,6 +208,13 @@ def _load_budgets():
         return None
     manager = load_budgets(path)  # raises BudgetConfigError with all problems
     logger.info(f"Budgets active from {path}")
+    url = os.environ.get("COREAI_ALERT_WEBHOOK_URL")
+    if url:  # signed budget alerts; the secret is required, never defaulted
+        from coreai.notify import WebhookNotifier
+
+        manager.on_alert = WebhookNotifier(
+            url, os.environ.get("COREAI_ALERT_WEBHOOK_SECRET", "")
+        )
     get_audit().record(
         "budget.config_loaded",
         actor="system",
