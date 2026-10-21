@@ -154,7 +154,7 @@ CaiPS becomes the place tools live: registered once, permissioned, and usable by
 **Built-in tools**
 
 - HTTP fetch with domain allow lists, file read and write inside a scoped workspace, web search through a configurable provider, and a calculator. *Status: calculator, scoped files and HTTP fetch done (`src/tools/builtin.py`; files and HTTP only registered when configured; fetch blocks non-public hosts and redirects). Web search, read-only database query and an allow-listed approval-gated shell also done (`src/tools/extra.py`).*
-- Sandboxed code execution (container or microVM) with no network by default and CPU, memory and time limits. *Status: process-level version done (`src/tools/sandbox.py`: `python -I`, empty env, rlimits, timeout, network namespace via `unshare`, refuses to run if it can't isolate; DESTRUCTIVE so approval-gated; not registered from config yet; container/microVM runner open).*
+- Sandboxed code execution (container or microVM) with no network by default and CPU, memory and time limits. *Status: process-level version done (`src/tools/sandbox.py`: `python -I`, empty env, rlimits, timeout, network namespace via `unshare`, refuses to run if it can't isolate; DESTRUCTIVE so approval-gated; registered from `python_sandbox:` in `config/tools.yml`; container/microVM runner open).*
 - Database query tool with read-only mode, and a shell tool disabled by default. *Status: done for SQLite (Postgres open).*
 
 **Quality and safety**
@@ -262,7 +262,7 @@ These features only pay off once real agent runs exist to measure and protect. E
 
 **Guardrails**
 
-- Input and output filters: PII detection and redaction, secret detection, and configurable blocked topics. *Status: PII and secret detection/redaction done (`src/guardrails/pii.py`) and on by default in logs (`COREAI_LOG_REDACT_PII=0` disables); request/response filters and blocked topics done as a library (`src/guardrails/filters.py`: secrets block, PII redacts, blocked phrases and regexes, length cap); not yet wired into the API or per-key policy.*
+- Input and output filters: PII detection and redaction, secret detection, and configurable blocked topics. *Status: PII and secret detection/redaction done (`src/guardrails/pii.py`) and on by default in logs (`COREAI_LOG_REDACT_PII=0` disables); request/response filters and blocked topics done as a library (`src/guardrails/filters.py`: secrets block, PII redacts, blocked phrases and regexes, length cap); wired into `/v1/chat/completions` through `config/guardrails.yml` (input filters always; output filters on non-streaming replies only; no file means no filtering); per-key policy open.*
 - Prompt-injection defenses for tool results and retrieved documents. *Status: tool results done (`wrap_untrusted(..., kind="retrieved_document")` is ready for RAG).*
 - Output validation against JSON schemas with automatic retry.
 - Policy per key or team: which models, tools and data an agent may use.

@@ -1,0 +1,11 @@
+# Copy to config/guardrails.yml to filter /v1/chat/completions.
+# Without that file nothing is filtered. Streaming replies are not output-filtered
+# (they are sent as produced); input filters always apply.
+input:
+  block_secrets: true      # reject requests that contain API keys, tokens, private keys
+  redact_pii: true         # replace emails, phones, SSNs, card numbers before routing
+  blocked_topics: []       # phrases, or regexes written as "re:..."
+  max_chars: 0             # 0 = unlimited
+output:
+  block_secrets: true
+  redact_pii: true

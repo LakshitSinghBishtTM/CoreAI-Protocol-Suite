@@ -15,6 +15,7 @@ tool names it may use, and anything not granted is denied.
     databases: {app: ./data/app.db}   # enables db_query (read-only SELECT)
     shell:                          # enables shell_run (always needs human approval)
       allowed_commands: [git, ls]
+    python_sandbox: {enabled: true}   # enables python_run (needs approval, no network)
     max_permission: write           # read_only | write | destructive
     rate_per_minute: {file_write: 30}
     grants:
@@ -77,6 +78,14 @@ def _register_extras(registry: ToolRegistry, cfg: dict) -> None:
     if sh.get("allowed_commands"):
         shell = ShellRunner(sh["allowed_commands"], sh.get("cwd") or cfg.get("workspace") or ".")
     register_extras(registry, search, db, shell)
+    sb = cfg.get("python_sandbox") or {}
+    if sb.get("enabled"):
+        from .sandbox import PythonSandbox, register_sandbox
+
+        register_sandbox(registry, PythonSandbox(
+            float(sb.get("timeout_s", 10)), int(sb.get("memory_mb", 256)),
+            int(sb.get("cpu_s", 10)), bool(sb.get("allow_network", False)),
+        ))  # fmt: skip
 
 
 def build_runtime(config: Optional[dict]) -> ToolsRuntime:

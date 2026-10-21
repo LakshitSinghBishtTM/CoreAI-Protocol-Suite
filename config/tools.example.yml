@@ -26,3 +26,7 @@ mcp_servers: {}                       # external MCP servers; see docs/tools.md
 # databases: {app: ./data/app.db}     # db_query: read-only SELECT only
 # shell:                              # shell_run: allow-listed programs, needs approval
 #   allowed_commands: [git, ls]       # also needs max_permission: destructive
+# python_sandbox:                     # python_run: needs approval, no network by default
+#   enabled: true                     # also needs max_permission: destructive
+#   timeout_s: 10
+#   memory_mb: 256

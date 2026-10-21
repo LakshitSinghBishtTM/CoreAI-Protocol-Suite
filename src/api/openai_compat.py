@@ -336,6 +336,50 @@ def _request_calls(raw: Any, index: int) -> list[dict]:
     return calls
 
 
+def _filter_input(preq) -> None:
+    """Apply the input guardrail policy in place; reject on a block."""
+    from guardrails import config as gcfg
+    from guardrails.filters import apply
+
+    policy = gcfg.load()[0]
+    if policy is None:
+        return
+    for m in preq.messages:
+        if isinstance(m.content, str) and m.content:
+            r = apply(m.content, policy)
+            if not r.allowed:
+                raise CompatError(
+                    400, "Request blocked by content policy: " + ", ".join(r.reasons),
+                    "invalid_request_error", "content_filter", "messages",
+                )  # fmt: skip
+            m.content = r.text
+    if preq.system_prompt:
+        r = apply(preq.system_prompt, policy)
+        if not r.allowed:
+            raise CompatError(
+                400, "Request blocked by content policy: " + ", ".join(r.reasons),
+                "invalid_request_error", "content_filter", "messages",
+            )  # fmt: skip
+        preq.system_prompt = r.text
+
+
+def _filter_output(resp) -> None:
+    """Apply the output guardrail policy in place; reject on a block."""
+    from guardrails import config as gcfg
+    from guardrails.filters import apply
+
+    policy = gcfg.load()[1]
+    if policy is None or not isinstance(resp.content, str) or not resp.content:
+        return
+    r = apply(resp.content, policy)
+    if not r.allowed:
+        raise CompatError(
+            502, "Response blocked by content policy: " + ", ".join(r.reasons),
+            "api_error", "content_filter", None,
+        )  # fmt: skip
+    resp.content = r.text
+
+
 def _policy_metadata(body) -> dict:
     """Named routing policy from ``metadata.policy`` (or a top-level
     ``policy`` field), so OpenAI-compatible clients can pick one."""
@@ -523,6 +567,7 @@ async def chat_completions(
 
     try:
         preq = _convert(body)
+        _filter_input(preq)
         routes._budget_check(ctx, body.model)
         _router = get_router()
         routes._bind_model_gate(_router)
@@ -549,6 +594,7 @@ async def chat_completions(
             except Exception as exc:
                 logger.error("Chat completion error for %s: %s", ctx.subject, exc)
                 raise routes._http_error(exc)
+            _filter_output(resp)
             tokens = (resp.input_tokens or 0) + (resp.output_tokens or 0)
             routes._budget_record(ctx, resp.cost_usd, tokens, model=resp.model)
             routes._ledger_record(
