@@ -9,7 +9,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class Hardware:
-    backend: str  # cuda | metal | cpu
+    backend: str  # cuda | metal | vulkan | cpu
     ram_bytes: int
     vram_bytes: int = 0  # 0 for cpu; for metal the shared budget
 
@@ -34,6 +34,19 @@ def _nvidia_vram() -> int:
         return 0
 
 
+def _vulkan_present() -> bool:
+    """True if a Vulkan device is listed (``vulkaninfo --summary``)."""
+    if not shutil.which("vulkaninfo"):
+        return False
+    try:
+        out = subprocess.run(
+            ["vulkaninfo", "--summary"], capture_output=True, text=True, timeout=5
+        ).stdout
+    except (subprocess.SubprocessError, OSError):
+        return False
+    return "deviceType" in out and "PHYSICAL_DEVICE_TYPE_CPU" not in out.split("deviceType", 1)[1][:60]
+
+
 def detect() -> Hardware:
     ram = _ram()
     vram = _nvidia_vram()
@@ -41,6 +54,10 @@ def detect() -> Hardware:
         return Hardware("cuda", ram, vram)
     if platform.system() == "Darwin" and platform.machine() == "arm64":
         return Hardware("metal", ram, int(ram * 0.65))
+    if _vulkan_present():
+        # Vulkan reports no portable free-VRAM figure; budget half of system RAM
+        # (iGPU/shared case) so the fit check stays conservative.
+        return Hardware("vulkan", ram, int(ram * 0.5))
     return Hardware("cpu", ram, 0)
 
 

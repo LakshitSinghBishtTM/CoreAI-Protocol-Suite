@@ -154,7 +154,7 @@ CaiPS becomes the place tools live: registered once, permissioned, and usable by
 **Built-in tools**
 
 - HTTP fetch with domain allow lists, file read and write inside a scoped workspace, web search through a configurable provider, and a calculator. *Status: calculator, scoped files and HTTP fetch done (`src/tools/builtin.py`; files and HTTP only registered when configured; fetch blocks non-public hosts and redirects). Web search, read-only database query and an allow-listed approval-gated shell also done (`src/tools/extra.py`).*
-- Sandboxed code execution (container or microVM) with no network by default and CPU, memory and time limits. *Status: open.*
+- Sandboxed code execution (container or microVM) with no network by default and CPU, memory and time limits. *Status: process-level version done (`src/tools/sandbox.py`: `python -I`, empty env, rlimits, timeout, network namespace via `unshare`, refuses to run if it can't isolate; DESTRUCTIVE so approval-gated; not registered from config yet; container/microVM runner open).*
 - Database query tool with read-only mode, and a shell tool disabled by default. *Status: done for SQLite (Postgres open).*
 
 **Quality and safety**
@@ -216,12 +216,12 @@ With this phase, dropping a `.gguf` file into a folder is enough, as in LM Studi
 **Downloads**
 
 - Pull from Hugging Face by name and quantization (for example `org/repo:Q4_K_M`), with resumable downloads, disk-space checks and SHA-256 verification.
-- Delete, list and inspect models through the API and CLI. *(Pull with resume, disk check and SHA-256: done, `src/localrt/download.py`. Admin API done: `GET/DELETE /v1/local/models`, `POST /v1/local/models/pull`, `POST .../unload` in `api/local_models_api.py`; CLI open; pull runs inline, not as a background job.)*
+- Delete, list and inspect models through the API and CLI. *(Pull with resume, disk check and SHA-256: done, `src/localrt/download.py`. Admin API done: `GET/DELETE /v1/local/models`, `POST /v1/local/models/pull`, `POST .../unload` in `api/local_models_api.py`; CLI done (`python -m localrt list|inspect|pull|delete|hardware`); pull runs inline, not as a background job.)*
 
 **Runtime management**
 
 - Detect an installed `llama-server`, or download an official prebuilt release for the platform. Pin a tested version and update on a schedule. CaiPS does not compile llama.cpp for users.
-- Hardware detection (CUDA, Metal, Vulkan, CPU) and automatic choice of GPU layer offload and context size to fit available memory, with manual overrides. *Status: done for CUDA, Metal and CPU (`src/localrt/hardware.py`); Vulkan open.*
+- Hardware detection (CUDA, Metal, Vulkan, CPU) and automatic choice of GPU layer offload and context size to fit available memory, with manual overrides. *Status: done for CUDA, Metal, Vulkan and CPU (`src/localrt/hardware.py`; Vulkan uses a conservative half-of-RAM budget because it reports no free VRAM).*
 - *(Gateway wiring done: `managed:` block in `config/local.yml` registers `ManagedLocalProvider`, `src/localrt/provider.py`, with readiness wait, fit check and busy response via `max_queue`.)*
 - Load on first request, unload after an idle timeout, and evict the least recently used model when memory runs short. One child process per loaded model, bound to localhost only.
 - Parallel request slots with a gateway-side queue and a clear "busy" response instead of piling requests on the server.
@@ -262,7 +262,7 @@ These features only pay off once real agent runs exist to measure and protect. E
 
 **Guardrails**
 
-- Input and output filters: PII detection and redaction, secret detection, and configurable blocked topics. *Status: PII and secret detection/redaction done (`src/guardrails/pii.py`) and on by default in logs (`COREAI_LOG_REDACT_PII=0` disables); request/response filters and blocked topics open.*
+- Input and output filters: PII detection and redaction, secret detection, and configurable blocked topics. *Status: PII and secret detection/redaction done (`src/guardrails/pii.py`) and on by default in logs (`COREAI_LOG_REDACT_PII=0` disables); request/response filters and blocked topics done as a library (`src/guardrails/filters.py`: secrets block, PII redacts, blocked phrases and regexes, length cap); not yet wired into the API or per-key policy.*
 - Prompt-injection defenses for tool results and retrieved documents. *Status: tool results done (`wrap_untrusted(..., kind="retrieved_document")` is ready for RAG).*
 - Output validation against JSON schemas with automatic retry.
 - Policy per key or team: which models, tools and data an agent may use.
