@@ -89,6 +89,7 @@ def describe(path: str | Path) -> dict[str, Any]:
         "parameters": m.get("general.size_label"),
         "quantization": FILE_TYPES.get(ft, f"type{ft}") if ft is not None else None,
         "context_length": m.get(f"{arch}.context_length"),
+        "n_layers": m.get(f"{arch}.block_count"),
         "chat_template": m.get("tokenizer.chat_template"),
         "license": m.get("general.license"),
         "source": m.get("general.source.url") or m.get("general.url"),

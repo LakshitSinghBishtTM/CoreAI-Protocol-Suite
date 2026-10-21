@@ -12,3 +12,12 @@ servers:
     base_url: http://192.168.1.50:8000/v1    # e.g. vLLM
     api_key_env: GPU_BOX_KEY                 # optional
     cost_per_hour_usd: 0.35                  # optional hardware/electricity estimate
+
+# Managed runtime: drop .gguf files in models_dir; CaiPS runs llama-server for you.
+# managed:
+#   models_dir: models
+#   binary: llama-server        # optional; found on PATH by default
+#   max_loaded: 1               # LRU-evict beyond this
+#   idle_timeout_s: 600
+#   max_queue: 4                # "busy" instead of piling requests on the server
+#   capabilities: {"qwen2.5-7b-instruct": {vision: false}}

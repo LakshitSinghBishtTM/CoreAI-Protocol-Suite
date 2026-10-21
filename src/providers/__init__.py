@@ -148,12 +148,40 @@ def _load_local(result: "ProviderLoadResult") -> None:
         logger.warning(f"  [FAIL] local servers ({path}) — {e}")
         result.failed["local"] = str(e)
         return
+    built.update(_managed(path))
     for name, provider in built.items():
         if name in result.providers:
             result.failed[name] = "name clashes with a cloud provider"
             continue
         result.providers[name] = provider
         logger.info(f"  [OK]   {name} (local, {provider.base_url})")
+
+
+def _managed(path: str) -> dict:
+    """Optional ``managed:`` block in local.yml: a models dir run via llama-server."""
+    import yaml
+
+    with open(path) as fh:
+        cfg = (yaml.safe_load(fh) or {}).get("managed")
+    if not cfg:
+        return {}
+    from localrt.provider import ManagedLocalProvider
+    from localrt.registry import ModelRegistry
+    from localrt.supervisor import Supervisor
+
+    name = cfg.get("name", "gguf")
+    sup = Supervisor(
+        max_loaded=cfg.get("max_loaded", 1),
+        idle_timeout_s=cfg.get("idle_timeout_s", 600),
+    )
+    prov = ManagedLocalProvider(
+        name,
+        ModelRegistry(cfg.get("models_dir", "models"), cfg.get("capabilities")),
+        sup,
+        binary=cfg.get("binary", ""),
+        max_queue=cfg.get("max_queue", 0),
+    )
+    return {name: prov}
 
 
 def load_providers_or_raise(
