@@ -1,0 +1,14 @@
+# Tiny built-in suite. Add your own files next to this one.
+tasks:
+  - id: arith
+    prompt: "What is 17 + 25? Answer with just the number."
+    scorer: {type: contains, expected: "42"}
+    tags: [smoke]
+  - id: capital
+    prompt: "Capital of France, one word."
+    scorer: {type: exact, expected: "Paris"}
+    tags: [smoke]
+  - id: json
+    prompt: 'Reply with JSON {"ok": true} and nothing else.'
+    scorer: {type: json, expected: {ok: true}}
+    tags: [smoke]

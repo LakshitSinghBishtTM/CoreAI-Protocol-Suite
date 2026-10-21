@@ -243,9 +243,9 @@ These features only pay off once real agent runs exist to measure and protect. E
 
 **Evals (first)**
 
-- A small suite that replays tasks against agents, models and routing configs and scores the results (exact match, rubric, or model-graded).
+- A small suite that replays tasks against agents, models and routing configs and scores the results (exact match, rubric, or model-graded). *Status: done for models and routing configs (`src/evals/`, `python -m evals`, `docs/evals.md`); agent replay, CLI rubric grading and a scheduled CI job are open.*
 - Regression runs in CI on a schedule, with cost and latency recorded next to quality.
-- Routing evals that compare policies, for example local-first against cloud-only, on the same tasks.
+- Routing evals that compare policies, for example local-first against cloud-only, on the same tasks. *Status: `compare()` done; no shipped policy comparison yet.*
 - User feedback (thumbs up or down, corrections) stored against requests, usable as an eval source.
 
 **Memory**
