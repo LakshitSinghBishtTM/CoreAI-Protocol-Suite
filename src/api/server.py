@@ -333,15 +333,25 @@ async def readiness():
     provider whose circuit breaker would admit a call."""
     router = app_state["router"]
     reasons = []
+    providers: dict = {}
     if not drain.accepting:
         reasons.append("draining")
     if router is None:
         reasons.append("router not initialized")
     else:
-        usable = [n for n, b in router.breakers.items() if b.would_allow()]
+        for n, b in router.breakers.items():
+            p = router.providers.get(n)
+            up = getattr(p, "up", True) is not False  # local servers: probe result
+            ok = b.would_allow()
+            providers[n] = {"circuit_allows": ok, "up": up}
+        usable = [n for n, v in providers.items() if v["circuit_allows"] and v["up"]]
         if not usable:
-            reasons.append("no provider available (all circuits open)")
-    body = {"status": "ready" if not reasons else "not_ready", "reasons": reasons}
+            reasons.append("no provider available (circuits open or servers down)")
+    body = {
+        "status": "ready" if not reasons else "not_ready",
+        "reasons": reasons,
+        "providers": providers,
+    }
     return JSONResponse(body, status_code=200 if not reasons else 503)
 
 

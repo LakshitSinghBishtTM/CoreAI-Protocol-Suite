@@ -94,7 +94,7 @@ After this phase, anyone can answer "which provider served this request, why, wh
 - **Cost tracking you can trust:** unit tests for `utils/cost.py` against current price tables, prices in a versioned config file, and a fix for the billing threshold that fires far later than the warning.
 - **Budgets and quotas:** soft and hard spend limits per API key, team and model, plus token and request quotas, with clear error responses.
 - **Usage reports:** per-key and per-model usage over time, exportable as CSV or JSON.
-- **Health endpoints:** `/healthz` (process up) and `/readyz` (dependencies reachable), plus per-provider health in the API.
+- **Health endpoints:** `/healthz` (process up) and `/readyz` (dependencies reachable; *status: done, lists per-provider circuit and up state, and a down local server counts as unavailable*), plus per-provider health in the API.
 - **Audit log:** who changed keys, policies or budgets, and when.
 - **Routing policy docs:** what the weights mean, with worked examples.
 
@@ -148,7 +148,7 @@ CaiPS becomes the place tools live: registered once, permissioned, and usable by
 - **MCP server:** expose the registry so any MCP client (editors, other agents, desktop apps) can use CaiPS tools. *Status: done (`POST /mcp` and `python -m tools` stdio; `src/tools/mcp.py`).*
 - **MCP client:** connect to external MCP servers over stdio and HTTP and add their tools to the registry, with per-server allow lists. *Status: done (`src/tools/mcp_client.py`; connects at startup, no reconnect yet).*
 - **Tool-call execution in the gateway:** when a model returns a tool call, CaiPS can run it and continue the conversation, or hand it back to the client. Selectable per request. *Status: done. `run_tools: true` on `/v1/chat/completions` runs the caller's server-side granted tools (`src/tools/executor.py`; step and cost limits, approval pause). See `docs/tools.md`.*
-- **Permissions and policy:** per-key and per-agent tool allow lists, argument validation against the schema, and rate limits per tool. *Status: done for per-subject allow lists (`config/tools.yml`), schema validation and per-tool rate limits; per-agent lists wait for Phase 7.*
+- **Permissions and policy:** per-key and per-agent tool allow lists, argument validation against the schema, and rate limits per tool. *Status: done for per-subject allow lists (`config/tools.yml`), schema validation and per-tool rate limits; per-agent lists done in Phase 7 (`AgentDef.allowed_tools` is enforced by the harness and `POST /v1/runs` rejects tools the caller isn't granted).*
 - **Approvals:** destructive tools pause for human approval through an API and webhook. *Status: done (API plus signed webhook).*
 
 **Built-in tools**

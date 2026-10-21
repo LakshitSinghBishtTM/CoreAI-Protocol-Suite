@@ -189,3 +189,19 @@ def test_no_histogram_without_traffic():
     router = make_router({"p": make_provider("p")})
     text = render_prometheus(router.stats())
     assert "caips_request_duration_seconds" not in text
+
+
+def test_readyz_reports_providers_and_treats_down_local_as_unavailable(server):
+    router = server.app_state["router"]
+    c = TestClient(server.app)
+    body = c.get("/readyz").json()
+    assert set(body["providers"]) == set(router.breakers)
+    assert all(v["up"] and v["circuit_allows"] for v in body["providers"].values())
+    for p in router.providers.values():
+        p.up = False  # what the 10 s local probe sets when a server disappears
+    r = c.get("/readyz")
+    assert r.status_code == 503
+    assert all(v["up"] is False for v in r.json()["providers"].values())
+    for p in router.providers.values():
+        p.up = True
+    assert c.get("/readyz").status_code == 200
