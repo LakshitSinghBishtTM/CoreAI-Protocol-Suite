@@ -112,6 +112,16 @@ def render_prometheus(stats: dict, *, accepting: bool = True, in_flight: int = 0
         ],
     )
     w.metric(
+        "caips_provider_error_status_total",
+        "counter",
+        "Failed provider calls by HTTP status (for example Anthropic 529).",
+        [
+            ({"provider": n, "status": st}, count)
+            for n, s in providers.items()
+            for st, count in sorted((s.get("error_statuses") or {}).items())
+        ],
+    )
+    w.metric(
         "caips_provider_cost_usd_total",
         "counter",
         "Estimated spend per provider in USD.",

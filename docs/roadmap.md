@@ -69,7 +69,7 @@ The gateway is the foundation for every other layer, and its failover logic is c
 
 **Known problems to fix**
 
-- **Anthropic 529 (overloaded):** retry with backoff and jitter, honor `Retry-After`, count toward the breaker, and fail over. Log the status distribution so the cause is visible.
+- **Anthropic 529 (overloaded):** retry with backoff and jitter, honor `Retry-After`, count toward the breaker, and fail over. Log the status distribution so the cause is visible. *Status: done (`error_statuses` per provider in router stats, `retries_by_status` in retry stats, retry log lines carry the HTTP status, Prometheus `caips_provider_error_status_total{provider,status}`).*
 - **DeepSeek reasoner latency spikes and Grok p99 near 30s:** per-provider connect and read timeouts plus a total request deadline. Add optional hedged requests for latency-sensitive routes.
 - **OOM kills under load:** profile with `tracemalloc` or `memray`, bound every queue and cache by size and TTL, and add a checked-in load test.
 - **Emergency shutdown:** make it a tested kill switch (stop accepting traffic, drain in-flight requests) or delete it.

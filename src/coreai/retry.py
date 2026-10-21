@@ -24,7 +24,7 @@ from typing import Any, Awaitable, Callable, Optional, TypeVar
 from loguru import logger
 
 from .deadline import Deadline
-from .errors import ErrorInfo, ErrorKind, classify
+from .errors import ErrorInfo, ErrorKind, classify, status_of
 
 T = TypeVar("T")
 
@@ -95,9 +95,10 @@ async def run_with_retry(
                 if remaining is not None and wait >= remaining:
                     raise
             logger.warning(
-                "attempt {}/{} failed ({}: {}); retrying in {:.2f}s",
+                "attempt {}/{} failed (status={} {}: {}); retrying in {:.2f}s",
                 attempt,
                 max_attempts,
+                status_of(exc),
                 info.kind.value,
                 str(exc)[:100],
                 wait,
@@ -149,6 +150,7 @@ class RetryManager:
         self.total_retries = 0
         self.total_failures = 0
         self.retries_by_kind: Counter = Counter()
+        self.retries_by_status: Counter = Counter()  # HTTP status -> retried attempts
 
     async def execute(
         self,
@@ -163,6 +165,9 @@ class RetryManager:
         def note(attempt: int, exc: Exception, info: ErrorInfo, wait: float) -> None:
             self.total_retries += 1
             self.retries_by_kind[info.kind.value] += 1
+            status = status_of(exc)
+            if status is not None:
+                self.retries_by_status[str(status)] += 1
 
         try:
             return await run_with_retry(
@@ -185,4 +190,5 @@ class RetryManager:
             "total_retries": self.total_retries,
             "total_failures": self.total_failures,
             "retries_by_kind": dict(self.retries_by_kind),
+            "retries_by_status": dict(self.retries_by_status),
         }

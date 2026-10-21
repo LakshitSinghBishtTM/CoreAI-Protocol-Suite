@@ -691,3 +691,29 @@ def test_invalid_environment_values_fail_loudly_naming_the_variable(name, value)
 
     with pytest.raises(ValueError, match=name):
         RoutingConfig.from_env({name: value})
+
+
+@pytest.mark.asyncio
+async def test_status_distribution_is_recorded_per_provider_and_exported():
+    from coreai.metrics import render_prometheus
+
+    a = make_provider("a", behaviour=StatusError(529))
+    b = make_provider("b")
+    router = make_router(
+        {"a": a, "b": b}, strategy=RoutingStrategy.FALLBACK, max_retry_attempts=1
+    )
+    await router.route(request())
+    await router.route(request())
+    stats = router.stats()
+    assert stats["provider_stats"]["a"]["error_statuses"] == {"529": 2}
+    assert stats["provider_stats"]["b"]["error_statuses"] == {}
+    text = render_prometheus(stats)
+    assert 'caips_provider_error_status_total{provider="a",status="529"} 2' in text
+
+
+@pytest.mark.asyncio
+async def test_retried_attempts_are_counted_by_status():
+    a = make_provider("a", behaviour=[StatusError(529), StatusError(529), None])
+    router = make_router({"a": a}, max_retry_attempts=3)
+    await router.route(request())
+    assert router.retry_manager.stats()["retries_by_status"] == {"529": 2}

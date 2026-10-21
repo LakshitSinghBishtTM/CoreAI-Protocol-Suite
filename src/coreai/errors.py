@@ -113,6 +113,11 @@ class AllProvidersUnavailable(RuntimeError):
         self.retry_after = retry_after
 
 
+def status_of(exc: BaseException) -> Optional[int]:
+    """HTTP status carried by a provider exception, if any."""
+    return _status_of(exc)
+
+
 def _status_of(exc: BaseException) -> Optional[int]:
     for attr in ("status_code", "status", "code"):
         value = getattr(exc, attr, None)

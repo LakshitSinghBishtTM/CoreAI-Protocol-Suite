@@ -30,6 +30,7 @@ from .errors import (
     ProviderTimeout,
     RateLimited,
     classify,
+    status_of,
 )
 from .health import HealthTracker
 from .limiter import GlobalRateLimiter, RateLimitConfig
@@ -308,6 +309,7 @@ class Router:
                 "total_cost": 0.0,
                 "latency_ms_history": [],  # rolling window
                 "error_kinds": {},  # ErrorKind value -> count
+                "error_statuses": {},  # HTTP status (str) -> count, e.g. Anthropic 529
             }
             for name in providers
         }
@@ -702,7 +704,7 @@ class Router:
                         yield chunk
             except Exception as exc:
                 info = classify(exc)
-                self._record_error(name, info.kind)
+                self._record_error(name, info.kind, status_of(exc))
                 if info.counts_against_breaker:
                     breaker.record_failure()
                 else:
@@ -833,7 +835,7 @@ class Router:
             raise
         except Exception as exc:
             info = classify(exc)
-            self._record_error(name, info.kind)
+            self._record_error(name, info.kind, status_of(exc))
             if info.counts_against_breaker:
                 breaker.record_failure()
             else:
@@ -896,7 +898,7 @@ class Router:
         except BaseException as exc:
             if isinstance(exc, Exception):
                 info = classify(exc)
-                self._record_error(name, info.kind)
+                self._record_error(name, info.kind, status_of(exc))
                 if info.counts_against_breaker:
                     breaker.record_failure()
                 else:
@@ -978,7 +980,7 @@ class Router:
                 )
             except Exception as exc:
                 info = classify(exc)
-                self._record_error(name, info.kind)
+                self._record_error(name, info.kind, status_of(exc))
                 if info.counts_against_breaker:
                     self.breakers[name].record_failure()
                 else:
@@ -1821,13 +1823,21 @@ class Router:
         if len(history) > _LATENCY_HISTORY_SIZE:
             history.pop(0)
 
-    def _record_error(self, name: str, kind: Optional[ErrorKind] = None):
+    def _record_error(
+        self,
+        name: str,
+        kind: Optional[ErrorKind] = None,
+        status: Optional[int] = None,
+    ):
         stats = self.provider_stats[name]
         stats["errors"] += 1
         if kind is not ErrorKind.BAD_REQUEST:  # the caller's fault, not the provider's
             self.health[name].record(False)
         key = (kind or ErrorKind.UNKNOWN).value
         stats["error_kinds"][key] = stats["error_kinds"].get(key, 0) + 1
+        if status is not None:
+            st = str(status)
+            stats["error_statuses"][st] = stats["error_statuses"].get(st, 0) + 1
 
     def _count_local_rate_limit(self, name: str):
         """Our own limiter turned a request away (not a provider failure)."""
@@ -1854,6 +1864,7 @@ class Router:
                     "p50_latency_ms": self._p50_latency(name),
                     "health": round(self.health[name].score(), 4),
                     "error_kinds": dict(s["error_kinds"]),
+                    "error_statuses": dict(s["error_statuses"]),
                     "circuit": self.breakers[name].snapshot(),
                 }
                 for name, s in self.provider_stats.items()
