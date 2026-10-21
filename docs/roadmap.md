@@ -243,7 +243,7 @@ These features only pay off once real agent runs exist to measure and protect. E
 
 **Evals (first)**
 
-- A small suite that replays tasks against agents, models and routing configs and scores the results (exact match, rubric, or model-graded). *Status: done for models and routing configs (`src/evals/`, `python -m evals`, `docs/evals.md`); agent replay, CLI rubric grading and a scheduled CI job are open.*
+- A small suite that replays tasks against agents, models and routing configs and scores the results (exact match, rubric, or model-graded). *Status: done for models and routing configs (`src/evals/`, `python -m evals`, `docs/evals.md`); scheduled CI job done (`.github/workflows/evals.yml`: weekly, compares against the previous run's cached results, skips when `EVAL_OPENAI_API_KEY` is unset); agent replay and CLI rubric grading are open.*
 - Regression runs in CI on a schedule, with cost and latency recorded next to quality.
 - Routing evals that compare policies, for example local-first against cloud-only, on the same tasks. *Status: `compare()` done and exposed as `python -m evals tasks.yml --compare cheap best local`, which prints quality, cost and latency per model or alias.*
 - User feedback (thumbs up or down, corrections) stored against requests, usable as an eval source. *Status: done (`src/feedback/`, `api/feedback_api.py`: `POST /v1/feedback`, list, delete, `GET /v1/feedback/eval-tasks` exports corrections that carry a prompt as `exact` tasks; stores only what the caller submits).*

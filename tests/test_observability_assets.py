@@ -87,3 +87,17 @@ def test_alert_rules_are_well_formed():
             seconds = {"s": 1, "m": 60}[r["for"][-1]] * int(r["for"][:-1])
             assert seconds <= 120
     assert len(names) == len(set(names))
+
+
+def test_scheduled_evals_workflow_is_valid_and_secret_free():
+    import pathlib
+
+    import yaml
+
+    text = pathlib.Path(".github/workflows/evals.yml").read_text()
+    wf = yaml.safe_load(text)
+    triggers = wf.get("on") or wf.get(True)
+    assert "schedule" in triggers and "workflow_dispatch" in triggers
+    assert "secrets.EVAL_OPENAI_API_KEY" in text
+    assert "sk-" not in text  # no literal keys
+    assert "evals/" in text and "--baseline" in text

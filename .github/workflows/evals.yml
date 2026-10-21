@@ -1,0 +1,58 @@
+name: Evals
+
+# Scheduled regression run: replays evals/ against a live gateway, records
+# quality, cost and latency, and fails if any task scored lower than the last
+# stored run. Skipped (green) when no provider key is configured, e.g. on forks.
+
+on:
+  schedule:
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  evals:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      OPENAI_API_KEY: ${{ secrets.EVAL_OPENAI_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check for provider key
+        id: gate
+        run: |
+          if [ -z "$OPENAI_API_KEY" ]; then echo "run=false" >> "$GITHUB_OUTPUT"; else echo "run=true" >> "$GITHUB_OUTPUT"; fi
+      - uses: actions/setup-python@v5
+        if: steps.gate.outputs.run == 'true'
+        with:
+          python-version: '3.12'
+      - name: Install
+        if: steps.gate.outputs.run == 'true'
+        run: pip install -e .
+      - name: Restore previous run
+        if: steps.gate.outputs.run == 'true'
+        uses: actions/cache@v4
+        with:
+          path: eval-baseline.json
+          key: eval-baseline-${{ github.run_id }}
+          restore-keys: eval-baseline-
+      - name: Run evals
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          export SECRET_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')"
+          export ENVIRONMENT=test
+          uvicorn api.server:app --port 8744 >/tmp/gateway.log 2>&1 &
+          for _ in $(seq 1 30); do curl -fs localhost:8744/health >/dev/null && break; sleep 1; done
+          export CAIPS_API_KEY="$(python -c "from api.auth import create_access_token; print(create_access_token('ci-evals', ['completions:read', 'completions:write']))")"
+          ARGS="evals/ --base-url http://localhost:8744 --model fast --out eval-run.json"
+          if [ -f eval-baseline.json ]; then ARGS="$ARGS --baseline eval-baseline.json"; fi
+          python -m evals $ARGS
+          cp eval-run.json eval-baseline.json
+      - name: Upload results
+        if: always() && steps.gate.outputs.run == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-run
+          path: eval-run.json
