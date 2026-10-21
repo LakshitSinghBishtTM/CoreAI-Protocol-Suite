@@ -8,6 +8,7 @@ from loguru import logger
 from agents.agent_manager import init_agent_manager
 from api import (
     anthropic_compat,
+    feedback_api,
     local_models_api,
     memory_api,
     openai_compat,
@@ -171,6 +172,7 @@ app.include_router(tools_api.router)
 app.include_router(runs_api.router)
 app.include_router(local_models_api.router)
 app.include_router(memory_api.router)
+app.include_router(feedback_api.router)
 app.include_router(rag_api.router)
 
 
