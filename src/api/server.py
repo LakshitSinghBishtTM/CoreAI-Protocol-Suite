@@ -6,7 +6,7 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 from loguru import logger
 
 from agents.agent_manager import init_agent_manager
-from api import anthropic_compat, openai_compat, routes, runs_api, tools_api
+from api import anthropic_compat, local_models_api, openai_compat, routes, runs_api, tools_api
 from api.auth import AuthContext, require_scope
 from api.middleware import RateLimitMiddleware
 from coreai import Orchestrator, Router, RoutingConfig, RoutingStrategy, tracing
@@ -152,6 +152,7 @@ app.include_router(openai_compat.router)
 app.include_router(anthropic_compat.router)
 app.include_router(tools_api.router)
 app.include_router(runs_api.router)
+app.include_router(local_models_api.router)
 
 
 def _load_rate_limits():

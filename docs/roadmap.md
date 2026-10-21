@@ -216,7 +216,7 @@ With this phase, dropping a `.gguf` file into a folder is enough, as in LM Studi
 **Downloads**
 
 - Pull from Hugging Face by name and quantization (for example `org/repo:Q4_K_M`), with resumable downloads, disk-space checks and SHA-256 verification.
-- Delete, list and inspect models through the API and CLI. *(Pull with resume, disk check and SHA-256: done, `src/localrt/download.py`; API and CLI open.)*
+- Delete, list and inspect models through the API and CLI. *(Pull with resume, disk check and SHA-256: done, `src/localrt/download.py`. Admin API done: `GET/DELETE /v1/local/models`, `POST /v1/local/models/pull`, `POST .../unload` in `api/local_models_api.py`; CLI open; pull runs inline, not as a background job.)*
 
 **Runtime management**
 
