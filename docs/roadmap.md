@@ -291,7 +291,7 @@ The last phase turns the layers into something both self-hosters and teams can a
 - Agent UI: define agents, start runs, watch traces live, approve tool calls, and replay past runs.
 - Playground for comparing models side by side on the same prompt.
 - Model manager for local GGUF files: download, load, unload and see memory use.
-- `caips` CLI for the same operations, so everything is scriptable.
+- `caips` CLI for the same operations, so everything is scriptable. *Status: started (`src/caips_cli/`, `docs/cli.md`): health, providers, usage, models, local models, runs, approvals, fine-tune and eval. Smoke-tested against a live local server. Keys, budgets, policies and streaming are open.*
 
 **Multi-tenancy and access**
 

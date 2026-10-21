@@ -1,0 +1,240 @@
+"""caips: a thin CLI over the HTTP API. Everything it does is one documented request,
+so the CLI and the API cannot drift apart.
+
+Environment: ``CAIPS_URL`` (default http://localhost:8000), ``CAIPS_API_KEY``.
+Output is JSON on stdout (pipe to ``jq``); errors go to stderr; exit code 1 on any
+HTTP error, 2 on bad usage.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+from typing import Any, Optional
+from urllib.parse import quote
+
+import httpx
+
+
+class CliError(Exception):
+    pass
+
+
+def _jsonl(path: str) -> list[dict]:
+    rows = []
+    with open(path) as f:
+        for n, line in enumerate(f, 1):
+            if line.strip():
+                try:
+                    rows.append(json.loads(line))
+                except ValueError as e:
+                    raise CliError(f"{path}:{n}: invalid JSON ({e})")
+    return rows
+
+
+def build_parser() -> argparse.ArgumentParser:
+    ap = argparse.ArgumentParser(prog="caips", description=__doc__.split("\n\n")[0])
+    ap.add_argument("--url", default=os.getenv("CAIPS_URL", "http://localhost:8000"))
+    ap.add_argument("--timeout", type=float, default=60)
+    sub = ap.add_subparsers(dest="cmd", required=True)
+
+    sub.add_parser("health", help="liveness and readiness")
+    sub.add_parser("providers", help="configured providers and their health")
+    sub.add_parser("usage", help="usage summary")
+    sub.add_parser("models", help="models the gateway can route to")
+
+    lm = sub.add_parser("local", help="managed local GGUF models").add_subparsers(
+        dest="sub", required=True
+    )
+    lm.add_parser("list")
+    p = lm.add_parser("inspect")
+    p.add_argument("model")
+    p = lm.add_parser("pull")
+    p.add_argument("model", help="org/repo:QUANT")
+    p = lm.add_parser("rm")
+    p.add_argument("model")
+    p = lm.add_parser("unload")
+    p.add_argument("model")
+
+    rn = sub.add_parser("runs", help="agent runs").add_subparsers(
+        dest="sub", required=True
+    )
+    rn.add_parser("list")
+    p = rn.add_parser("start")
+    p.add_argument("agent")
+    p.add_argument("task")
+    for name in ("status", "events", "cancel", "pause", "resume"):
+        p = rn.add_parser(name)
+        p.add_argument("run_id")
+    p = rn.add_parser("kill", help="stop all active runs (admin)")
+    p.add_argument(
+        "--owner", default=None, help="only this owner; default is everything"
+    )
+
+    ap_ = sub.add_parser("approvals", help="tool-call approvals").add_subparsers(
+        dest="sub", required=True
+    )
+    ap_.add_parser("list")
+    for name in ("approve", "deny"):
+        p = ap_.add_parser(name)
+        p.add_argument("approval_id")
+
+    ft = sub.add_parser("finetune", help="fine-tuning jobs").add_subparsers(
+        dest="sub", required=True
+    )
+    for name in ("estimate", "submit"):
+        p = ft.add_parser(name)
+        p.add_argument("dataset", help='JSONL file, one {"messages": [...]} per line')
+        p.add_argument("--base-model", required=True)
+        p.add_argument("--provider", default="openai")
+        p.add_argument("--preset", default="balanced")
+        if name == "submit":
+            p.add_argument(
+                "--max-cost",
+                type=float,
+                default=None,
+                help="refuse if the estimate is higher (USD)",
+            )
+    ft.add_parser("list")
+    p = ft.add_parser("status")
+    p.add_argument("job_id")
+    p = ft.add_parser("cancel")
+    p.add_argument("job_id")
+
+    p = sub.add_parser("eval", help="run an eval suite (see docs/evals.md)")
+    p.add_argument("tasks")
+    p.add_argument("--model", default=None)
+    p.add_argument("--baseline", default=None)
+    p.add_argument("--out", default="eval-results.json")
+    return ap
+
+
+def _plan(a: argparse.Namespace) -> tuple[str, str, Optional[dict]]:
+    """(method, path, json body) for a parsed command."""
+    c, s = a.cmd, getattr(a, "sub", None)
+    q = lambda v: quote(str(v), safe="")  # noqa: E731  ids go into URL paths
+    simple = {
+        "health": "/readyz",
+        "providers": "/v1/providers",
+        "usage": "/v1/usage",
+        "models": "/v1/models",
+    }
+    if c in simple:
+        return "GET", simple[c], None
+    if c == "local":
+        return {
+            "list": ("GET", "/v1/local/models", None),
+            "inspect": ("GET", f"/v1/local/models/{q(getattr(a, 'model', ''))}", None),
+            "pull": (
+                "POST",
+                "/v1/local/models/pull",
+                {"model": getattr(a, "model", "")},
+            ),
+            "rm": ("DELETE", f"/v1/local/models/{q(getattr(a, 'model', ''))}", None),
+            "unload": (
+                "POST",
+                f"/v1/local/models/{q(getattr(a, 'model', ''))}/unload",
+                None,
+            ),
+        }[s]
+    if c == "runs":
+        rid = q(getattr(a, "run_id", ""))
+        if s == "list":
+            return "GET", "/v1/runs", None
+        if s == "start":
+            return "POST", "/v1/runs", {"agent": a.agent, "task": a.task}
+        if s == "kill":
+            return "POST", "/v1/runs/kill", {"owner": a.owner}
+        return (
+            ("GET" if s in ("status", "events") else "POST"),
+            f"/v1/runs/{rid}" + ("" if s == "status" else f"/{s}"),
+            None,
+        )
+    if c == "approvals":
+        if s == "list":
+            return "GET", "/v1/tools/approvals", None
+        return (
+            "POST",
+            f"/v1/tools/approvals/{q(a.approval_id)}",
+            {"approve": s == "approve"},
+        )
+    if c == "finetune":
+        if s == "list":
+            return "GET", "/v1/finetune/jobs", None
+        if s in ("status", "cancel"):
+            return (
+                ("GET" if s == "status" else "DELETE"),
+                f"/v1/finetune/jobs/{q(a.job_id)}",
+                None,
+            )
+        body: dict[str, Any] = {
+            "base_model": a.base_model,
+            "provider": a.provider,
+            "hyperparam_preset": a.preset,
+            "examples": _jsonl(a.dataset),
+        }
+        if s == "submit" and a.max_cost is not None:
+            body["max_cost_usd"] = a.max_cost
+        return (
+            "POST",
+            "/v1/finetune/estimate" if s == "estimate" else "/v1/finetune/jobs",
+            body,
+        )
+    raise CliError(f"unhandled command {c}")
+
+
+def main(
+    argv: Optional[list[str]] = None, transport: Any = None, out=None, err=None
+) -> int:
+    out, err = out or sys.stdout, err or sys.stderr
+    try:
+        a = build_parser().parse_args(argv)
+    except SystemExit as e:
+        return int(e.code or 0)
+    key = os.getenv("CAIPS_API_KEY")
+    if a.cmd == "eval":
+        import asyncio
+
+        from evals.__main__ import main as eval_main
+
+        args = [a.tasks, "--base-url", a.url, "--out", a.out] + (
+            ["--model", a.model] if a.model else []
+        )
+        args += ["--baseline", a.baseline] if a.baseline else []
+        return asyncio.run(eval_main(args, transport=transport))
+    try:
+        method, path, body = _plan(a)
+        headers = {"Authorization": f"Bearer {key}"} if key else {}
+        with httpx.Client(
+            base_url=a.url, headers=headers, timeout=a.timeout, transport=transport
+        ) as c:
+            r = c.request(method, path, json=body)
+    except CliError as e:
+        print(f"caips: {e}", file=err)
+        return 2
+    except httpx.HTTPError as e:
+        print(f"caips: cannot reach {a.url}: {e}", file=err)
+        return 1
+    if r.status_code >= 400:
+        try:
+            detail = r.json().get("detail") or r.json()
+        except ValueError:
+            detail = r.text
+        print(f"caips: HTTP {r.status_code}: {detail}", file=err)
+        return 1
+    if r.content:
+        try:
+            try:
+                text = json.dumps(r.json(), indent=2)
+            except ValueError:
+                text = r.text
+            print(text, file=out)
+            out.flush()
+        except BrokenPipeError:  # e.g. `caips providers | head`: not an error
+            try:
+                sys.stdout = open(os.devnull, "w")  # keep interpreter shutdown quiet
+            except OSError:
+                pass
+    return 0

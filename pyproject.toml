@@ -51,6 +51,9 @@ Issues = "https://github.com/LakshitSinghBishtTM/CoreAI-Protocol-Suite/issues"
 
 # Runtime dependencies live in requirements.txt so the Dockerfile and the
 # package install the same set. Version lives in coreai/_version.py.
+[project.scripts]
+caips = "caips_cli.cli:main"
+
 [tool.setuptools.dynamic]
 version = { attr = "coreai._version.__version__" }
 dependencies = { file = ["requirements.txt"] }
