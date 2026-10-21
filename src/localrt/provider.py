@@ -32,6 +32,15 @@ async def http_ready(base_url: str) -> bool:
         return False
 
 
+def _sync_healthy(base_url: str) -> bool:
+    try:
+        return httpx.get(
+            base_url.removesuffix("/v1") + "/health", timeout=3
+        ).status_code in (200, 503)
+    except httpx.HTTPError:
+        return False  # 503 = still loading, which is not hung
+
+
 class ManagedLocalProvider(LocalProvider):
     """Models are the .gguf files in a directory; one child process per loaded model."""
 
@@ -72,6 +81,10 @@ class ManagedLocalProvider(LocalProvider):
         )
 
     async def probe(self) -> bool:
+        """Runs every few seconds: unload idle models, kill hung children (they
+        restart on the next request), and report whether we can launch at all."""
+        self.supervisor.reap_idle()
+        await asyncio.to_thread(self.supervisor.unhealthy, _sync_healthy)
         self.up = bool(self.binary)  # models load on demand, so "up" = can launch
         return self.up
 

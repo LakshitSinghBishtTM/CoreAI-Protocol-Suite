@@ -225,7 +225,7 @@ With this phase, dropping a `.gguf` file into a folder is enough, as in LM Studi
 - *(Gateway wiring done: `managed:` block in `config/local.yml` registers `ManagedLocalProvider`, `src/localrt/provider.py`, with readiness wait, fit check and busy response via `max_queue`.)*
 - Load on first request, unload after an idle timeout, and evict the least recently used model when memory runs short. One child process per loaded model, bound to localhost only.
 - Parallel request slots with a gateway-side queue and a clear "busy" response instead of piling requests on the server.
-- Supervision: health checks, restart with backoff, and crash logs captured per model. *(Lazy load, idle unload, LRU eviction, restart with backoff and give-up: done, `src/localrt/supervisor.py`; HTTP health probe, crash logs and gateway wiring open.)*
+- Supervision: health checks, restart with backoff, and crash logs captured per model. *(Lazy load, idle unload, LRU eviction, restart with backoff and give-up: done, `src/localrt/supervisor.py`; gateway wiring, per-model crash logs with rotation, and hung-child detection through the 10 s probe loop also done; prebuilt `llama-server` download open.)*
 
 **API parity**
 

@@ -88,3 +88,43 @@ def test_crash_restart_with_backoff_then_give_up():
         e.sup.ensure("a", "b", "/a", PLAN)
     with pytest.raises(RuntimeError, match="reload"):
         e.sup.ensure("a", "b", "/a", PLAN)
+
+
+def test_unhealthy_child_is_killed_then_restarted():
+    e = Env()
+    e.sup.ensure("a", "b", "/a", PLAN)
+    assert e.sup.unhealthy(lambda url: True) == []
+    assert e.sup.unhealthy(lambda url: False) == ["a"]
+    assert not e.procs[0].alive
+    e.sup.ensure("a", "b", "/a", PLAN)  # polled dead -> restart
+    assert len(e.procs) == 2
+
+
+def test_real_log_capture_and_tail(tmp_path):
+    import sys
+
+    from localrt.supervisor import Supervisor, tail_log
+
+    sup = Supervisor(log_dir=str(tmp_path))
+    proc = sup.spawn(
+        "m/odel", [sys.executable, "-c", "print('boom'); raise SystemExit(3)"]
+    )
+    proc.wait(timeout=10)
+    assert proc.returncode == 3
+    assert "boom" in sup.crash_log("m/odel")
+    assert tail_log(str(tmp_path / "nope.log")) == ""
+
+
+def test_give_up_error_includes_log_tail(tmp_path):
+    from localrt.supervisor import Supervisor
+
+    (tmp_path / "a.log").write_text("CUDA out of memory\n")
+    t = [0.0]
+    sup = Supervisor(
+        max_restarts=0, clock=lambda: t[0], spawn=lambda c: FakeProc(),
+        port_fn=lambda: 9000, log_dir=str(tmp_path),
+    )  # fmt: skip
+    sup.ensure("a", "b", "/a", PLAN)
+    sup.loaded["a"].proc.alive = False
+    with pytest.raises(RuntimeError, match="CUDA out of memory"):
+        sup.ensure("a", "b", "/a", PLAN)

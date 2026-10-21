@@ -5,15 +5,37 @@ when over the model limit, restart a crashed child with backoff. Children bind
 to 127.0.0.1 only. ``clock`` and ``spawn`` are injectable for tests.
 """
 
+import os
 import socket
 import subprocess
 import time
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
+MAX_LOG_BYTES = 1_000_000
 
-def _popen(cmd: list[str]) -> Any:
-    return subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+def _popen(cmd: list[str], log_path: str | None = None) -> Any:
+    if not log_path:
+        return subprocess.Popen(
+            cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+        )
+    os.makedirs(os.path.dirname(log_path), exist_ok=True)
+    if os.path.exists(log_path) and os.path.getsize(log_path) > MAX_LOG_BYTES:
+        os.replace(log_path, log_path + ".1")  # one rotation keeps disk bounded
+    with open(log_path, "ab") as log:
+        return subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT)
+
+
+def tail_log(log_path: str, lines: int = 50) -> str:
+    """Last ``lines`` lines of a model's log (empty string if none)."""
+    try:
+        with open(log_path, "rb") as f:
+            f.seek(max(0, os.path.getsize(log_path) - 64_000))
+            data = f.read().decode("utf-8", "replace")
+    except OSError:
+        return ""
+    return "\n".join(data.splitlines()[-lines:])
 
 
 def free_port() -> int:
@@ -53,15 +75,30 @@ class Supervisor:
         clock: Callable[[], float] = time.monotonic,
         spawn: Callable[[list[str]], Any] | None = None,
         port_fn: Callable[[], int] = free_port,
+        log_dir: str | None = None,
     ):
+        self.log_dir = log_dir
         self.max_loaded = max_loaded
         self.idle_timeout_s = idle_timeout_s
         self.max_restarts = max_restarts
         self.clock = clock
-        self.spawn = spawn or _popen
+        self._spawn_fn = spawn
         self.port_fn = port_fn
         self.loaded: dict[str, Loaded] = {}
         self.failed: set[str] = set()
+
+    def log_path(self, name: str) -> str | None:
+        safe = "".join(c if c.isalnum() or c in "-_." else "_" for c in name)
+        return os.path.join(self.log_dir, f"{safe}.log") if self.log_dir else None
+
+    def spawn(self, name: str, cmd: list[str]) -> Any:
+        if self._spawn_fn:
+            return self._spawn_fn(cmd)
+        return _popen(cmd, self.log_path(name))
+
+    def crash_log(self, name: str, lines: int = 50) -> str:
+        p = self.log_path(name)
+        return tail_log(p, lines) if p else ""
 
     def ensure(self, name: str, binary: str, model_path: str, plan: dict) -> str:
         """Return the base URL for ``name``, starting or evicting as needed."""
@@ -78,19 +115,25 @@ class Supervisor:
             self.unload(min(self.loaded.values(), key=lambda x: x.last_used).name)
         port = self.port_fn()
         cmd = build_cmd(binary, model_path, port, plan)
-        self.loaded[name] = Loaded(name, port, self.spawn(cmd), self.clock(), cmd=cmd)
+        self.loaded[name] = Loaded(
+            name, port, self.spawn(name, cmd), self.clock(), cmd=cmd
+        )
         return f"http://127.0.0.1:{port}/v1"
 
     def _restart(self, m: Loaded) -> None:
         if m.restarts >= self.max_restarts:
             self.failed.add(m.name)
             self.loaded.pop(m.name, None)
-            raise RuntimeError(f"model '{m.name}' crashed too often")
+            tail = self.crash_log(m.name, 10)
+            raise RuntimeError(
+                f"model '{m.name}' crashed too often"
+                + (f"; last log:\n{tail}" if tail else "")
+            )
         if self.clock() < m.next_restart_at:
             raise RuntimeError(f"model '{m.name}' is restarting; retry shortly")
         m.restarts += 1
         m.next_restart_at = self.clock() + min(2**m.restarts, 60)
-        m.proc = self.spawn(m.cmd)
+        m.proc = self.spawn(m.name, m.cmd)
         m.last_used = self.clock()
 
     def unload(self, name: str) -> bool:
@@ -104,6 +147,16 @@ class Supervisor:
             except Exception:
                 m.proc.kill()
         return True
+
+    def unhealthy(self, healthy: Callable[[str], bool]) -> list[str]:
+        """Names of live children whose health probe fails (hung, not crashed).
+        They are killed so the next request restarts them with backoff."""
+        bad = []
+        for n, m in list(self.loaded.items()):
+            if m.proc.poll() is None and not healthy(f"http://127.0.0.1:{m.port}/v1"):
+                m.proc.kill()
+                bad.append(n)
+        return bad
 
     def reap_idle(self) -> list[str]:
         now = self.clock()

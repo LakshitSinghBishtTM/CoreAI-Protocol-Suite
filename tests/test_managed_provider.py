@@ -95,3 +95,20 @@ def test_busy_response_via_queue_limit(tmp_path):
     prov, _, _ = make(tmp_path, max_queue=1)
     prov.inflight = 1
     assert "busy" in prov.capability_problem(req())
+
+
+@pytest.mark.asyncio
+async def test_probe_reaps_idle_and_kills_hung(tmp_path, monkeypatch):
+    import localrt.provider as lp
+
+    prov, sup, _ = make(tmp_path)
+    sup.idle_timeout_s = 10
+    t = [0.0]
+    sup.clock = lambda: t[0]
+    sup.ensure("tiny", "b", "/x", {"ctx": 1, "n_gpu_layers": 0})
+    monkeypatch.setattr(lp, "_sync_healthy", lambda url: False)
+    assert await prov.probe() is True
+    assert not sup.loaded["tiny"].proc.alive  # hung -> killed
+    t[0] = 100
+    await prov.probe()
+    assert not sup.loaded  # idle -> unloaded
