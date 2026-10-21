@@ -109,6 +109,26 @@ def _register_rag(registry: ToolRegistry, cfg: dict, embed) -> None:
         )
 
 
+def _register_memory(registry: ToolRegistry, cfg: dict) -> None:
+    """``memory: {owner, namespace, db}`` adds memory tools bound to that owner."""
+    mem = cfg.get("memory")
+    if not mem:
+        return
+    if not mem.get("owner"):
+        raise ValueError("memory.owner is required")
+    from memory import MemoryStore
+    from memory.tool import memory_tools
+
+    store = MemoryStore(
+        mem.get("db", "data/memory.db"),
+        retention_days=float(mem.get("retention_days", 0)),
+    )
+    for t in memory_tools(
+        store, str(mem["owner"]), str(mem.get("namespace", "default"))
+    ):
+        registry.register(t)
+
+
 def build_runtime(config: Optional[dict], embed=None) -> ToolsRuntime:
     cfg = config or {}
     registry = ToolRegistry()
@@ -118,6 +138,7 @@ def build_runtime(config: Optional[dict], embed=None) -> ToolsRuntime:
     register_builtins(registry, workspace, fetcher)
     _register_extras(registry, cfg)
     _register_rag(registry, cfg, embed)
+    _register_memory(registry, cfg)
     for name, per_min in (cfg.get("rate_per_minute") or {}).items():
         tool = registry.get(name)
         if tool is not None:
