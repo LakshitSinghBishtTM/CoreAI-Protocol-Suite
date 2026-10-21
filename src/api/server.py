@@ -9,6 +9,7 @@ from agents.agent_manager import init_agent_manager
 from api import (
     anthropic_compat,
     local_models_api,
+    memory_api,
     openai_compat,
     routes,
     runs_api,
@@ -168,6 +169,7 @@ app.include_router(anthropic_compat.router)
 app.include_router(tools_api.router)
 app.include_router(runs_api.router)
 app.include_router(local_models_api.router)
+app.include_router(memory_api.router)
 
 
 def _load_rate_limits():

@@ -251,7 +251,7 @@ These features only pay off once real agent runs exist to measure and protect. E
 **Memory**
 
 - Short-term: run state and conversation history, already covered by checkpointing in Phase 7.
-- Long-term: per-user and per-agent memory in a key-value or vector store, with explicit write and forget operations and a way to view what is stored. *Status: key-value store with write, view, keyword search and forget done (`src/memory/store.py`, per-owner isolation, PII redacted on write); API, agent tools and a vector backend open.*
+- Long-term: per-user and per-agent memory in a key-value or vector store, with explicit write and forget operations and a way to view what is stored. *Status: key-value store with write, view, keyword search and forget done (`src/memory/store.py`, per-owner isolation, PII redacted on write); REST API done (`api/memory_api.py`: `PUT/GET/DELETE /v1/memory`, `GET /v1/memory/search`, scopes `memory:read`/`memory:write`, owner is always the caller); agent tools and a vector backend open.*
 - Retention limits and deletion on request. *Status: done (`retention_days`, per-item size and count caps, `forget`).*
 
 **RAG**
