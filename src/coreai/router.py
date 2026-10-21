@@ -1156,6 +1156,24 @@ class Router:
             raise ValueError(problem or "No provider can serve this request")
         return keep
 
+    def can_offer_tools(
+        self, request: CompletionRequest, preferred: Optional[str] = None
+    ) -> bool:
+        """Capability negotiation: True if at least one candidate provider/model
+        can call tools, so callers don't offer tools a model can't use."""
+        probe = dataclasses.replace(
+            request, tools=request.tools or [{"type": "function"}], stream=False
+        )
+        try:
+            names = self._candidates(probe, preferred)
+        except Exception:  # noqa: BLE001 - planning errors surface in route()
+            return True
+        for name in names:
+            problem = self._model_problem(probe, name)
+            if problem is None or "tool calling" not in problem:
+                return True
+        return False
+
     def _model_problem(self, req: CompletionRequest, name: str) -> Optional[str]:
         """Why the catalogued model can't serve *req*, or None. Unknown
         models are not blocked: the catalogue may lag behind new releases."""

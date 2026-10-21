@@ -116,3 +116,39 @@ async def test_destructive_tool_pauses_for_approval_then_runs_when_approved():
         route2, r, request(), allowed=["wipe"], approved=["wipe"]
     )
     assert ran == [1] and out2.response.content == "finished"
+
+
+async def test_tools_withheld_when_no_model_can_call_them():
+    route, seen = scripted(resp("plain answer"))
+    out = await run_tool_loop(
+        route, calc_registry(), request(), allowed=["calculator"],
+        tools_ok=lambda r: False,
+    )  # fmt: skip
+    assert out.tools_skipped and out.response.content == "plain answer"
+    assert not seen[0].tools
+
+
+async def test_tools_offered_when_negotiation_allows():
+    route, seen = scripted(resp("ok"))
+    out = await run_tool_loop(
+        route, calc_registry(), request(), allowed=["calculator"],
+        tools_ok=lambda r: True,
+    )  # fmt: skip
+    assert not out.tools_skipped and seen[0].tools
+
+
+def test_router_can_offer_tools_reflects_provider_support():
+    from coreai.router import Router
+
+    class P:
+        def __init__(self, tools):
+            self.supports_tools = tools
+
+    r = Router.__new__(Router)
+    r.providers = {"a": P(False), "b": P(True)}
+    req = request()
+    r._candidates = lambda rq, pref: ["a"]
+    r._resolve_model_profile = lambda n, m: None
+    assert r.can_offer_tools(req) is False
+    r._candidates = lambda rq, pref: ["a", "b"]
+    assert r.can_offer_tools(req) is True

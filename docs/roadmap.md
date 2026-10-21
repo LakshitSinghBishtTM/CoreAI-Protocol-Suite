@@ -162,7 +162,7 @@ CaiPS becomes the place tools live: registered once, permissioned, and usable by
 - Treat tool output as untrusted input: label it, cap its size, and strip or flag instruction-like content to limit prompt injection. *Status: done (`guardrails/injection.py`; `ToolResult.as_untrusted` labels, escapes wrapper tags, caps and flags; heuristic, so flags rather than proves).*
 - Record every tool call (arguments, result, duration, caller) in the audit log and traces. *Status: done (audit log and `caips.tool` spans; argument names only, by design not values).*
 - Tool test harness: replay recorded calls against a tool to catch regressions. *Status: done (`src/tools/replay.py`).*
-- Capability negotiation so tools aren't offered to local models that can't call them reliably.
+- Capability negotiation so tools aren't offered to local models that can't call them reliably. *Status: done (`Router.can_offer_tools`, `run_tool_loop(tools_ok=...)`; tools are withheld and the reply carries `metadata.tools_skipped` when no candidate can call them).*
 
 **Exit criteria:** an external MCP client can list and call CaiPS tools, and a model request can use a registered tool end to end with permissions enforced and the call visible in traces.
 

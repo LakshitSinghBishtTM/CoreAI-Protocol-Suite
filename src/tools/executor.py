@@ -37,6 +37,7 @@ class ToolLoopResult:
     # "answered" | "max_steps" | "needs_approval" | "cost_limit"
     stop_reason: str = "answered"
     pending_approval: Optional[ToolStep] = None
+    tools_skipped: bool = False  # tools withheld: no candidate model supports them
     total_cost_usd: float = 0.0
     input_tokens: int = 0
     output_tokens: int = 0
@@ -53,6 +54,7 @@ async def run_tool_loop(
     max_cost_usd: Optional[float] = None,
     approved: Iterable[str] | Callable[[str, str, dict], bool] = (),
     max_permission: Permission = Permission.DESTRUCTIVE,
+    tools_ok: Optional[Callable[[CompletionRequest], bool]] = None,
 ) -> ToolLoopResult:
     """Run the request, executing tool calls the model makes.
 
@@ -65,6 +67,9 @@ async def run_tool_loop(
         names = set(approved)
         approved = lambda caller, name, args: name in names  # noqa: E731
     specs = registry.specs(allowed)
+    skipped = False
+    if specs and tools_ok is not None and not tools_ok(request):
+        specs, skipped = [], True  # negotiation: no candidate can call tools
     req = replace(
         request,
         messages=list(request.messages),
@@ -72,6 +77,7 @@ async def run_tool_loop(
         stream=False,
     )
     result = ToolLoopResult(response=None)  # type: ignore[arg-type]
+    result.tools_skipped = skipped
 
     for _ in range(max_steps + 1):
         resp = await route(req)

@@ -500,6 +500,7 @@ async def _route_with_tools(_router, preq, body, ctx):
     out = await run_tool_loop(
         route, rt.registry, preq, allowed=allowed, caller=ctx.subject,
         approved=rt.approvals.consume, max_permission=rt.max_permission,
+        tools_ok=lambda r: _router.can_offer_tools(r, body.provider),
     )  # fmt: skip
     if out.stop_reason == "needs_approval":
         step = out.pending_approval
@@ -511,6 +512,8 @@ async def _route_with_tools(_router, preq, body, ctx):
     resp = out.response
     resp.cost_usd = out.total_cost_usd
     resp.input_tokens, resp.output_tokens = out.input_tokens, out.output_tokens
+    if out.tools_skipped:
+        resp.metadata = {**(resp.metadata or {}), "tools_skipped": True}
     if out.stop_reason in ("max_steps", "cost_limit"):
         resp.metadata = {**(resp.metadata or {}), "tool_loop_stopped": out.stop_reason}
     return resp, out.steps
