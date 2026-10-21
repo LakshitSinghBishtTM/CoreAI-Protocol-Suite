@@ -1021,7 +1021,12 @@ class Router:
         """Candidates and models, with privacy applied: a request tagged
         ``private`` (``metadata.private``) is only ever sent to local servers."""
         order, models = self._plan_any(request, preferred)
-        if not (request.metadata or {}).get("private"):
+        meta = request.metadata or {}
+        if not meta.get("private"):
+            if preferred is None and len(order) > 1:
+                order, models = self._apply_difficulty(
+                    order, models, meta.get("difficulty")
+                )
             return order, models
         kept = [
             (n, m)
@@ -1034,6 +1039,26 @@ class Router:
                 "it was not sent to a cloud provider."
             )
         return [n for n, _ in kept], [m for _, m in kept]
+
+    def _apply_difficulty(
+        self,
+        order: list[str],
+        models: list[Optional[str]],
+        difficulty: Any,
+    ) -> tuple[list[str], list[Optional[str]]]:
+        """``easy`` -> local servers first, ``hard`` -> cloud first. A stable
+        reorder only: the other group stays as fallback, nothing is dropped."""
+        if difficulty not in ("easy", "hard"):
+            return order, models
+        want_local = difficulty == "easy"
+        pairs = list(zip(order, models))
+        first = [
+            x for x in pairs
+            if (getattr(self.providers[x[0]], "is_local", False) is True) == want_local
+        ]  # fmt: skip
+        rest = [x for x in pairs if x not in first]
+        merged = first + rest
+        return [n for n, _ in merged], [m for _, m in merged]
 
     def _plan_any(
         self, request: CompletionRequest, preferred: Optional[str]

@@ -344,6 +344,8 @@ def _policy_metadata(body) -> dict:
     meta: dict = {"policy": name} if isinstance(name, str) and name else {}
     if raw.get("private") is True:
         meta["private"] = True  # local providers only
+    if raw.get("difficulty") in ("easy", "hard"):
+        meta["difficulty"] = raw["difficulty"]  # easy: local first, hard: cloud first
     return meta
 
 

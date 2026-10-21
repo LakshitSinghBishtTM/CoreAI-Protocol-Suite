@@ -253,3 +253,30 @@ async def test_inflight_is_released_after_completion_and_failure():
     with pytest.raises(Exception):
         await bad.complete(req())
     assert bad.inflight == 0
+
+
+def _diff_req(level):
+    return CompletionRequest(
+        messages=[Message(role="user", content="hi")], metadata={"difficulty": level}
+    )
+
+
+async def test_easy_tasks_go_local_first():
+    cloud, lm = make_provider("cloud"), local_mock()
+    r = make_router({"cloud": cloud, "lm": lm})  # cloud listed first
+    assert (await r.route(_diff_req("easy"))).provider == "lm"
+    assert not cloud.complete.called
+
+
+async def test_hard_tasks_go_cloud_first():
+    cloud, lm = make_provider("cloud"), local_mock()
+    r = make_router({"lm": lm, "cloud": cloud})  # local listed first
+    assert (await r.route(_diff_req("hard"))).provider == "cloud"
+
+
+async def test_easy_falls_back_to_cloud_and_unknown_difficulty_is_ignored():
+    cloud = make_provider("cloud")
+    lm = local_mock(behaviour=ConnectionError("refused"))
+    r = make_router({"cloud": cloud, "lm": lm})
+    assert (await r.route(_diff_req("easy"))).provider == "cloud"
+    assert (await r.route(_diff_req("bogus"))).provider == "cloud"

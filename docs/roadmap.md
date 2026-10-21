@@ -133,7 +133,7 @@ The fastest route to local GGUF support is a provider for any OpenAI-compatible 
 - Presets for LM Studio, Ollama, `llama-server` (llama.cpp) and vLLM, with auto-discovery of loaded models through `/v1/models`.
 - Per-model capability flags (tool calling, vision, JSON mode, context length) so the router and tools layer never assume what a local model can't do. *Status: done.*
 - Local usage recorded with tokens and latency at zero dollar cost, with an optional hardware or electricity cost estimate. *Status: done.*
-- Routing rules for local models: keep requests tagged `private` on local only, try local first and fall back to cloud on timeout or queue depth, send small tasks local and hard ones to a frontier model. *Status: private, local-first fallback and queue-depth (`max_queue`) done; difficulty rule open.*
+- Routing rules for local models: keep requests tagged `private` on local only, try local first and fall back to cloud on timeout or queue depth, send small tasks local and hard ones to a frontier model. *Status: private, local-first fallback and queue-depth (`max_queue`) and difficulty rule done (`metadata.difficulty`: `easy` goes local first, `hard` cloud first; a hint set by the caller, no automatic classifier).*
 - Health checks that mark a local server down quickly, since desktop servers come and go. *Status: done (10 s background probe, `LocalProvider.probe`).*
 
 **Exit criteria:** a request to a model name configured against LM Studio or Ollama works through the same API as a cloud model, with failover to a cloud model when the local server is down.
