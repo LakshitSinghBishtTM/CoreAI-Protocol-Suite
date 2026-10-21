@@ -11,7 +11,7 @@ Usage:
 
 import asyncio
 import sys
-from datetime import datetime
+from utils.clock import utcnow as _utcnow
 from pathlib import Path
 from typing import Optional
 
@@ -164,7 +164,7 @@ async def migrate_up(target: Optional[str] = None):
                     ),
                     {
                         "filename": migration_file.name,
-                        "applied_at": datetime.utcnow().isoformat(),
+                        "applied_at": _utcnow().isoformat(),
                     },
                 )
                 logger.info(f"  ✓ {migration_file.name}")

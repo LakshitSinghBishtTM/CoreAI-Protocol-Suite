@@ -4,6 +4,7 @@ SQLAlchemy ORM models.
 """
 
 import uuid
+from utils.clock import utcnow as _utcnow
 from datetime import datetime
 from typing import Optional
 
@@ -58,7 +59,7 @@ class RequestLog(Base):
     task_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=datetime.utcnow
+        DateTime, nullable=False, default=_utcnow
     )
 
     __table_args__ = (
@@ -99,7 +100,7 @@ class UsageDaily(Base):
     p95_latency_ms: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
 
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime, nullable=False, default=_utcnow, onupdate=_utcnow
     )
 
     __table_args__ = (
@@ -132,7 +133,7 @@ class Agent(Base):
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=datetime.utcnow
+        DateTime, nullable=False, default=_utcnow
     )
     last_seen_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
@@ -173,7 +174,7 @@ class Task(Base):
     total_tokens: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=datetime.utcnow
+        DateTime, nullable=False, default=_utcnow
     )
     started_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
@@ -189,7 +190,7 @@ class Task(Base):
     def duration_seconds(self) -> Optional[float]:
         if not self.started_at:
             return None
-        end = self.completed_at or datetime.utcnow()
+        end = self.completed_at or _utcnow()
         return (end - self.started_at).total_seconds()
 
     def __repr__(self):
@@ -216,7 +217,7 @@ class APIKey(Base):
     last_used_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, default=datetime.utcnow
+        DateTime, nullable=False, default=_utcnow
     )
     expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 

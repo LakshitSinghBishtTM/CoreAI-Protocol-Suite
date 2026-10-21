@@ -4,6 +4,7 @@ Cost calculation, budget tracking, and spend reporting across providers.
 """
 
 from dataclasses import dataclass, field
+from utils.clock import utcnow as _utcnow
 from datetime import datetime
 from typing import Optional
 
@@ -111,7 +112,7 @@ class BudgetTracker:
     _total_requests: int = field(default=0, init=False)
     _total_input_tokens: int = field(default=0, init=False)
     _total_output_tokens: int = field(default=0, init=False)
-    _started_at: datetime = field(default_factory=datetime.utcnow, init=False)
+    _started_at: datetime = field(default_factory=_utcnow, init=False)
     _warned: bool = field(default=False, init=False)
 
     def record(
@@ -154,7 +155,7 @@ class BudgetTracker:
         return self._warned
 
     def stats(self) -> dict:
-        elapsed = (datetime.utcnow() - self._started_at).total_seconds()
+        elapsed = (_utcnow() - self._started_at).total_seconds()
         return {
             "total_cost_usd": round(self._total_cost, 6),
             "total_requests": self._total_requests,

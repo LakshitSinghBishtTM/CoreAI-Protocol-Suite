@@ -1,6 +1,7 @@
 import uuid
 from collections import OrderedDict
 from dataclasses import asdict, dataclass, field
+from utils.clock import utcnow as _utcnow
 from datetime import datetime
 from enum import Enum
 from typing import Any, Optional
@@ -27,7 +28,7 @@ class AgentTask:
     status: TaskStatus = TaskStatus.PENDING
     result: Optional[str] = None
     error: Optional[str] = None
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=_utcnow)
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     iterations: int = 0
@@ -48,7 +49,7 @@ class AgentTask:
     def duration_seconds(self) -> Optional[float]:
         if not self.started_at:
             return None
-        end = self.completed_at or datetime.utcnow()
+        end = self.completed_at or _utcnow()
         return (end - self.started_at).total_seconds()
 
 
@@ -123,7 +124,7 @@ class Orchestrator:
         self.agents[agent_id] = {
             "id": agent_id,
             "config": agent_config or {},
-            "created_at": datetime.utcnow(),
+            "created_at": _utcnow(),
             "total_tasks": 0,
             "completed_tasks": 0,
             "failed_tasks": 0,
@@ -162,7 +163,7 @@ class Orchestrator:
             raise ValueError(f"Task {task_id} not found")
 
         task.status = TaskStatus.RUNNING
-        task.started_at = datetime.utcnow()
+        task.started_at = _utcnow()
         self.task_store.update(task)
         logger.debug(f"Started task {task_id}")
 
@@ -174,7 +175,7 @@ class Orchestrator:
 
         task.status = TaskStatus.COMPLETED
         task.result = result
-        task.completed_at = datetime.utcnow()
+        task.completed_at = _utcnow()
         self.task_store.update(task)
 
         agent_id = self.active_tasks.pop(task_id, None)
@@ -193,7 +194,7 @@ class Orchestrator:
 
         task.status = TaskStatus.FAILED
         task.error = error
-        task.completed_at = datetime.utcnow()
+        task.completed_at = _utcnow()
         self.task_store.update(task)
 
         agent_id = self.active_tasks.pop(task_id, None)
@@ -209,7 +210,7 @@ class Orchestrator:
             return
 
         task.status = TaskStatus.CANCELLED
-        task.completed_at = datetime.utcnow()
+        task.completed_at = _utcnow()
         self.task_store.update(task)
         self.active_tasks.pop(task_id, None)
         logger.info(f"Cancelled task {task_id}")

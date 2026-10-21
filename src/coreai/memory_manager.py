@@ -5,6 +5,7 @@ Handles trimming, summarization triggers, and memory persistence.
 """
 
 from dataclasses import dataclass, field
+from utils.clock import utcnow as _utcnow
 from datetime import datetime
 from typing import Optional
 
@@ -15,7 +16,7 @@ from loguru import logger
 class Message:
     role: str  # "system" | "user" | "assistant"
     content: str
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=_utcnow)
     token_estimate: int = 0
 
     def __post_init__(self):
@@ -29,8 +30,8 @@ class ContextWindow:
     messages: list[Message] = field(default_factory=list)
     max_tokens: int = 8000  # soft limit before trimming
     system_prompt: Optional[str] = None
-    created_at: datetime = field(default_factory=datetime.utcnow)
-    last_updated: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=_utcnow)
+    last_updated: datetime = field(default_factory=_utcnow)
 
     def token_count(self) -> int:
         total = sum(m.token_estimate for m in self.messages)
@@ -89,7 +90,7 @@ class MemoryManager:
         """Append a message to an agent's context window."""
         window = self.get_or_create(agent_id)
         window.messages.append(Message(role=role, content=content))
-        window.last_updated = datetime.utcnow()
+        window.last_updated = _utcnow()
         self._total_messages_added += 1
 
         if window.is_over_limit():

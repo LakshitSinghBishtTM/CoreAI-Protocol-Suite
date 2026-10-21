@@ -6,6 +6,7 @@ Handles cache eviction, stats snapshots, health checks, and log rotation trigger
 
 import asyncio
 from dataclasses import dataclass, field
+from utils.clock import utcnow as _utcnow
 from datetime import datetime, timedelta
 from enum import Enum
 from typing import Awaitable, Callable, Optional
@@ -27,17 +28,17 @@ class Job:
     func: Callable[[], Awaitable[None]]
     interval_seconds: float
     last_run: Optional[datetime] = None
-    next_run: datetime = field(default_factory=datetime.utcnow)
+    next_run: datetime = field(default_factory=_utcnow)
     run_count: int = 0
     error_count: int = 0
     last_error: Optional[str] = None
     enabled: bool = True
 
     def is_due(self) -> bool:
-        return self.enabled and datetime.utcnow() >= self.next_run
+        return self.enabled and _utcnow() >= self.next_run
 
     def schedule_next(self):
-        self.next_run = datetime.utcnow() + timedelta(seconds=self.interval_seconds)
+        self.next_run = _utcnow() + timedelta(seconds=self.interval_seconds)
 
 
 class Scheduler:
@@ -80,9 +81,9 @@ class Scheduler:
     ):
         """Register a recurring background job."""
         next_run = (
-            datetime.utcnow()
+            _utcnow()
             if run_immediately
-            else (datetime.utcnow() + timedelta(seconds=interval_seconds))
+            else (_utcnow() + timedelta(seconds=interval_seconds))
         )
         self._jobs[name] = Job(
             name=name,
@@ -120,7 +121,7 @@ class Scheduler:
 
     async def _run_job(self, job: Job):
         """Execute a single job, catching and logging errors."""
-        job.last_run = datetime.utcnow()
+        job.last_run = _utcnow()
         job.schedule_next()
 
         try:
