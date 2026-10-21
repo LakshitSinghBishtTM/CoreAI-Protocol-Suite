@@ -27,14 +27,18 @@ class FilterPolicy:
     def from_dict(cls, raw: dict[str, Any] | None) -> "FilterPolicy":
         raw = raw or {}
         topics = raw.get("blocked_topics") or []
-        if not isinstance(topics, (list, tuple)) or not all(isinstance(t, str) for t in topics):
+        if not isinstance(topics, (list, tuple)) or not all(
+            isinstance(t, str) for t in topics
+        ):
             raise ValueError("blocked_topics must be a list of strings")
         for t in topics:
             if t.startswith("re:"):
                 try:
                     re.compile(t[3:])  # fail at load time, not per request
                 except re.error as exc:
-                    raise ValueError(f"invalid blocked_topics regex {t!r}: {exc}") from exc
+                    raise ValueError(
+                        f"invalid blocked_topics regex {t!r}: {exc}"
+                    ) from exc
         return cls(
             redact_pii=bool(raw.get("redact_pii", True)),
             block_secrets=bool(raw.get("block_secrets", True)),
@@ -47,7 +51,9 @@ class FilterPolicy:
 class FilterResult:
     allowed: bool
     text: str
-    reasons: list[str] = field(default_factory=list)  # kinds and topics, never the matched text
+    reasons: list[str] = field(
+        default_factory=list
+    )  # kinds and topics, never the matched text
 
 
 def _topic_hit(text: str, topic: str) -> bool:
@@ -71,7 +77,11 @@ def apply(text: str, policy: FilterPolicy) -> FilterResult:
     if policy.redact_pii:
         kinds = {f.kind for f in detect(text, DEFAULT_KINDS)}
         if kinds:
-            return FilterResult(True, redact(text, DEFAULT_KINDS), [f"redacted:{k}" for k in sorted(kinds)])
+            return FilterResult(
+                True,
+                redact(text, DEFAULT_KINDS),
+                [f"redacted:{k}" for k in sorted(kinds)],
+            )
     return FilterResult(True, text, [])
 
 

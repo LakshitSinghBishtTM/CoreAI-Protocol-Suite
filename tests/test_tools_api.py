@@ -39,7 +39,12 @@ def make_client(monkeypatch):
 
     started = []
 
-    def build(router, runtime, subject="u", scopes=("completions:write", "tools:read", "tools:call")):
+    def build(
+        router,
+        runtime,
+        subject="u",
+        scopes=("completions:write", "tools:read", "tools:call"),
+    ):
         app = FastAPI()
         for r in (api_router, compat, tools_router):
             app.include_router(r)
@@ -50,7 +55,9 @@ def make_client(monkeypatch):
             p.start()
             started.append(p)
         c = TestClient(app, base_url="http://testserver")
-        c.headers["Authorization"] = "Bearer " + create_access_token(subject, list(scopes))
+        c.headers["Authorization"] = "Bearer " + create_access_token(
+            subject, list(scopes)
+        )
         return c
 
     yield build
@@ -61,7 +68,13 @@ def make_client(monkeypatch):
 def runtime(**extra):
     rt = build_runtime({"grants": {"u": ["calculator"], "boss": ["*"]}, **extra})
     rt.registry.register(
-        Tool("wipe", "w", {"type": "object"}, lambda: "wiped", permission=Permission.DESTRUCTIVE)
+        Tool(
+            "wipe",
+            "w",
+            {"type": "object"},
+            lambda: "wiped",
+            permission=Permission.DESTRUCTIVE,
+        )
     )
     return rt
 
@@ -90,16 +103,28 @@ def test_run_tools_refused_without_server_side_grant(make_client):
 
 def test_destructive_call_returns_409_then_succeeds_after_approval(make_client):
     rt = runtime(max_permission="destructive")
-    script = [tool_reply([call("wipe", {})]), tool_reply([call("wipe", {})]), tool_reply(text="wiped it")]
+    script = [
+        tool_reply([call("wipe", {})]),
+        tool_reply([call("wipe", {})]),
+        tool_reply(text="wiped it"),
+    ]
     c = make_client(make_router({"a": make_provider("a", behaviour=script)}), rt, subject="boss",
                     scopes=("completions:write", "admin", "tools:read", "tools:call"))  # fmt: skip
     r = c.post("/v1/chat/completions", json=BODY)
     assert r.status_code == 409 and r.json()["error"]["code"] == "approval_required"
     (pending,) = c.get("/v1/tools/approvals").json()["data"]
     assert pending["tool"] == "wipe"
-    assert c.post(f"/v1/tools/approvals/{pending['id']}", json={"approve": True}).status_code == 200
+    assert (
+        c.post(
+            f"/v1/tools/approvals/{pending['id']}", json={"approve": True}
+        ).status_code
+        == 200
+    )
     again = c.post("/v1/chat/completions", json=BODY)
-    assert again.status_code == 200 and again.json()["choices"][0]["message"]["content"] == "wiped it"
+    assert (
+        again.status_code == 200
+        and again.json()["choices"][0]["message"]["content"] == "wiped it"
+    )
 
 
 def test_approval_endpoints_need_admin(make_client):
@@ -120,8 +145,15 @@ def test_list_tools_and_mcp_over_http(make_client):
 
 
 def test_tools_disabled_returns_404_and_scopes_enforced(make_client):
-    assert make_client(make_router({"a": make_provider("a")}), None).get("/v1/tools").status_code == 404
-    c = make_client(make_router({"a": make_provider("a")}), runtime(), scopes=("completions:write",))
+    assert (
+        make_client(make_router({"a": make_provider("a")}), None)
+        .get("/v1/tools")
+        .status_code
+        == 404
+    )
+    c = make_client(
+        make_router({"a": make_provider("a")}), runtime(), scopes=("completions:write",)
+    )
     assert c.get("/v1/tools").status_code == 403
 
 
@@ -134,9 +166,16 @@ async def test_tool_calls_are_audited_without_argument_values():
     rt = build_runtime({"grants": {"u": ["calculator"]}})
     rt.registry.on_call = tool_audit_hook
     with patch("api.server.get_audit", return_value=audit):
-        await rt.registry.call("calculator", {"expression": "2+2"}, allowed=["calculator"], caller="u")
+        await rt.registry.call(
+            "calculator", {"expression": "2+2"}, allowed=["calculator"], caller="u"
+        )
         with pytest.raises(ToolError):
-            await rt.registry.call("calculator", {"expression": "SECRET"}, allowed=["calculator"], caller="u")
+            await rt.registry.call(
+                "calculator",
+                {"expression": "SECRET"},
+                allowed=["calculator"],
+                caller="u",
+            )
     events = [e for e in audit._events if e["action"] == "tool.call"]
     assert [e["outcome"] for e in events] == ["ok", "invalid_arguments"]
     assert events[0]["actor"] == "u" and events[0]["target"] == "calculator"

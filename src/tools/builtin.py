@@ -189,7 +189,10 @@ def register_builtins(
             Tool(
                 "file_write",
                 "Write a text file inside the workspace.",
-                obj({"path": {"type": "string"}, "content": {"type": "string"}}, ["path", "content"]),
+                obj(
+                    {"path": {"type": "string"}, "content": {"type": "string"}},
+                    ["path", "content"],
+                ),
                 workspace.write,
                 permission=Permission.WRITE,
             )

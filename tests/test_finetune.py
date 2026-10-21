@@ -303,5 +303,9 @@ def test_default_manager_wiring(monkeypatch, tmp_path):
     monkeypatch.setattr(t, "_manager", None)
     monkeypatch.setenv("COREAI_FINETUNE_DB", str(tmp_path / "x.db"))
     m = t.get_training_manager()
-    assert m.store is not None and m.on_succeeded is not None and m.prices.rate("gpt-4o-mini") == 3.0
+    assert (
+        m.store is not None
+        and m.on_succeeded is not None
+        and m.prices.rate("gpt-4o-mini") == 3.0
+    )
     monkeypatch.setattr(t, "_manager", None)

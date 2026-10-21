@@ -7,7 +7,6 @@ and output, so it is opt-in and meant for development, not production.
 
 import json
 from pathlib import Path
-from typing import Optional
 
 from .registry import ToolError, ToolRegistry, ToolResult
 
@@ -29,7 +28,9 @@ class Recorder:
             fh.write(json.dumps(entry, default=str) + "\n")
 
 
-async def replay(registry: ToolRegistry, path: str | Path, caller: str = "replay") -> list[dict]:
+async def replay(
+    registry: ToolRegistry, path: str | Path, caller: str = "replay"
+) -> list[dict]:
     """Re-run recorded calls; return the mismatches (empty list = no regressions)."""
     problems = []
     for n, line in enumerate(Path(path).read_text().splitlines(), 1):
@@ -38,12 +39,18 @@ async def replay(registry: ToolRegistry, path: str | Path, caller: str = "replay
         rec = json.loads(line)
         try:
             res = await registry.call(
-                rec["tool"], rec["arguments"], allowed=["*"], caller=caller, approved=True
+                rec["tool"],
+                rec["arguments"],
+                allowed=["*"],
+                caller=caller,
+                approved=True,
             )
             got = {"ok": True, "output": res.content, "error": None}
         except ToolError as exc:
             got = {"ok": False, "output": None, "error": exc.code}
         want = {"ok": rec["ok"], "output": rec["output"], "error": rec["error"]}
         if got != want:
-            problems.append({"line": n, "tool": rec["tool"], "expected": want, "got": got})
+            problems.append(
+                {"line": n, "tool": rec["tool"], "expected": want, "got": got}
+            )
     return problems

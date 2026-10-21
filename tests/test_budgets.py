@@ -191,9 +191,8 @@ def test_usage_endpoint_reports_consumption(api):
 
 def test_failed_provider_call_is_not_billed(api):
     client, budgets = api
-    from tests.helpers import StatusError
-
     import api.server as server
+    from tests.helpers import StatusError
 
     bad = make_router({"p": make_provider("p", behaviour=StatusError(400))})
     server.get_router.return_value = bad

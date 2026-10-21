@@ -9,7 +9,7 @@ import pytest
 
 from agents.task_orchestrator import TaskOrchestrator
 from api.middleware import RateLimitMiddleware
-from coreai.budgets import BudgetExceeded, BudgetConfigError, load_budgets
+from coreai.budgets import BudgetConfigError, BudgetExceeded, load_budgets
 from coreai.circuit_breaker import CircuitBreaker, CircuitState
 from coreai.router import Router, RoutingConfig, RoutingStrategy
 from coreai.usage import UsageLedger, UsageQueryError
@@ -36,7 +36,9 @@ def test_explicit_model_selects_owning_provider():
 
 
 def test_model_provider_mismatch_is_rejected():
-    r = _router(deepseek=make_provider("deepseek"), anthropic=make_provider("anthropic"))
+    r = _router(
+        deepseek=make_provider("deepseek"), anthropic=make_provider("anthropic")
+    )
     with pytest.raises(ValueError):
         r._candidates(_req(model="claude-3-5-haiku-20241022"), "deepseek")
 
@@ -77,7 +79,9 @@ def test_model_cap_applies_to_cache_hits():
     cfg = RoutingConfig(strategy=RoutingStrategy.FALLBACK, enable_cache=True)
     r = Router({"a": make_provider("a")}, cfg)
     asyncio.run(r.route(_req()))  # populate cache
-    r.model_gate = lambda m: (_ for _ in ()).throw(BudgetExceeded("max_requests", 1, 1, 10.0))
+    r.model_gate = lambda m: (_ for _ in ()).throw(
+        BudgetExceeded("max_requests", 1, 1, 10.0)
+    )
     with pytest.raises(BudgetExceeded):
         asyncio.run(r.route(_req()))
 
@@ -85,7 +89,9 @@ def test_model_cap_applies_to_cache_hits():
 def test_cost_ranking_uses_requested_output_size():
     r = _router(a=make_provider("a"))
     seen = []
-    r.providers["a"].estimate_cost.side_effect = lambda i, o, m: seen.append((i, o)) or 0.0
+    r.providers["a"].estimate_cost.side_effect = (
+        lambda i, o, m: seen.append((i, o)) or 0.0
+    )
     r._select_cheapest(_req(max_tokens=700), ["a"])
     assert seen[0][1] == 700
 
@@ -109,7 +115,12 @@ def test_rate_limit_key_uses_full_api_key_and_idle_clients_are_swept():
     mw = RateLimitMiddleware.__new__(RateLimitMiddleware)
     mw.rpm = 60
     mw._windows = {}
-    req = lambda k: SimpleNamespace(headers={"X-API-Key": k}, client=SimpleNamespace(host="h"))  # noqa: E731
+
+    def req(k):
+        return SimpleNamespace(
+            headers={"X-API-Key": k}, client=SimpleNamespace(host="h")
+        )  # noqa: E731
+
     k1 = mw._get_client_key(req("sharedprefix-0000-aaaa"))
     k2 = mw._get_client_key(req("sharedprefix-0000-bbbb"))
     assert k1 != k2
@@ -180,7 +191,9 @@ def test_expired_api_key_is_rejected(monkeypatch):
     import database.db as db
 
     rec = SimpleNamespace(
-        owner="o", id="1", scopes="x",
+        owner="o",
+        id="1",
+        scopes="x",
         expires_at=datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=1),
     )
 
@@ -255,7 +268,9 @@ def test_explicit_policy_without_chain_does_not_fail_over(tmp_path):
 def test_named_policy_forwarded_by_api_schema():
     from api.routes import CompletionRequest as Api
 
-    assert Api(messages=[{"role": "user", "content": "x"}], policy="bulk").policy == "bulk"
+    assert (
+        Api(messages=[{"role": "user", "content": "x"}], policy="bulk").policy == "bulk"
+    )
     with pytest.raises(Exception):
         Api(messages=[])
     with pytest.raises(Exception):

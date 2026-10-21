@@ -1,6 +1,5 @@
 """Streamed responses are metered: tokens, cost, budgets and metrics."""
 
-import asyncio
 from types import SimpleNamespace as NS
 from unittest.mock import MagicMock
 
@@ -190,10 +189,17 @@ async def test_openai_compatible_requests_usage_and_skips_the_final_empty_chunk(
     assert out == ["he", "llo"]
     assert calls["stream_options"] == {"include_usage": True}
     u = req.stream_usage
-    assert (u.input_tokens, u.output_tokens, u.model, u.reported) == (5, 2, "gpt-x", True)
+    assert (u.input_tokens, u.output_tokens, u.model, u.reported) == (
+        5,
+        2,
+        "gpt-x",
+        True,
+    )
 
 
-@pytest.mark.parametrize("mod,cls", [("grok", "GrokProvider"), ("deepseek", "DeepSeekProvider")])
+@pytest.mark.parametrize(
+    "mod,cls", [("grok", "GrokProvider"), ("deepseek", "DeepSeekProvider")]
+)
 async def test_grok_and_deepseek_report_usage(mod, cls):
     import importlib
 
@@ -318,7 +324,6 @@ def api(monkeypatch):
         pt.stop()
 
 
-
 def _sse_text(body: str) -> str:
     """Concatenate the content of SSE ``data:`` frames (ignores [DONE])."""
     import json as _json
@@ -347,6 +352,8 @@ def test_stream_cost_and_tokens_count_toward_the_budget(api):
 def test_streaming_cannot_dodge_the_cost_limit(api):
     client, _ = api
     assert client.post("/v1/completions/stream", json=BODY).status_code == 200
-    assert client.post("/v1/completions/stream", json=BODY).status_code == 200  # 0.6 now
+    assert (
+        client.post("/v1/completions/stream", json=BODY).status_code == 200
+    )  # 0.6 now
     r = client.post("/v1/completions/stream", json=BODY)
     assert r.status_code == 429 and r.json()["detail"]["limit"] == "cost_usd"

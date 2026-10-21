@@ -72,7 +72,9 @@ def test_off_by_default_and_costless(monkeypatch):
 async def test_router_unchanged_when_off():
     router = make_router({"p": make_provider("p")})
     assert (await router.route(request())).provider == "p"
-    assert await collect(make_router({"s": make_stream_provider("s")}).stream(request()))
+    assert await collect(
+        make_router({"s": make_stream_provider("s")}).stream(request())
+    )
 
 
 def test_requested_by_env(monkeypatch):
@@ -147,7 +149,11 @@ async def test_route_span_with_failover_and_child_provider_calls(spans):
 
 async def test_failed_request_marks_the_route_span_without_leaking_text(spans):
     router = make_router(
-        {"p": make_provider("p", behaviour=StatusError(400, f"bad input {SECRET_PROMPT}"))}
+        {
+            "p": make_provider(
+                "p", behaviour=StatusError(400, f"bad input {SECRET_PROMPT}")
+            )
+        }
     )
     with pytest.raises(Exception):
         await router.route(request(SECRET_PROMPT))
@@ -346,7 +352,8 @@ async def test_concurrent_requests_do_not_share_traces(spans):
     for i in range(5):
         (root,) = by_name(spans, f"req-{i}")
         kids = [
-            s for s in spans.get_finished_spans()
+            s
+            for s in spans.get_finished_spans()
             if s.context.trace_id == root.context.trace_id and s is not root
         ]
         assert {k.name for k in kids} == {"caips.route", "caips.provider_call"}

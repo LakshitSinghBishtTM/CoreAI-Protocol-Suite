@@ -9,7 +9,13 @@ from tools.builtin import HttpFetcher, Workspace, register_builtins, safe_eval
 
 @pytest.mark.parametrize(
     "expr,out",
-    [("1+2*3", 7), ("(1+2)*3", 9), ("2**10", 1024), ("-4+10/4", -1.5), ("sqrt(16)+pi*0", 4.0)],
+    [
+        ("1+2*3", 7),
+        ("(1+2)*3", 9),
+        ("2**10", 1024),
+        ("-4+10/4", -1.5),
+        ("sqrt(16)+pi*0", 4.0),
+    ],
 )
 def test_calculator_math(expr, out):
     assert safe_eval(expr) == out
@@ -17,7 +23,17 @@ def test_calculator_math(expr, out):
 
 @pytest.mark.parametrize(
     "expr",
-    ["__import__('os').system('x')", "open('f')", "a+1", "(1).real", "[1]", "2**100000", "1/0", "1+", "x" * 600],
+    [
+        "__import__('os').system('x')",
+        "open('f')",
+        "a+1",
+        "(1).real",
+        "[1]",
+        "2**100000",
+        "1/0",
+        "1+",
+        "x" * 600,
+    ],
 )
 def test_calculator_rejects_everything_else(expr):
     with pytest.raises(ToolError):
@@ -47,7 +63,10 @@ def test_workspace_size_limits(tmp_path):
 
 def fetcher(handler, **kw):
     return HttpFetcher(
-        ["example.com"], transport=httpx.MockTransport(handler), resolver=lambda h: True, **kw
+        ["example.com"],
+        transport=httpx.MockTransport(handler),
+        resolver=lambda h: True,
+        **kw,
     )
 
 
@@ -64,7 +83,9 @@ async def test_fetch_blocks_private_hosts_and_redirects():
                     resolver=lambda h: False)  # fmt: skip
     with pytest.raises(ToolError):
         await f.fetch("https://example.com/")
-    g = fetcher(lambda r: httpx.Response(302, headers={"location": "http://169.254.169.254/"}))
+    g = fetcher(
+        lambda r: httpx.Response(302, headers={"location": "http://169.254.169.254/"})
+    )
     with pytest.raises(ToolError):
         await g.fetch("https://example.com/")
 

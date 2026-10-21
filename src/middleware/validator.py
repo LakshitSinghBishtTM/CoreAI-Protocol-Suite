@@ -6,8 +6,7 @@ Checks message structure, content policy limits, and provider availability.
 
 from typing import Optional
 
-from fastapi import HTTPException, Request
-from loguru import logger
+from fastapi import HTTPException
 
 # Hard limits — requests exceeding these are rejected before hitting providers
 MAX_MESSAGES = 50

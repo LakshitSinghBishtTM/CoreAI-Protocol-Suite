@@ -28,7 +28,10 @@ def test_no_config_means_no_filtering(make_client, tmp_path, monkeypatch):
     monkeypatch.setenv("COREAI_GUARDRAILS_CONFIG", str(tmp_path / "missing.yml"))
     gcfg.reset()
     c = make_client(make_router({"a": make_provider("a")}))
-    assert c.post("/v1/chat/completions", json=body("forbidden bob@x.io")).status_code == 200
+    assert (
+        c.post("/v1/chat/completions", json=body("forbidden bob@x.io")).status_code
+        == 200
+    )
 
 
 def test_blocked_input_is_rejected_before_any_provider(make_client, policy):
@@ -43,6 +46,9 @@ def test_blocked_input_is_rejected_before_any_provider(make_client, policy):
 def test_pii_in_input_is_redacted_before_the_provider_sees_it(make_client, policy):
     p = make_provider("a")
     c = make_client(make_router({"a": p}))
-    assert c.post("/v1/chat/completions", json=body("mail bob@example.com")).status_code == 200
+    assert (
+        c.post("/v1/chat/completions", json=body("mail bob@example.com")).status_code
+        == 200
+    )
     sent = p.complete.call_args[0][0]
     assert "bob@example.com" not in str(sent.messages[-1].content)

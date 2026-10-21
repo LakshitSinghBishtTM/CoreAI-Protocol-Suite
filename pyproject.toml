@@ -69,6 +69,12 @@ extend-exclude = ["build", "dist"]
 select = ["E", "F", "W", "I"]
 ignore = ["E203"]
 
+[tool.ruff.lint.per-file-ignores]
+"src/providers/__init__.py" = ["F401"]
+"src/providers/*.py" = ["E402"]
+"tests/*" = ["E402", "E501", "F811"]
+"src/tools/config.py" = ["E501"]
+
 [tool.mypy]
 python_version = "3.11"
 ignore_missing_imports = true

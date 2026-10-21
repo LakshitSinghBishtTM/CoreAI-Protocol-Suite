@@ -18,7 +18,9 @@ _cache: dict[str, tuple[FilterPolicy | None, FilterPolicy | None]] = {}
 
 def load(path: str | None = None) -> tuple[FilterPolicy | None, FilterPolicy | None]:
     """Return ``(input_policy, output_policy)``; either may be None."""
-    p = Path(path or os.environ.get("COREAI_GUARDRAILS_CONFIG") or "config/guardrails.yml")
+    p = Path(
+        path or os.environ.get("COREAI_GUARDRAILS_CONFIG") or "config/guardrails.yml"
+    )
     key = str(p)
     if key not in _cache:
         if not p.is_file():
@@ -26,7 +28,8 @@ def load(path: str | None = None) -> tuple[FilterPolicy | None, FilterPolicy | N
         else:
             raw = yaml.safe_load(p.read_text()) or {}
             _cache[key] = tuple(  # type: ignore[assignment]
-                FilterPolicy.from_dict(raw[s]) if s in raw else None for s in ("input", "output")
+                FilterPolicy.from_dict(raw[s]) if s in raw else None
+                for s in ("input", "output")
             )
     return _cache[key]
 

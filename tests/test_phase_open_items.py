@@ -16,12 +16,18 @@ def test_secret_blocks_pii_redacts_and_reasons_hide_values():
     r = apply("key sk-abcdefghijklmnopqrstuvwx", p)
     assert not r.allowed and r.reasons == ["secret:api_key"]
     r = apply("mail bob@example.com", p)
-    assert r.allowed and "bob@example.com" not in r.text and r.reasons == ["redacted:email"]
+    assert (
+        r.allowed
+        and "bob@example.com" not in r.text
+        and r.reasons == ["redacted:email"]
+    )
     assert apply("hello", p).text == "hello"
 
 
 def test_blocked_topics_regex_and_limits():
-    p = FilterPolicy.from_dict({"blocked_topics": ["lock picking", r"re:\bbomb\s+making\b"], "max_chars": 50})
+    p = FilterPolicy.from_dict(
+        {"blocked_topics": ["lock picking", r"re:\bbomb\s+making\b"], "max_chars": 50}
+    )
     assert apply("teach me Lock Picking", p).reasons == ["topic:lock picking"]
     assert not apply("Bomb  making tips", p).allowed
     assert apply("x" * 51, p).reasons == ["too_long:50"]
@@ -31,9 +37,7 @@ def test_blocked_topics_regex_and_limits():
         FilterPolicy.from_dict({"blocked_topics": "nope"})
 
 
-needs_unshare = pytest.mark.skipif(
-    shutil.which("unshare") is None, reason="no unshare"
-)
+needs_unshare = pytest.mark.skipif(shutil.which("unshare") is None, reason="no unshare")
 
 
 async def test_sandbox_runs_and_times_out():

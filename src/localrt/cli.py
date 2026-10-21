@@ -14,7 +14,9 @@ from .registry import ModelRegistry
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(prog="localrt", description="Manage local GGUF models.")
+    ap = argparse.ArgumentParser(
+        prog="localrt", description="Manage local GGUF models."
+    )
     ap.add_argument("--dir", default=os.environ.get("COREAI_MODELS_DIR", "models"))
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("list")

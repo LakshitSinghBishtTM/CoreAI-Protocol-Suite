@@ -4,13 +4,11 @@ tests/test_cache.py
 Unit tests for coreai.cache — ResponseCache, MemoryCache, RedisCache.
 """
 
-import asyncio
 from datetime import datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from coreai.cache import CacheBackend, MemoryCache, RedisCache, ResponseCache
+from coreai.cache import MemoryCache, RedisCache, ResponseCache
 
 # ---------------------------------------------------------------------------
 # MemoryCache
@@ -87,7 +85,7 @@ class TestRedisCacheFallback:
 
     @pytest.fixture
     def cache(self):
-        from coreai.cache import MemoryCache, RedisCache
+        from coreai.cache import MemoryCache
 
         c = RedisCache.__new__(RedisCache)
         c.redis = None

@@ -3,7 +3,9 @@
 import re
 import subprocess
 
-PATTERN = re.compile(r"(sk-ant-[A-Za-z0-9_-]{20,}|sk-[A-Za-z0-9]{32,}|AIzaSy[A-Za-z0-9_-]{30,}|xai-[A-Za-z0-9]{30,})")
+PATTERN = re.compile(
+    r"(sk-ant-[A-Za-z0-9_-]{20,}|sk-[A-Za-z0-9]{32,}|AIzaSy[A-Za-z0-9_-]{30,}|xai-[A-Za-z0-9]{30,})"
+)
 
 
 def test_no_tracked_secrets():

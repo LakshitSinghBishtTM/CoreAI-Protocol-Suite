@@ -11,7 +11,13 @@ def rt(**extra):
     cfg = {"grants": {"default": ["calculator"], "admin": ["*"]}, **extra}
     r = build_runtime(cfg)
     r.registry.register(
-        Tool("wipe", "w", {"type": "object"}, lambda: "wiped", permission=Permission.DESTRUCTIVE)
+        Tool(
+            "wipe",
+            "w",
+            {"type": "object"},
+            lambda: "wiped",
+            permission=Permission.DESTRUCTIVE,
+        )
     )
     return r
 
@@ -28,7 +34,10 @@ async def test_initialize_ping_and_notification():
     out = await s.handle(rpc("initialize", {}))
     assert out["result"]["serverInfo"]["name"] == "caips-tools"
     assert (await s.handle(rpc("ping")))["result"] == {}
-    assert await s.handle({"jsonrpc": "2.0", "method": "notifications/initialized"}) is None
+    assert (
+        await s.handle({"jsonrpc": "2.0", "method": "notifications/initialized"})
+        is None
+    )
     assert (await s.handle({"nope": 1}))["error"]["code"] == -32600
     assert (await s.handle(rpc("bogus")))["error"]["code"] == -32601
 
@@ -38,16 +47,28 @@ async def test_tools_list_respects_server_side_grants():
     names = lambda r: [t["name"] for t in r["result"]["tools"]]  # noqa: E731
     assert names(await s.handle(rpc("tools/list"), "bob")) == ["calculator"]
     assert "wipe" in names(await s.handle(rpc("tools/list"), "admin"))
-    assert (await s.handle(rpc("tools/list"), "bob"))["result"]["tools"][0]["inputSchema"]
+    assert (await s.handle(rpc("tools/list"), "bob"))["result"]["tools"][0][
+        "inputSchema"
+    ]
 
 
 async def test_tools_call_success_and_errors_are_in_band():
     s = rt().mcp
-    ok = await s.handle(rpc("tools/call", {"name": "calculator", "arguments": {"expression": "6*7"}}), "bob")
-    assert ok["result"]["isError"] is False and "42" in ok["result"]["content"][0]["text"]
+    ok = await s.handle(
+        rpc("tools/call", {"name": "calculator", "arguments": {"expression": "6*7"}}),
+        "bob",
+    )
+    assert (
+        ok["result"]["isError"] is False and "42" in ok["result"]["content"][0]["text"]
+    )
     bad = await s.handle(rpc("tools/call", {"name": "wipe", "arguments": {}}), "bob")
-    assert bad["result"]["isError"] and "not_allowed" in bad["result"]["content"][0]["text"]
-    inv = await s.handle(rpc("tools/call", {"name": "calculator", "arguments": {}}), "bob")
+    assert (
+        bad["result"]["isError"]
+        and "not_allowed" in bad["result"]["content"][0]["text"]
+    )
+    inv = await s.handle(
+        rpc("tools/call", {"name": "calculator", "arguments": {}}), "bob"
+    )
     assert "invalid_arguments" in inv["result"]["content"][0]["text"]
     assert (await s.handle(rpc("tools/call", {}), "bob"))["error"]["code"] == -32602
 
@@ -56,7 +77,10 @@ async def test_destructive_over_mcp_needs_approval_then_runs_once():
     r = rt(max_permission="destructive")
     call = rpc("tools/call", {"name": "wipe", "arguments": {}})
     first = await r.mcp.handle(call, "admin")
-    assert first["result"]["isError"] and "approval_required" in first["result"]["content"][0]["text"]
+    assert (
+        first["result"]["isError"]
+        and "approval_required" in first["result"]["content"][0]["text"]
+    )
     (pending,) = r.approvals.pending()
     assert pending.tool == "wipe" and pending.caller == "admin"
     r.approvals.decide(pending.id, True, by="root")
@@ -131,7 +155,9 @@ def test_webhook_config_needs_secret(monkeypatch):
     with pytest.raises(ValueError):
         build_runtime({"approval_webhook": {"url": "http://h/x"}})
     monkeypatch.setenv("TOOLS_WEBHOOK_SECRET", "k")
-    assert build_runtime({"approval_webhook": {"url": "http://h/x"}}).approvals.on_request
+    assert build_runtime(
+        {"approval_webhook": {"url": "http://h/x"}}
+    ).approvals.on_request
 
 
 def test_extra_tools_register_only_when_configured(tmp_path):

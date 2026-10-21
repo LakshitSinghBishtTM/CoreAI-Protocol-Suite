@@ -21,7 +21,10 @@ def search(payload, **kw):
 
 
 async def test_search_formats_and_caps_results():
-    items = [{"title": f"T{i}\nline", "url": f"https://x/{i}", "content": "c" * 1000} for i in range(9)]
+    items = [
+        {"title": f"T{i}\nline", "url": f"https://x/{i}", "content": "c" * 1000}
+        for i in range(9)
+    ]
     ws, seen = search({"results": items})
     out = await ws.search("cats", count=99)  # capped by max_results
     assert out.count("https://x/") == 5 and "\nline" not in out.replace("\n  ", "")
@@ -32,10 +35,15 @@ async def test_search_formats_and_caps_results():
 async def test_search_failures_are_tool_errors():
     with pytest.raises(ToolError):
         await search({"nope": []})[0].search("x")
-    ws = WebSearch("https://s/", transport=httpx.MockTransport(lambda r: httpx.Response(500)))
+    ws = WebSearch(
+        "https://s/", transport=httpx.MockTransport(lambda r: httpx.Response(500))
+    )
     with pytest.raises(ToolError):
         await ws.search("x")
-    nested, _ = search({"data": {"hits": [{"title": "a", "link": "https://l"}]}}, results_path="data.hits")
+    nested, _ = search(
+        {"data": {"hits": [{"title": "a", "link": "https://l"}]}},
+        results_path="data.hits",
+    )
     assert "https://l" in await nested.search("x")
 
 
@@ -57,11 +65,19 @@ def test_sql_select_works_and_caps_rows(db):
     assert "add LIMIT" in reader.query("main", "select * from t")
 
 
-@pytest.mark.parametrize("sql", [
-    "delete from t", "drop table t", "update t set a=1", "insert into t values (1,'x')",
-    "select 1; drop table t", "pragma writable_schema=1", "attach database 'x' as y",
-    "with x as (select 1) delete from t",
-])
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "delete from t",
+        "drop table t",
+        "update t set a=1",
+        "insert into t values (1,'x')",
+        "select 1; drop table t",
+        "pragma writable_schema=1",
+        "attach database 'x' as y",
+        "with x as (select 1) delete from t",
+    ],
+)
 def test_sql_writes_are_refused_and_data_survives(db, sql):
     reader, path = db
     with pytest.raises(ToolError):
@@ -74,7 +90,9 @@ def test_sql_unknown_database_and_runaway_query(db):
     reader, _ = db
     with pytest.raises(ToolError):
         reader.query("other", "select 1")
-    with pytest.raises(ToolError):  # cartesian explosion is cut off by the progress handler
+    with pytest.raises(
+        ToolError
+    ):  # cartesian explosion is cut off by the progress handler
         reader.query("main", "select count(*) from t a, t b, t c, t d, t e")
 
 
@@ -84,7 +102,9 @@ async def test_shell_allow_list_no_shell_features_clean_env(tmp_path, monkeypatc
     out = await sh.run("echo hello world")
     assert out.startswith("exit code 0") and "hello world" in out
     assert "SECRET_KEY_FOR_TEST" not in await sh.run("env")
-    assert "$(whoami)" in await sh.run("echo '$(whoami)'")  # printed literally, not executed
+    assert "$(whoami)" in await sh.run(
+        "echo '$(whoami)'"
+    )  # printed literally, not executed
     piped = await sh.run("echo a | cat")  # the pipe is just an argument, not a pipe
     assert "a | cat" in piped
     with pytest.raises(ToolError) as e:
@@ -100,7 +120,12 @@ async def test_registration_is_opt_in_and_shell_needs_approval(tmp_path):
     register_extras(r)
     assert r.visible(["*"]) == []
     ws, _ = search({"results": []})
-    register_extras(r, ws, SqliteReader({"main": tmp_path / "x.db"}), ShellRunner(["echo"], tmp_path))
+    register_extras(
+        r,
+        ws,
+        SqliteReader({"main": tmp_path / "x.db"}),
+        ShellRunner(["echo"], tmp_path),
+    )
     assert [t.name for t in r.visible(["*"])] == ["db_query", "shell_run", "web_search"]
     with pytest.raises(ApprovalRequired):
         await r.call("shell_run", {"command": "echo hi"}, allowed=["*"])

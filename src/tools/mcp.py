@@ -79,10 +79,17 @@ class McpServer:
                 name, args, allowed=allowed, caller=caller,
                 approved=approved, max_permission=self.max_permission,
             )  # fmt: skip
-            return _ok(mid, {"content": [{"type": "text", "text": res.content}], "isError": False})
+            return _ok(
+                mid,
+                {"content": [{"type": "text", "text": res.content}], "isError": False},
+            )
         except ApprovalRequired:
             if self.approvals is None:
-                return _tool_error(mid, "approval_required", "This tool needs approval and none is configured.")
+                return _tool_error(
+                    mid,
+                    "approval_required",
+                    "This tool needs approval and none is configured.",
+                )
             a = self.approvals.request(caller, name, args)
             return _tool_error(
                 mid, "approval_required",
@@ -93,7 +100,9 @@ class McpServer:
 
 
 def _tool_error(mid: Any, code: str, text: str) -> dict:
-    return _ok(mid, {"content": [{"type": "text", "text": f"{code}: {text}"}], "isError": True})
+    return _ok(
+        mid, {"content": [{"type": "text", "text": f"{code}: {text}"}], "isError": True}
+    )
 
 
 async def serve_stdio(server: McpServer, caller: str = "stdio") -> None:

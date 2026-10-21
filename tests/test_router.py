@@ -5,7 +5,6 @@ Regression tests for the router/provider layer bug-fixes.
 All provider calls are mocked — no real API keys needed.
 """
 
-import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -252,7 +251,6 @@ class TestRoundRobinIndexIsolation:
             "b": _make_provider("b"),
         }
         router = _router(providers, strategy_str="fastest")
-        before = router._rr_index
         # _select_fastest falls back to round-robin during warm-up
         router._select_fastest(list(providers))
         # That call may advance _rr_index — that's acceptable.

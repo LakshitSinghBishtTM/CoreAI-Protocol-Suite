@@ -76,7 +76,9 @@ def _register_extras(registry: ToolRegistry, cfg: dict) -> None:
         db = SqliteReader(cfg["databases"])
     sh = cfg.get("shell") or {}
     if sh.get("allowed_commands"):
-        shell = ShellRunner(sh["allowed_commands"], sh.get("cwd") or cfg.get("workspace") or ".")
+        shell = ShellRunner(
+            sh["allowed_commands"], sh.get("cwd") or cfg.get("workspace") or "."
+        )
     register_extras(registry, search, db, shell)
     sb = cfg.get("python_sandbox") or {}
     if sb.get("enabled"):

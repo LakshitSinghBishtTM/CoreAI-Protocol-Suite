@@ -4,7 +4,7 @@ Cost calculation, budget tracking, and spend reporting across providers.
 """
 
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import datetime
 from typing import Optional
 
 from coreai.pricing import get_pricing

@@ -44,7 +44,10 @@ def _vulkan_present() -> bool:
         ).stdout
     except (subprocess.SubprocessError, OSError):
         return False
-    return "deviceType" in out and "PHYSICAL_DEVICE_TYPE_CPU" not in out.split("deviceType", 1)[1][:60]
+    return (
+        "deviceType" in out
+        and "PHYSICAL_DEVICE_TYPE_CPU" not in out.split("deviceType", 1)[1][:60]
+    )
 
 
 def detect() -> Hardware:

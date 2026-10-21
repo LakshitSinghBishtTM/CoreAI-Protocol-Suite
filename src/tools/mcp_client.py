@@ -40,9 +40,15 @@ class McpClientError(Exception):
 
 
 class StdioTransport:
-    def __init__(self, command: list[str], env: Optional[dict] = None, cwd: Optional[str] = None):
+    def __init__(
+        self, command: list[str], env: Optional[dict] = None, cwd: Optional[str] = None
+    ):
         self.command, self.cwd = command, cwd
-        base = {k: os.environ[k] for k in ("PATH", "HOME", "LANG", "SYSTEMROOT") if k in os.environ}
+        base = {
+            k: os.environ[k]
+            for k in ("PATH", "HOME", "LANG", "SYSTEMROOT")
+            if k in os.environ
+        }
         self.env = {**base, **(env or {})}
         self._proc: Optional[asyncio.subprocess.Process] = None
         self._lock = asyncio.Lock()
@@ -132,7 +138,8 @@ class McpClient:
             "clientInfo": {"name": "caips", "version": "0.1"},
         })  # fmt: skip
         await self.transport.send(
-            {"jsonrpc": "2.0", "method": "notifications/initialized"}, expect_reply=False
+            {"jsonrpc": "2.0", "method": "notifications/initialized"},
+            expect_reply=False,
         )
 
     async def list_tools(self) -> list[dict]:
@@ -141,7 +148,9 @@ class McpClient:
     async def call_tool(self, name: str, arguments: dict) -> str:
         result = await self._rpc("tools/call", {"name": name, "arguments": arguments})
         text = "\n".join(
-            c.get("text", "") for c in result.get("content") or [] if c.get("type") == "text"
+            c.get("text", "")
+            for c in result.get("content") or []
+            if c.get("type") == "text"
         )
         if result.get("isError"):
             raise ToolError("tool_failed", text or "remote tool failed")
@@ -170,7 +179,9 @@ async def register_remote_tools(
     for spec in await client.list_tools():
         remote = spec.get("name")
         if not isinstance(remote, str) or not _NAME.match(remote):
-            logger.warning(f"[mcp:{client.name}] skipping tool with bad name {remote!r}")
+            logger.warning(
+                f"[mcp:{client.name}] skipping tool with bad name {remote!r}"
+            )
             continue
         if "*" not in wanted and remote not in wanted:
             continue
@@ -225,6 +236,8 @@ async def connect_servers(registry: ToolRegistry, servers: dict) -> list[McpClie
         except Exception as exc:
             logger.warning(f"[mcp:{name}] not connected: {exc}")
             continue
-        logger.info(f"[mcp:{name}] connected, tools: {', '.join(added) or 'none (check allow)'}")
+        logger.info(
+            f"[mcp:{name}] connected, tools: {', '.join(added) or 'none (check allow)'}"
+        )
         clients.append(client)
     return clients

@@ -45,16 +45,25 @@ class GeminiProvider(BaseProvider):
             "temperature": request.temperature,
             "system_instruction": system_with_json(request),
         }
-        if (request.response_format or {}).get("type") in ("json_object", "json_schema"):
+        if (request.response_format or {}).get("type") in (
+            "json_object",
+            "json_schema",
+        ):
             kw["response_mime_type"] = "application/json"
         choice = request.tool_choice
         if request.tools and choice != "none":
-            field = "parameters_json_schema" if "parameters_json_schema" in types.FunctionDeclaration.model_fields else "parameters"
+            field = (
+                "parameters_json_schema"
+                if "parameters_json_schema" in types.FunctionDeclaration.model_fields
+                else "parameters"
+            )
             kw["tools"] = [
                 types.Tool(
                     function_declarations=[
                         types.FunctionDeclaration(
-                            name=t["name"], description=t["description"], **{field: t["parameters"]}
+                            name=t["name"],
+                            description=t["description"],
+                            **{field: t["parameters"]},
                         )
                         for t in tool_specs(request)
                     ]
@@ -81,7 +90,9 @@ class GeminiProvider(BaseProvider):
                         {
                             "id": f"call_{len(calls)}",
                             "name": fc.name,
-                            "arguments": json.dumps(dict(getattr(fc, "args", None) or {})),
+                            "arguments": json.dumps(
+                                dict(getattr(fc, "args", None) or {})
+                            ),
                         }
                     )
         except Exception:
@@ -173,7 +184,11 @@ class GeminiProvider(BaseProvider):
                     }
                 }
                 last = contents[-1] if contents else None
-                if last and last["role"] == "user" and "function_response" in last["parts"][-1]:
+                if (
+                    last
+                    and last["role"] == "user"
+                    and "function_response" in last["parts"][-1]
+                ):
                     last["parts"].append(part)  # results of one turn share a message
                 else:
                     contents.append({"role": "user", "parts": [part]})
@@ -181,7 +196,14 @@ class GeminiProvider(BaseProvider):
                 parts = [{"text": msg.content}] if msg.content else []
                 for c in msg.tool_calls:
                     names[c["id"]] = c["name"]
-                    parts.append({"function_call": {"name": c["name"], "args": parse_arguments(c.get("arguments"))}})
+                    parts.append(
+                        {
+                            "function_call": {
+                                "name": c["name"],
+                                "args": parse_arguments(c.get("arguments")),
+                            }
+                        }
+                    )
                 contents.append({"role": "model", "parts": parts})
             else:
                 role = "model" if msg.role == "assistant" else "user"
@@ -200,8 +222,13 @@ class GeminiProvider(BaseProvider):
     @staticmethod
     def _blob(image: dict) -> dict:
         if not image.get("data"):
-            raise ValueError("Gemini accepts images as inline data only (send a data: URL, not a link).")
-        return {"mime_type": image["media_type"], "data": base64.b64decode(image["data"])}
+            raise ValueError(
+                "Gemini accepts images as inline data only (send a data: URL, not a link)."
+            )
+        return {
+            "mime_type": image["media_type"],
+            "data": base64.b64decode(image["data"]),
+        }
 
     def _metadata(self, response, tool_calls: list[dict]) -> dict:
         meta = {"finish_reason": self._finish(response)}

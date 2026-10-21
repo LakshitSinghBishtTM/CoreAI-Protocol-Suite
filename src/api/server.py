@@ -6,7 +6,14 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 from loguru import logger
 
 from agents.agent_manager import init_agent_manager
-from api import anthropic_compat, local_models_api, openai_compat, routes, runs_api, tools_api
+from api import (
+    anthropic_compat,
+    local_models_api,
+    openai_compat,
+    routes,
+    runs_api,
+    tools_api,
+)
 from api.auth import AuthContext, require_scope
 from api.middleware import RateLimitMiddleware
 from coreai import Orchestrator, Router, RoutingConfig, RoutingStrategy, tracing
@@ -104,7 +111,10 @@ async def lifespan(app: FastAPI):
         tools_rt.registry if tools_rt is not None else ToolRegistry(),
     )  # None unless config/agents.yml exists
     if app_state["harness"] is not None:
-        logger.info("Agent harness enabled; resumed %d interrupted run(s)", app_state["harness"].start())
+        logger.info(
+            "Agent harness enabled; resumed %d interrupted run(s)",
+            app_state["harness"].start(),
+        )
 
     logger.info("CoreAI server ready")
 

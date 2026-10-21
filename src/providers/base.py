@@ -83,7 +83,9 @@ class CompletionRequest:
     def cacheable(self) -> bool:
         """Tool conversations are never served from, or stored in, the cache:
         the cache key only covers role and content."""
-        return not self.tools and not any(m.tool_calls or m.images or m.role == "tool" for m in self.messages)
+        return not self.tools and not any(
+            m.tool_calls or m.images or m.role == "tool" for m in self.messages
+        )
 
 
 @dataclass
@@ -194,7 +196,8 @@ def tool_specs(request: "CompletionRequest") -> list[dict]:
             {
                 "name": fn.get("name", ""),
                 "description": fn.get("description", ""),
-                "parameters": fn.get("parameters") or {"type": "object", "properties": {}},
+                "parameters": fn.get("parameters")
+                or {"type": "object", "properties": {}},
             }
         )
     return specs
@@ -217,7 +220,9 @@ def json_instruction(response_format: Optional[dict]) -> Optional[str]:
     if kind == "json_schema":
         schema = (response_format.get("json_schema") or {}).get("schema")
         if schema:
-            text += " It must conform to this JSON schema: " + json.dumps(schema, separators=(",", ":"))
+            text += " It must conform to this JSON schema: " + json.dumps(
+                schema, separators=(",", ":")
+            )
     return text
 
 
@@ -236,14 +241,18 @@ def system_with_json(request: "CompletionRequest") -> Optional[str]:
     return "\n\n".join(p for p in (system, extra) if p) or None
 
 
-def openai_messages(request: "CompletionRequest", extra_system: Optional[str] = None) -> list[dict]:
+def openai_messages(
+    request: "CompletionRequest", extra_system: Optional[str] = None
+) -> list[dict]:
     """Messages in OpenAI's wire format, including tool calls and results."""
     system, rest = split_system(request)
     system = "\n\n".join(p for p in (system, extra_system) if p) or None
     out: list[dict] = [{"role": "system", "content": system}] if system else []
     for m in rest:
         if m.role == "tool":
-            out.append({"role": "tool", "tool_call_id": m.tool_call_id, "content": m.content})
+            out.append(
+                {"role": "tool", "tool_call_id": m.tool_call_id, "content": m.content}
+            )
         elif m.role == "assistant" and m.tool_calls:
             out.append(
                 {
@@ -253,22 +262,32 @@ def openai_messages(request: "CompletionRequest", extra_system: Optional[str] = 
                         {
                             "id": c["id"],
                             "type": "function",
-                            "function": {"name": c["name"], "arguments": c.get("arguments") or "{}"},
+                            "function": {
+                                "name": c["name"],
+                                "arguments": c.get("arguments") or "{}",
+                            },
                         }
                         for c in m.tool_calls
                     ],
                 }
             )
         elif m.images:
-            parts: list[dict] = [{"type": "text", "text": m.content}] if m.content else []
-            parts.extend({"type": "image_url", "image_url": {"url": image_url(i)}} for i in m.images)
+            parts: list[dict] = (
+                [{"type": "text", "text": m.content}] if m.content else []
+            )
+            parts.extend(
+                {"type": "image_url", "image_url": {"url": image_url(i)}}
+                for i in m.images
+            )
             out.append({"role": m.role, "content": parts})
         else:
             out.append({"role": m.role, "content": m.content})
     return out
 
 
-def openai_tool_kwargs(request: "CompletionRequest", native_schema: bool = True) -> dict:
+def openai_tool_kwargs(
+    request: "CompletionRequest", native_schema: bool = True
+) -> dict:
     """``tools``, ``tool_choice`` and ``response_format`` kwargs for an
     OpenAI-compatible endpoint. With ``native_schema`` False a json_schema
     format is downgraded to json_object (the schema goes in the prompt)."""
@@ -279,7 +298,11 @@ def openai_tool_kwargs(request: "CompletionRequest", native_schema: bool = True)
             kw["tool_choice"] = request.tool_choice
     rf = request.response_format
     if rf and rf.get("type") in ("json_object", "json_schema"):
-        kw["response_format"] = rf if (native_schema or rf["type"] == "json_object") else {"type": "json_object"}
+        kw["response_format"] = (
+            rf
+            if (native_schema or rf["type"] == "json_object")
+            else {"type": "json_object"}
+        )
     return kw
 
 

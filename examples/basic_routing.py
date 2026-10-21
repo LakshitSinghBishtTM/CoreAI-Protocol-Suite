@@ -1,4 +1,5 @@
 """OpenAI SDK pointed at CaiPS: only the base URL changes."""
+
 from openai import OpenAI
 
 client = OpenAI(base_url="http://localhost:8000/v1", api_key="YOUR_CAIPS_TOKEN")

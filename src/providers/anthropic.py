@@ -132,7 +132,11 @@ class AnthropicProvider(BaseProvider):
 
     @staticmethod
     def _metadata(response, tool_calls: list[dict]) -> dict:
-        meta = {"finish_reason": normalize_finish_reason(getattr(response, "stop_reason", None))}
+        meta = {
+            "finish_reason": normalize_finish_reason(
+                getattr(response, "stop_reason", None)
+            )
+        }
         if tool_calls:
             meta["tool_calls"] = tool_calls
             meta["finish_reason"] = "tool_calls"
@@ -146,7 +150,11 @@ class AnthropicProvider(BaseProvider):
             return {}
         kw: dict = {
             "tools": [
-                {"name": t["name"], "description": t["description"], "input_schema": t["parameters"]}
+                {
+                    "name": t["name"],
+                    "description": t["description"],
+                    "input_schema": t["parameters"],
+                }
                 for t in tool_specs(request)
             ]
         }
@@ -165,9 +173,17 @@ class AnthropicProvider(BaseProvider):
         messages: list[dict] = []
         for m in split_system(request)[1]:
             if m.role == "tool":
-                block = {"type": "tool_result", "tool_use_id": m.tool_call_id, "content": m.content}
+                block = {
+                    "type": "tool_result",
+                    "tool_use_id": m.tool_call_id,
+                    "content": m.content,
+                }
                 last = messages[-1] if messages else None
-                if last and last["role"] == "user" and isinstance(last["content"], list):
+                if (
+                    last
+                    and last["role"] == "user"
+                    and isinstance(last["content"], list)
+                ):
                     last["content"].append(block)  # results of one turn share a message
                 else:
                     messages.append({"role": "user", "content": [block]})
@@ -198,5 +214,9 @@ class AnthropicProvider(BaseProvider):
             return {"type": "image", "source": {"type": "url", "url": image["url"]}}
         return {
             "type": "image",
-            "source": {"type": "base64", "media_type": image["media_type"], "data": image["data"]},
+            "source": {
+                "type": "base64",
+                "media_type": image["media_type"],
+                "data": image["data"],
+            },
         }

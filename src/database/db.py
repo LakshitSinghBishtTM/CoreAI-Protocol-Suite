@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
-from sqlalchemy.pool import AsyncAdaptedQueuePool, NullPool
+from sqlalchemy.pool import NullPool
 
 # ------------------------------------------------------------------ #
 # Connection URL construction

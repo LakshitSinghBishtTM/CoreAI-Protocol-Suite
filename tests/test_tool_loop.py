@@ -42,7 +42,9 @@ def calc_registry():
 
 
 async def test_runs_tool_and_continues_to_final_answer():
-    route, seen = scripted(resp(calls=[call("calculator", {"expression": "2+2"})]), resp("four"))
+    route, seen = scripted(
+        resp(calls=[call("calculator", {"expression": "2+2"})]), resp("four")
+    )
     out = await run_tool_loop(route, calc_registry(), request(), allowed=["calculator"])
     assert out.response.content == "four" and out.stop_reason == "answered"
     assert out.steps[0].ok and "4" in out.steps[0].output
@@ -55,7 +57,9 @@ async def test_runs_tool_and_continues_to_final_answer():
 
 
 async def test_only_allowed_tools_are_offered_and_called():
-    route, seen = scripted(resp(calls=[call("calculator", {"expression": "1+1"})]), resp("done"))
+    route, seen = scripted(
+        resp(calls=[call("calculator", {"expression": "1+1"})]), resp("done")
+    )
     out = await run_tool_loop(route, calc_registry(), request(), allowed=[])
     assert seen[0].tools is None  # deny by default: nothing offered
     assert not out.steps[0].ok and out.steps[0].error_code == "not_allowed"
@@ -64,24 +68,37 @@ async def test_only_allowed_tools_are_offered_and_called():
 
 async def test_bad_arguments_are_fed_back_not_raised():
     route, _ = scripted(
-        resp(calls=[{"id": "c1", "name": "calculator", "arguments": "{nope"}]), resp("ok")
+        resp(calls=[{"id": "c1", "name": "calculator", "arguments": "{nope"}]),
+        resp("ok"),
     )
     out = await run_tool_loop(route, calc_registry(), request(), allowed=["*"])
-    assert out.steps[0].error_code == "invalid_arguments" and out.response.content == "ok"
+    assert (
+        out.steps[0].error_code == "invalid_arguments" and out.response.content == "ok"
+    )
 
 
 async def test_max_steps_stops_a_runaway_model():
-    calls = [resp(calls=[call("calculator", {"expression": "1"}, f"c{i}")]) for i in range(10)]
+    calls = [
+        resp(calls=[call("calculator", {"expression": "1"}, f"c{i}")])
+        for i in range(10)
+    ]
     route, seen = scripted(*calls)
-    out = await run_tool_loop(route, calc_registry(), request(), allowed=["*"], max_steps=2)
+    out = await run_tool_loop(
+        route, calc_registry(), request(), allowed=["*"], max_steps=2
+    )
     assert out.stop_reason == "max_steps" and len(out.steps) == 2
     assert len(seen) == 3
 
 
 async def test_cost_limit_stops_loop():
-    calls = [resp(calls=[call("calculator", {"expression": "1"}, f"c{i}")], cost=1.0) for i in range(5)]
+    calls = [
+        resp(calls=[call("calculator", {"expression": "1"}, f"c{i}")], cost=1.0)
+        for i in range(5)
+    ]
     route, _ = scripted(*calls)
-    out = await run_tool_loop(route, calc_registry(), request(), allowed=["*"], max_cost_usd=1.5)
+    out = await run_tool_loop(
+        route, calc_registry(), request(), allowed=["*"], max_cost_usd=1.5
+    )
     assert out.stop_reason == "cost_limit" and len(out.steps) == 1
 
 
@@ -95,5 +112,7 @@ async def test_destructive_tool_pauses_for_approval_then_runs_when_approved():
     assert out.stop_reason == "needs_approval" and out.pending_approval.tool == "wipe"
     assert not ran
     route2, _ = scripted(resp(calls=[call("wipe", {})]), resp("finished"))
-    out2 = await run_tool_loop(route2, r, request(), allowed=["wipe"], approved=["wipe"])
+    out2 = await run_tool_loop(
+        route2, r, request(), allowed=["wipe"], approved=["wipe"]
+    )
     assert ran == [1] and out2.response.content == "finished"

@@ -55,7 +55,10 @@ class ApprovalStore:
         self._sweep()
         fp = _fingerprint(caller, tool, arguments)
         for a in self._items.values():
-            if a.status in (PENDING, APPROVED) and _fingerprint(a.caller, a.tool, a.arguments) == fp:
+            if (
+                a.status in (PENDING, APPROVED)
+                and _fingerprint(a.caller, a.tool, a.arguments) == fp
+            ):
                 return a
         if len(self._items) >= self.max_items:
             raise RuntimeError("too many pending approvals")
@@ -91,7 +94,10 @@ class ApprovalStore:
         self._sweep()
         fp = _fingerprint(caller, tool, arguments)
         for a in self._items.values():
-            if a.status == APPROVED and _fingerprint(a.caller, a.tool, a.arguments) == fp:
+            if (
+                a.status == APPROVED
+                and _fingerprint(a.caller, a.tool, a.arguments) == fp
+            ):
                 a.status = USED
                 return True
         return False

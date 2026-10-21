@@ -47,12 +47,16 @@ class WebSearch:
         try:
             async with httpx.AsyncClient(timeout=10, transport=self.transport) as http:
                 r = await http.get(
-                    self.url, params={**self.params, self.query_param: query}, headers=self.headers
+                    self.url,
+                    params={**self.params, self.query_param: query},
+                    headers=self.headers,
                 )
                 r.raise_for_status()
                 data: Any = r.json()
         except (httpx.HTTPError, ValueError) as exc:
-            raise ToolError("tool_failed", f"Search failed: {type(exc).__name__}") from exc
+            raise ToolError(
+                "tool_failed", f"Search failed: {type(exc).__name__}"
+            ) from exc
         for key in filter(None, self.results_path.split(".")):
             data = data.get(key) if isinstance(data, dict) else None
         if not isinstance(data, list):
@@ -63,7 +67,9 @@ class WebSearch:
                 continue
             title = " ".join(str(item.get("title", "")).split())[:200]
             url = str(item.get("url") or item.get("link") or "")[:500]
-            snippet = " ".join(str(item.get("content") or item.get("snippet") or "").split())[:400]
+            snippet = " ".join(
+                str(item.get("content") or item.get("snippet") or "").split()
+            )[:400]
             lines.append(f"- {title}\n  {url}\n  {snippet}")
         return "\n".join(lines) or "No results."
 
@@ -78,7 +84,9 @@ class SqliteReader:
             raise ToolError("invalid_arguments", f"Unknown database '{database}'.")
         stmt = sql.strip().rstrip(";").strip()
         if ";" in stmt or not stmt.lower().startswith(("select", "with")):
-            raise ToolError("invalid_arguments", "Only a single SELECT statement is allowed.")
+            raise ToolError(
+                "invalid_arguments", "Only a single SELECT statement is allowed."
+            )
         conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=5)
         try:
             conn.execute("PRAGMA query_only = ON")
@@ -114,7 +122,9 @@ class SqliteReader:
 
 
 class ShellRunner:
-    def __init__(self, allowed_commands: list[str], cwd: str | Path, timeout_s: float = 20.0):
+    def __init__(
+        self, allowed_commands: list[str], cwd: str | Path, timeout_s: float = 20.0
+    ):
         self.allowed = set(allowed_commands)
         self.cwd = Path(cwd).resolve()
         self.timeout_s = timeout_s
@@ -125,7 +135,10 @@ class ShellRunner:
         except ValueError as exc:
             raise ToolError("invalid_arguments", f"Bad command line: {exc}") from exc
         if not argv or argv[0] not in self.allowed:
-            raise ToolError("not_allowed", f"Command '{argv[0] if argv else ''}' is not allow-listed.")
+            raise ToolError(
+                "not_allowed",
+                f"Command '{argv[0] if argv else ''}' is not allow-listed.",
+            )
         proc = await asyncio.create_subprocess_exec(
             *argv, cwd=self.cwd, env={"PATH": os.environ.get("PATH", "")},
             stdin=asyncio.subprocess.DEVNULL, stdout=asyncio.subprocess.PIPE,
@@ -136,7 +149,9 @@ class ShellRunner:
         except asyncio.TimeoutError as exc:
             proc.kill()
             await proc.wait()
-            raise ToolError("timeout", f"Command timed out after {self.timeout_s}s.") from exc
+            raise ToolError(
+                "timeout", f"Command timed out after {self.timeout_s}s."
+            ) from exc
         text = out.decode(errors="replace")
         return f"exit code {proc.returncode}\n{text}"
 
@@ -148,7 +163,12 @@ def register_extras(
     shell: Optional[ShellRunner] = None,
 ) -> None:
     def obj(props: dict, req: list[str]) -> dict:
-        return {"type": "object", "properties": props, "required": req, "additionalProperties": False}
+        return {
+            "type": "object",
+            "properties": props,
+            "required": req,
+            "additionalProperties": False,
+        }
 
     if search:
         registry.register(Tool(

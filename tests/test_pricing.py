@@ -103,8 +103,15 @@ providers:
     with pytest.raises(PricingError) as e:
         load_pricing(write(tmp_path, bad))
     msg = str(e.value)
-    for needle in ("version", "extra", "providers.a: missing 'default'",
-                   "m.input", "m.output", "junk", "providers.b.models"):
+    for needle in (
+        "version",
+        "extra",
+        "providers.a: missing 'default'",
+        "m.input",
+        "m.output",
+        "junk",
+        "providers.b.models",
+    ):
         assert needle in msg, needle
 
 
@@ -122,7 +129,12 @@ def test_missing_file_is_a_clear_error(tmp_path):
 
 def test_output_below_input_is_flagged(table):
     t = PriceTable(
-        {"a": {"default": Rate(1, 1), "models": {"odd": Rate(12, 10), "ok": Rate(1, 2)}}}
+        {
+            "a": {
+                "default": Rate(1, 1),
+                "models": {"odd": Rate(12, 10), "ok": Rate(1, 2)},
+            }
+        }
     )
     assert t.warnings() == ["a/odd"]
 
@@ -241,7 +253,9 @@ def test_estimates_do_not_count_as_unpriced_but_billing_does():
     from providers.openai import OpenAIProvider
 
     previous = get_pricing()
-    t = PriceTable({"openai": {"default": Rate(5, 15), "models": {"gpt-4o": Rate(5, 15)}}})
+    t = PriceTable(
+        {"openai": {"default": Rate(5, 15), "models": {"gpt-4o": Rate(5, 15)}}}
+    )
     set_pricing(t)
     try:
         p = OpenAIProvider.__new__(OpenAIProvider)

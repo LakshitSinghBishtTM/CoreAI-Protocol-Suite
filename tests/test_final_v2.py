@@ -5,7 +5,7 @@ End-to-end integration tests for the CoreAI high-level facade (CoreAI class
 in core_final.py) and the Kernel. All provider/router calls are mocked.
 """
 
-from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -53,9 +53,10 @@ class TestCoreAIFacade:
         """Patch boot() so no real providers are loaded.
         Import via package path to preserve relative imports inside coreai/.
         """
-        with patch("coreai.core_final.boot") as mock_boot, patch(
-            "coreai.core_final.Kernel"
-        ) as MockKernel:
+        with (
+            patch("coreai.core_final.boot") as mock_boot,
+            patch("coreai.core_final.Kernel") as MockKernel,
+        ):
             mock_kernel = _mock_kernel()
             MockKernel.return_value = mock_kernel
             mock_boot.return_value = (MagicMock(), MagicMock())
@@ -160,7 +161,7 @@ class TestCoreAIFacade:
         CoreAI, mock_kernel = ai_class
         mock_kernel.orchestrator.assign_task.return_value = MagicMock(task_id="t-001")
         async with CoreAI() as ai:
-            task = ai.assign_task("agent-1", "Summarize the logs", {"limit": 100})
+            ai.assign_task("agent-1", "Summarize the logs", {"limit": 100})
         mock_kernel.orchestrator.assign_task.assert_called_once()
 
     @pytest.mark.asyncio
@@ -168,7 +169,7 @@ class TestCoreAIFacade:
         CoreAI, mock_kernel = ai_class
         mock_kernel.orchestrator.get_task.return_value = MagicMock(task_id="t-007")
         async with CoreAI() as ai:
-            task = ai.get_task("t-007")
+            ai.get_task("t-007")
         mock_kernel.orchestrator.get_task.assert_called_once_with("t-007")
 
 

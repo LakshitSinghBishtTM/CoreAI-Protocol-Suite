@@ -6,10 +6,9 @@ Uses TestClient; no real providers are loaded.
 """
 
 from datetime import timedelta
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
-from fastapi.testclient import TestClient
 from jose import jwt
 
 # ---------------------------------------------------------------------------
@@ -45,7 +44,6 @@ class TestCreateAccessToken:
         assert "exp" in payload
 
     def test_custom_expiry(self, monkeypatch):
-        import time
 
         monkeypatch.setenv("SECRET_KEY", "test-secret-key-fixture")
         from auth import create_access_token

@@ -14,7 +14,6 @@ import hashlib
 import hmac
 import json
 import time
-from typing import Optional
 
 import httpx
 from loguru import logger
@@ -23,7 +22,9 @@ from .approvals import Approval
 
 
 def sign(secret: str, timestamp: str, body: str) -> str:
-    return hmac.new(secret.encode(), f"{timestamp}.{body}".encode(), hashlib.sha256).hexdigest()
+    return hmac.new(
+        secret.encode(), f"{timestamp}.{body}".encode(), hashlib.sha256
+    ).hexdigest()
 
 
 def payload_for(a: Approval, include_arguments: bool) -> dict:
@@ -38,7 +39,9 @@ def payload_for(a: Approval, include_arguments: bool) -> dict:
 
 
 class ApprovalWebhook:
-    def __init__(self, url: str, secret: str, include_arguments: bool = False, transport=None):
+    def __init__(
+        self, url: str, secret: str, include_arguments: bool = False, transport=None
+    ):
         if not secret:
             raise ValueError("approval webhook needs a signing secret")
         self.url, self.secret = url, secret

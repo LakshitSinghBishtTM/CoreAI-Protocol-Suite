@@ -36,9 +36,9 @@ jobs:
       - name: Install dependencies
         run: pip install -e .[dev]
       - name: ruff
-        run: ruff check src/coreai src/api src/agents
+        run: ruff check .
       - name: black
-        run: black --check src/coreai src/api src/agents
+        run: black --check .
       - name: mypy (ratchet list in pyproject.toml)
         run: mypy
 

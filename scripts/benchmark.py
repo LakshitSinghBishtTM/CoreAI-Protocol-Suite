@@ -71,14 +71,14 @@ class BenchmarkResult:
         print(f"  Elapsed         : {self.elapsed():.1f}s")
         print(f"  Throughput      : {self.throughput():.2f} req/s")
         if self.latencies:
-            print(f"\n  Latency (ms)")
+            print("\n  Latency (ms)")
             print(f"    P50           : {self.percentile(50):.0f}ms")
             print(f"    P95           : {self.percentile(95):.0f}ms")
             print(f"    P99           : {self.percentile(99):.0f}ms")
             print(f"    Min           : {min(self.latencies):.0f}ms")
             print(f"    Max           : {max(self.latencies):.0f}ms")
         if self.costs:
-            print(f"\n  Cost")
+            print("\n  Cost")
             print(f"    Total         : ${sum(self.costs):.6f}")
             print(f"    Avg/request   : ${statistics.mean(self.costs):.6f}")
         if self.errors:

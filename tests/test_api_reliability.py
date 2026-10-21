@@ -191,7 +191,6 @@ def test_unexpected_errors_are_500_without_internal_details(make_client, auth):
     assert "hunter2" not in r.text
 
 
-
 def _sse_text(body: str) -> str:
     """Concatenate the content of SSE ``data:`` frames (ignores [DONE])."""
     import json as _json

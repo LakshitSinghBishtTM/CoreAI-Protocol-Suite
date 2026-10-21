@@ -22,7 +22,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), "src
 
 from database.db import get_session, init_db
 from database.migrations import create_all_tables
-from database.models import Agent, APIKey, Base, RequestLog, Task, UsageDaily
+from database.models import Agent, APIKey, RequestLog, Task, UsageDaily
 
 PROVIDERS = ["openai", "anthropic", "gemini", "deepseek", "grok"]
 MODELS = {
@@ -87,7 +87,7 @@ async def seed_request_logs(session, n: int = 500):
             )
         )
     session.add_all(logs)
-    print(f"  Done.")
+    print("  Done.")
 
 
 async def seed_usage_daily(session, days: int = 30):
@@ -114,7 +114,7 @@ async def seed_usage_daily(session, days: int = 30):
                     p95_latency_ms=round(random.uniform(1200, 4500), 1),
                 )
             )
-    print(f"  Done.")
+    print("  Done.")
 
 
 async def seed_agents_and_tasks(session):
@@ -169,11 +169,11 @@ async def seed_agents_and_tasks(session):
                     ),
                 )
             )
-    print(f"  Done.")
+    print("  Done.")
 
 
 async def seed_api_keys(session):
-    print(f"  Seeding API keys...")
+    print("  Seeding API keys...")
     keys = [
         ("dev-local", "lakshit", "coreai-dev-Xm7kQ2nP4vL9wR5j"),
         ("prod-svc", "lakshit", "coreai-prod-Tz1Yw9Lc3Fh6Jd5B"),
@@ -191,7 +191,7 @@ async def seed_api_keys(session):
                 created_at=random_date(90),
             )
         )
-    print(f"  Done.")
+    print("  Done.")
 
 
 async def main(reset: bool = False):

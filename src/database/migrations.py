@@ -44,7 +44,7 @@ CREATE TABLE IF NOT EXISTS _schema_migrations (
 
 async def _ensure_migrations_table(session):
     """Create tracking table if it doesn't exist."""
-    url = str(session.bind.url) if hasattr(session, "bind") else ""
+    str(session.bind.url) if hasattr(session, "bind") else ""
     ddl = (
         CREATE_MIGRATIONS_TABLE_PG
         if "postgresql" in str(session.get_bind())

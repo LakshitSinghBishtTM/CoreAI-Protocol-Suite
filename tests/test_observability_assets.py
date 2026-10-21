@@ -29,9 +29,7 @@ def exposed_names():
         }
     ]
     text = render_prometheus(stats)
-    return {
-        re.split(r"[{ ]", line)[0] for line in text.splitlines() if line[:1] != "#"
-    }
+    return {re.split(r"[{ ]", line)[0] for line in text.splitlines() if line[:1] != "#"}
 
 
 def used_names(expr):
@@ -45,7 +43,9 @@ def dashboard_exprs():
 
 def alert_exprs():
     data = yaml.safe_load(ALERTS.read_text())
-    return [r["expr"] for g in data["groups"] for r in g["rules"] if "caips_" in r["expr"]]
+    return [
+        r["expr"] for g in data["groups"] for r in g["rules"] if "caips_" in r["expr"]
+    ]
 
 
 def test_dashboard_is_valid_and_panels_do_not_overlap():

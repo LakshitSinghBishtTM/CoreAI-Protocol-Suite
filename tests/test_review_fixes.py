@@ -2,8 +2,8 @@ import asyncio
 
 from coreai.cache import ResponseCache
 from coreai.orchestrator import Orchestrator
-from providers.base import CompletionRequest, Message, split_system
 from providers.anthropic import AnthropicProvider
+from providers.base import CompletionRequest, Message, split_system
 
 
 def test_cache_key_changes_with_every_option():
@@ -11,7 +11,11 @@ def test_cache_key_changes_with_every_option():
     m = [{"role": "user", "content": "hi"}]
     base = {"system_prompt": None, "temperature": 0.7, "max_tokens": 50}
     k = c._make_key("p", "m", m, base)
-    for opt, val in [("system_prompt", "be brief"), ("temperature", 0.1), ("max_tokens", 2000)]:
+    for opt, val in [
+        ("system_prompt", "be brief"),
+        ("temperature", 0.1),
+        ("max_tokens", 2000),
+    ]:
         assert c._make_key("p", "m", m, {**base, opt: val}) != k
 
 
@@ -38,7 +42,9 @@ def test_split_system_merges_prompt_and_system_messages():
 
 def test_anthropic_keeps_system_messages():
     p = AnthropicProvider.__new__(AnthropicProvider)
-    req = CompletionRequest(messages=[Message("system", "Answer in French"), Message("user", "hi")])
+    req = CompletionRequest(
+        messages=[Message("system", "Answer in French"), Message("user", "hi")]
+    )
     assert split_system(req)[0] == "Answer in French"
     assert p._build_messages(req) == [{"role": "user", "content": "hi"}]
 
@@ -50,11 +56,14 @@ def test_task_priority_is_stored_and_ordered():
     hi = o.assign_task("a", "high", priority=3)
     assert hi.priority == 3
     from coreai.orchestrator import TaskStatus
-    assert [t.task_id for t in o.task_store.list_by_status(TaskStatus.PENDING)] == [hi.task_id, lo.task_id]
+
+    assert [t.task_id for t in o.task_store.list_by_status(TaskStatus.PENDING)] == [
+        hi.task_id,
+        lo.task_id,
+    ]
 
 
 # ---- second review ---------------------------------------------------------
-import hashlib
 import time
 from types import SimpleNamespace
 
@@ -78,6 +87,7 @@ class _Agent:
 
 def _setup(agent, timeout=5.0):
     orch = Orchestrator()
+
     class _Mgr:
         agents = {"a1": SimpleNamespace(agent=agent)}
 
@@ -152,7 +162,9 @@ def test_middleware_separates_bearer_clients_on_one_ip():
             headers={"Authorization": auth}, client=SimpleNamespace(host="1.1.1.1")
         )
 
-    a, b = mw._get_client_key(req("Bearer eyJhbGci.aaa")), mw._get_client_key(req("Bearer eyJhbGci.bbb"))
+    a, b = mw._get_client_key(req("Bearer eyJhbGci.aaa")), mw._get_client_key(
+        req("Bearer eyJhbGci.bbb")
+    )
     assert a != b and a.startswith("bearer:") and "aaa" not in a
 
 
@@ -161,8 +173,11 @@ def test_cache_hit_reports_current_latency():
 
     async def run():
         router = make_router({"a": make_provider("a")}, enable_cache=True)
-        req = lambda: CompletionRequest(messages=[Message("user", "hello")])
-        first = await router.route(req())
+
+        def req():
+            return CompletionRequest(messages=[Message("user", "hello")])
+
+        await router.route(req())
         first_cached = await router.route(req())
         assert first_cached.cached and first_cached.cost_usd == 0.0
         assert first_cached.latency_ms < 1000
@@ -208,7 +223,9 @@ def test_health_check_keeps_context_while_a_task_is_running():
 
     a = AutonomousAgent.__new__(AutonomousAgent)
     a.agent_id, a.kernel, a.system_prompt = "x", K(), "sys"
-    a.context = SimpleNamespace(clear=lambda: setattr(a, "cleared", True), append=lambda *x: None)
+    a.context = SimpleNamespace(
+        clear=lambda: setattr(a, "cleared", True), append=lambda *x: None
+    )
     a._last_active = time.monotonic() - 10_000
     a._active = 1
     asyncio.run(a.health_check())

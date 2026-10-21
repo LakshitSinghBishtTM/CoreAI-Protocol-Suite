@@ -6,7 +6,12 @@ import httpx
 import pytest
 
 from tools import Permission, ToolError, ToolRegistry
-from tools.mcp_client import HttpTransport, McpClient, connect_servers, register_remote_tools
+from tools.mcp_client import (
+    HttpTransport,
+    McpClient,
+    connect_servers,
+    register_remote_tools,
+)
 
 
 class FakeTransport:
@@ -32,12 +37,20 @@ class FakeTransport:
                 text, err = self.call(p["name"], p["arguments"]), False
             except Exception as exc:
                 text, err = str(exc), True
-            return {"jsonrpc": "2.0", "id": mid, "result": {"content": [{"type": "text", "text": text}], "isError": err}}
+            return {
+                "jsonrpc": "2.0",
+                "id": mid,
+                "result": {"content": [{"type": "text", "text": text}], "isError": err},
+            }
         return None
 
 
 def spec(name, desc="d", schema=None):
-    return {"name": name, "description": desc, "inputSchema": schema or {"type": "object"}}
+    return {
+        "name": name,
+        "description": desc,
+        "inputSchema": schema or {"type": "object"},
+    }
 
 
 async def connected(tools, **kw):
@@ -65,11 +78,17 @@ async def test_remote_metadata_is_untrusted():
     assert await register_remote_tools(r, c, ["*"]) == ["srv__ok"]
     t = r.get("srv__ok")
     assert "\n" not in t.description and len(t.description) <= 500
-    assert t.permission is Permission.WRITE and t.owner == "mcp:srv"  # not read_only by default
+    assert (
+        t.permission is Permission.WRITE and t.owner == "mcp:srv"
+    )  # not read_only by default
 
 
 async def test_call_goes_through_registry_checks_and_remote_errors_surface():
-    schema = {"type": "object", "properties": {"n": {"type": "integer"}}, "required": ["n"]}
+    schema = {
+        "type": "object",
+        "properties": {"n": {"type": "integer"}},
+        "required": ["n"],
+    }
 
     def call(name, args):
         if args["n"] < 0:
@@ -81,7 +100,9 @@ async def test_call_goes_through_registry_checks_and_remote_errors_surface():
     await register_remote_tools(r, c, ["count"])
     ok = await r.call("srv__count", {"n": 3}, allowed=["srv__count"])
     assert ok.content == "got 3"
-    with pytest.raises(ToolError) as e:  # schema enforced locally, before the remote sees it
+    with pytest.raises(
+        ToolError
+    ) as e:  # schema enforced locally, before the remote sees it
         await r.call("srv__count", {"n": "x"}, allowed=["srv__count"])
     assert e.value.code == "invalid_arguments"
     with pytest.raises(ToolError) as e:
@@ -100,9 +121,13 @@ async def test_http_transport_round_trip():
         if "id" not in msg:
             return httpx.Response(202)
         result = {"tools": [spec("ping")]} if msg["method"] == "tools/list" else {}
-        return httpx.Response(200, json={"jsonrpc": "2.0", "id": msg["id"], "result": result})
+        return httpx.Response(
+            200, json={"jsonrpc": "2.0", "id": msg["id"], "result": result}
+        )
 
-    c = McpClient("web", HttpTransport("http://x/mcp", transport=httpx.MockTransport(handler)))
+    c = McpClient(
+        "web", HttpTransport("http://x/mcp", transport=httpx.MockTransport(handler))
+    )
     await c.connect()
     assert [t["name"] for t in await c.list_tools()] == ["ping"]
     await c.close()
@@ -131,7 +156,9 @@ async def test_real_stdio_round_trip_with_our_own_server(tmp_path):
     })  # fmt: skip
     try:
         assert [t.name for t in r.visible(["*"])] == ["remote__calculator"]
-        out = await r.call("remote__calculator", {"expression": "7*6"}, allowed=["remote__calculator"])
+        out = await r.call(
+            "remote__calculator", {"expression": "7*6"}, allowed=["remote__calculator"]
+        )
         assert "42" in out.content
     finally:
         for c in clients:

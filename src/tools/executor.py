@@ -10,7 +10,7 @@ step limit is hit, or a call needs approval.
 
 import json
 from dataclasses import dataclass, field, replace
-from typing import Any, Awaitable, Callable, Iterable, Optional
+from typing import Awaitable, Callable, Iterable, Optional
 
 from providers.base import CompletionRequest, CompletionResponse, Message
 
@@ -109,14 +109,18 @@ async def run_tool_loop(
     return result
 
 
-async def _run_one(registry, call, allowed, caller, approved, max_permission) -> ToolStep:
+async def _run_one(
+    registry, call, allowed, caller, approved, max_permission
+) -> ToolStep:
     cid, name = call.get("id", ""), call.get("name", "")
     try:
         args = json.loads(call.get("arguments") or "{}")
         if not isinstance(args, dict):
             raise ValueError("arguments must be an object")
     except ValueError as exc:
-        return ToolStep(cid, name, {}, False, f"Invalid arguments: {exc}", 0.0, "invalid_arguments")
+        return ToolStep(
+            cid, name, {}, False, f"Invalid arguments: {exc}", 0.0, "invalid_arguments"
+        )
     try:
         try:
             res = await registry.call(
@@ -135,4 +139,6 @@ async def _run_one(registry, call, allowed, caller, approved, max_permission) ->
         return ToolStep(cid, name, args, False, str(exc), 0.0, exc.code)
     except ToolError as exc:
         # Errors go back to the model so it can correct itself.
-        return ToolStep(cid, name, args, False, f"Tool error ({exc.code}): {exc}", 0.0, exc.code)
+        return ToolStep(
+            cid, name, args, False, f"Tool error ({exc.code}): {exc}", 0.0, exc.code
+        )

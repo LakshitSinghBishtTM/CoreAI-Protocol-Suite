@@ -4,9 +4,7 @@ tests/test_protocols.py
 Unit tests for protocols/ — secure_protocol, distributed_agent.
 """
 
-import asyncio
 import time
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -215,7 +213,9 @@ class TestAgentMessageRouter:
         tampered = sealed[:-1] + bytes([sealed[-1] ^ 0xFF])  # flip a MAC byte
 
         assert router.unseal("agent-b", tampered) is None
-        assert router.unseal("agent-b", sealed) is not None  # untouched copy still opens
+        assert (
+            router.unseal("agent-b", sealed) is not None
+        )  # untouched copy still opens
 
     @pytest.mark.asyncio
     async def test_broadcast_to_multiple_recipients_all_open(self):
@@ -248,4 +248,3 @@ class TestAgentMessageRouter:
         assert opened_b is not None
         assert opened_c is not None
         assert opened_b.msg_id == opened_c.msg_id == env.msg_id
-
