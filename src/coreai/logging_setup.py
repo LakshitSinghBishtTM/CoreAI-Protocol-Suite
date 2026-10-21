@@ -38,8 +38,13 @@ _RESERVED = {"ts", "level", "logger", "message", "request_id", "exception"}
 
 
 def redact(text: str) -> str:
+    """Mask secrets, then PII (on by default; ``COREAI_LOG_REDACT_PII=0`` turns PII off)."""
     for pattern, repl in _SECRET_PATTERNS:
         text = pattern.sub(repl, text)
+    if os.getenv("COREAI_LOG_REDACT_PII", "1").lower() not in ("0", "false", "no"):
+        from guardrails.pii import redact as pii_redact
+
+        text = pii_redact(text)
     return text
 
 

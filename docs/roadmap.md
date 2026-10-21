@@ -262,7 +262,7 @@ These features only pay off once real agent runs exist to measure and protect. E
 
 **Guardrails**
 
-- Input and output filters: PII detection and redaction, secret detection, and configurable blocked topics.
+- Input and output filters: PII detection and redaction, secret detection, and configurable blocked topics. *Status: PII and secret detection/redaction done (`src/guardrails/pii.py`) and on by default in logs (`COREAI_LOG_REDACT_PII=0` disables); request/response filters and blocked topics open.*
 - Prompt-injection defenses for tool results and retrieved documents.
 - Output validation against JSON schemas with automatic retry.
 - Policy per key or team: which models, tools and data an agent may use.
