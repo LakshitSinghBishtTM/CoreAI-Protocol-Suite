@@ -223,6 +223,10 @@ class TrainingError(RuntimeError):
     pass
 
 
+class CostLimitError(TrainingError):
+    """The pre-launch estimate is above the caller's ``max_cost_usd``."""
+
+
 class DatasetValidationError(TrainingError):
     pass
 
@@ -347,7 +351,7 @@ class TrainingManager:
             raise DatasetValidationError("Dataset exceeds the 100 MB upload limit.")
         est = self.estimate(config)
         if max_cost_usd is not None and est["estimated_usd"] > max_cost_usd:
-            raise TrainingError(
+            raise CostLimitError(
                 f"Estimated cost ${est['estimated_usd']} exceeds the limit ${max_cost_usd}; nothing was submitted."
             )
 

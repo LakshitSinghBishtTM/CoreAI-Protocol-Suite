@@ -892,6 +892,11 @@ class SubmitFineTuneRequest(BaseModel):
     )
     suffix: str = "coreai-ft"
     description: str = ""
+    max_cost_usd: Optional[float] = Field(
+        None,
+        ge=0,
+        description="Refuse (before anything is uploaded) if the pre-launch estimate is higher.",
+    )
 
 
 class FineTuneJobResponse(BaseModel):
@@ -903,6 +908,7 @@ class FineTuneJobResponse(BaseModel):
     trained_tokens: int
     duration_s: Optional[float] = None
     cost_estimate_usd: float
+    estimated_usd: Optional[float] = None
     checkpoint_count: int
     error: Optional[str] = None
 
@@ -924,6 +930,54 @@ def _finetune_provider(provider_name: str):
     return provider
 
 
+def _finetune_config(body: "SubmitFineTuneRequest"):
+    from neural.training import (
+        HyperparamConfig,
+        HyperparamPreset,
+        TrainingDataset,
+        TrainingExample,
+        TrainingJobConfig,
+    )
+
+    try:
+        preset = HyperparamPreset(body.hyperparam_preset)
+    except ValueError:
+        valid = [p.value for p in HyperparamPreset]
+        raise HTTPException(
+            status_code=422,
+            detail=f"Unknown hyperparam_preset '{body.hyperparam_preset}'. Valid: {valid}",
+        )
+    dataset = TrainingDataset(
+        examples=[
+            TrainingExample(messages=e.messages, weight=e.weight) for e in body.examples
+        ]
+    )
+    return TrainingJobConfig(
+        base_model=body.base_model,
+        provider=body.provider,
+        dataset=dataset,
+        hyperparams=HyperparamConfig.from_preset(preset),
+        suffix=body.suffix,
+        description=body.description,
+    )
+
+
+@router.post(
+    "/finetune/estimate",
+    summary="Estimate a fine-tuning job's cost without submitting it",
+    tags=["admin"],
+)
+async def estimate_finetune_job(
+    body: SubmitFineTuneRequest,
+    ctx: AuthContext = Depends(require_scope("admin")),
+):
+    from neural.training import get_training_manager
+
+    config = _finetune_config(body)
+    validation = config.dataset.validate()
+    return {"validation": validation, **get_training_manager().estimate(config)}
+
+
 @router.post(
     "/finetune/jobs",
     response_model=FineTuneJobResponse,
@@ -936,45 +990,21 @@ async def submit_finetune_job(
     ctx: AuthContext = Depends(require_scope("admin")),
 ):
     from neural.training import (
+        CostLimitError,
         DatasetValidationError,
-        HyperparamConfig,
-        HyperparamPreset,
-        TrainingDataset,
         TrainingError,
-        TrainingExample,
-        TrainingJobConfig,
         UnsupportedProviderError,
         get_training_manager,
     )
 
     provider = _finetune_provider(body.provider)
+    config = _finetune_config(body)
 
     try:
-        preset = HyperparamPreset(body.hyperparam_preset)
-    except ValueError:
-        valid = [p.value for p in HyperparamPreset]
-        raise HTTPException(
-            status_code=422,
-            detail=f"Unknown hyperparam_preset '{body.hyperparam_preset}'. Valid: {valid}",
+        job = await get_training_manager().submit(
+            config, provider.fine_tuning_client(), max_cost_usd=body.max_cost_usd
         )
-
-    dataset = TrainingDataset(
-        examples=[
-            TrainingExample(messages=e.messages, weight=e.weight) for e in body.examples
-        ]
-    )
-    config = TrainingJobConfig(
-        base_model=body.base_model,
-        provider=body.provider,
-        dataset=dataset,
-        hyperparams=HyperparamConfig.from_preset(preset),
-        suffix=body.suffix,
-        description=body.description,
-    )
-
-    try:
-        job = await get_training_manager().submit(config, provider.fine_tuning_client())
-    except DatasetValidationError as e:
+    except (DatasetValidationError, CostLimitError) as e:
         raise HTTPException(status_code=422, detail=str(e))
     except UnsupportedProviderError as e:
         raise HTTPException(status_code=501, detail=str(e))
