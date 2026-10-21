@@ -245,7 +245,7 @@ These features only pay off once real agent runs exist to measure and protect. E
 
 - A small suite that replays tasks against agents, models and routing configs and scores the results (exact match, rubric, or model-graded). *Status: done for models and routing configs (`src/evals/`, `python -m evals`, `docs/evals.md`); agent replay, CLI rubric grading and a scheduled CI job are open.*
 - Regression runs in CI on a schedule, with cost and latency recorded next to quality.
-- Routing evals that compare policies, for example local-first against cloud-only, on the same tasks. *Status: `compare()` done; no shipped policy comparison yet.*
+- Routing evals that compare policies, for example local-first against cloud-only, on the same tasks. *Status: `compare()` done and exposed as `python -m evals tasks.yml --compare cheap best local`, which prints quality, cost and latency per model or alias.*
 - User feedback (thumbs up or down, corrections) stored against requests, usable as an eval source.
 
 **Memory**
@@ -258,7 +258,7 @@ These features only pay off once real agent runs exist to measure and protect. E
 
 - An embeddings endpoint (cloud and local) and a vector store abstraction (SQLite-vec or pgvector first). *Status: embeddings endpoint existed; SQLite vector store with brute-force cosine done (`src/rag/store.py`, per-owner collections, dimension-mismatch safe, bounded size); SQLite-vec/pgvector open.*
 - Document ingestion: text, Markdown, PDF and HTML with chunking, metadata and re-indexing. *Status: done for text, Markdown and HTML; PDF needs optional `pypdf`, untested; unchanged sources skip re-embedding; no ingestion API yet.*
-- A retrieval tool in the tools layer, so any agent can search a collection with citations. *Status: done (`rag/tool.py`, bound to one owner and collection, results wrapped as untrusted); not yet registered from config.*
+- A retrieval tool in the tools layer, so any agent can search a collection with citations. *Status: done (`rag/tool.py`, bound to one owner and collection, results wrapped as untrusted); registered from `rag:` in `config/tools.yml`, one `search_<name>` tool per collection).*
 
 **Guardrails**
 

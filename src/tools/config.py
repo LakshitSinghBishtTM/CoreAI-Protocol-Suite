@@ -90,7 +90,26 @@ def _register_extras(registry: ToolRegistry, cfg: dict) -> None:
         ))  # fmt: skip
 
 
-def build_runtime(config: Optional[dict]) -> ToolsRuntime:
+def _register_rag(registry: ToolRegistry, cfg: dict, embed) -> None:
+    """One read-only search tool per configured (owner, collection); needs an embed function."""
+    rag = cfg.get("rag") or {}
+    if not rag.get("collections"):
+        return
+    if embed is None:
+        raise ValueError(
+            "rag.collections needs an embedding function (gateway embeddings)"
+        )
+    from rag.store import VectorStore
+    from rag.tool import retrieval_tool
+
+    store = VectorStore(rag.get("db", "data/rag.db"), embed)
+    for c in rag["collections"]:
+        registry.register(
+            retrieval_tool(store, str(c["owner"]), str(c["name"]), int(c.get("k", 4)))
+        )
+
+
+def build_runtime(config: Optional[dict], embed=None) -> ToolsRuntime:
     cfg = config or {}
     registry = ToolRegistry()
     workspace = Workspace(cfg["workspace"]) if cfg.get("workspace") else None
@@ -98,6 +117,7 @@ def build_runtime(config: Optional[dict]) -> ToolsRuntime:
     fetcher = HttpFetcher(domains) if domains else None
     register_builtins(registry, workspace, fetcher)
     _register_extras(registry, cfg)
+    _register_rag(registry, cfg, embed)
     for name, per_min in (cfg.get("rate_per_minute") or {}).items():
         tool = registry.get(name)
         if tool is not None:
@@ -124,7 +144,9 @@ def build_runtime(config: Optional[dict]) -> ToolsRuntime:
     return rt
 
 
-def load_tools_runtime(path: Optional[str] = None) -> Optional[ToolsRuntime]:
+def load_tools_runtime(
+    path: Optional[str] = None, embed=None
+) -> Optional[ToolsRuntime]:
     """None when there is no config file: the tools layer is opt-in."""
     path = path or os.getenv("COREAI_TOOLS_FILE", "config/tools.yml")
     if not os.path.exists(path):
@@ -132,4 +154,4 @@ def load_tools_runtime(path: Optional[str] = None) -> Optional[ToolsRuntime]:
     import yaml
 
     with open(path) as fh:
-        return build_runtime(yaml.safe_load(fh) or {})
+        return build_runtime(yaml.safe_load(fh) or {}, embed)

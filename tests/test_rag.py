@@ -120,3 +120,23 @@ async def test_ingest_needs_embed_function(tmp_path):
         await s.ingest_file("u", "c", f) == 1
         and s.sources("u", "c")[0]["source"] == "a.txt"
     )
+
+
+def test_rag_tool_registered_from_config(tmp_path):
+    import pytest
+
+    from tools.config import build_runtime
+
+    async def embed(texts):
+        return [[1.0, 0.0] for _ in texts]
+
+    cfg = {
+        "rag": {
+            "db": str(tmp_path / "r.db"),
+            "collections": [{"owner": "o", "name": "my-docs"}],
+        }
+    }
+    rt = build_runtime(cfg, embed)
+    assert "search_my_docs" in [t.name for t in rt.registry.visible(["*"])]
+    with pytest.raises(ValueError):
+        build_runtime(cfg)

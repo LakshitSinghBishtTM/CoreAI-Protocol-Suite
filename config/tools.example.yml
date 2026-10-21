@@ -30,3 +30,7 @@ mcp_servers: {}                       # external MCP servers; see docs/tools.md
 #   enabled: true                     # also needs max_permission: destructive
 #   timeout_s: 10
 #   memory_mb: 256
+# rag:                                # one search_<name> tool per collection (read-only)
+#   db: ./data/rag.db
+#   collections:
+#     - {owner: default, name: docs, k: 4}   # grant search_docs to subjects

@@ -71,7 +71,12 @@ async def lifespan(app: FastAPI):
     app_state["providers"] = providers
     from tools.config import load_tools_runtime
 
-    app_state["tools"] = load_tools_runtime()  # None unless config/tools.yml exists
+    async def _embed(texts):  # gateway embeddings (cloud or local) for RAG tools
+        return (await get_router().embed(texts))[0]
+
+    app_state["tools"] = load_tools_runtime(
+        embed=_embed
+    )  # None unless config/tools.yml exists
     if app_state["tools"] is not None:
         app_state["tools"].registry.on_call = tool_audit_hook
         from tools.mcp_client import connect_servers

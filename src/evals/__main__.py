@@ -14,7 +14,7 @@ from types import SimpleNamespace
 
 import httpx
 
-from .runner import load_tasks, regressions, run_suite
+from .runner import compare, load_tasks, regressions, run_suite
 
 
 def http_route(client: httpx.AsyncClient):
@@ -50,12 +50,23 @@ def http_route(client: httpx.AsyncClient):
     return route
 
 
+def _with_model(req, model):
+    req.model = model
+    return req
+
+
 async def main(argv: list[str] | None = None, transport=None) -> int:
     ap = argparse.ArgumentParser(prog="evals")
     ap.add_argument("tasks")
     ap.add_argument("--base-url", default="http://localhost:8000")
     ap.add_argument("--model", default=None)
     ap.add_argument("--tag", action="append")
+    ap.add_argument(
+        "--compare",
+        nargs="+",
+        metavar="MODEL",
+        help="run the same tasks on several models or aliases (e.g. cheap best local) and print a table",
+    )
     ap.add_argument("--out", default="eval-results.json")
     ap.add_argument("--baseline")
     ap.add_argument("--tolerance", type=float, default=0.05)
@@ -68,6 +79,32 @@ async def main(argv: list[str] | None = None, transport=None) -> int:
     async with httpx.AsyncClient(
         base_url=a.base_url, headers=headers, timeout=120, transport=transport
     ) as c:
+        if a.compare:
+            route = http_route(c)
+            reps = {}
+            for m in a.compare:
+                reps[m] = (
+                    await compare(
+                        load_tasks(a.tasks),
+                        {m: lambda r, m=m: route(_with_model(r, m))},
+                        tags=a.tag,
+                    )
+                )[m]
+            json.dump(reps, open(a.out, "w"), indent=2)
+            print(
+                f"{'config':<16}{'quality':>8}{'errors':>7}{'cost $':>10}{'p50 ms':>8}{'p95 ms':>8}"
+            )
+            for m, r in reps.items():
+                row = (
+                    m,
+                    r["quality"],
+                    r["errors"],
+                    r["cost_usd"],
+                    r["p50_ms"],
+                    r["p95_ms"],
+                )
+                print("%-16s%8.2f%7d%10.4f%8.0f%8.0f" % row)
+            return 0
         rep = await run_suite(
             load_tasks(a.tasks), http_route(c), model=a.model, tags=a.tag
         )

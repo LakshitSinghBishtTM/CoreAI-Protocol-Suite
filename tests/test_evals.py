@@ -103,3 +103,38 @@ async def test_cli_runs_and_flags_regression(tmp_path):
     state["answer"] = "41"
     argv = [str(tmp_path / "t.yml"), "--out", out, "--baseline", base]
     assert await main(argv, transport=tr) == 1
+
+
+def test_cli_compare_models(tmp_path, capsys):
+    import asyncio
+    import json
+
+    import httpx
+
+    from evals.__main__ import main
+
+    def handler(request):
+        model = json.loads(request.content)["model"]
+        text = "42" if model == "best" else "wrong"
+        return httpx.Response(
+            200,
+            json={
+                "model": model,
+                "choices": [{"message": {"content": text}}],
+                "usage": {},
+            },
+        )
+
+    tasks = tmp_path / "t.yml"
+    tasks.write_text(
+        "tasks:\n  - id: a\n    prompt: q\n    scorer: {type: contains, expected: '42'}\n"
+    )
+    out = tmp_path / "o.json"
+    rc = asyncio.run(
+        main(
+            [str(tasks), "--compare", "cheap", "best", "--out", str(out)],
+            transport=httpx.MockTransport(handler),
+        )
+    )
+    res = json.loads(out.read_text())
+    assert rc == 0 and res["best"]["quality"] == 1.0 and res["cheap"]["quality"] == 0.0
