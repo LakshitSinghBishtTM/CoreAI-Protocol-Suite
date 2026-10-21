@@ -279,3 +279,10 @@ dist/
 .kube/*secrets*
 config/secrets.json
 *.mbox
+# Credentials and keys: never commit
+.aws/
+.netrc
+.pypirc
+.kube/
+.docker/config.json
+keys/
