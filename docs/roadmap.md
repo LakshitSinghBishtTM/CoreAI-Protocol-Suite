@@ -257,7 +257,7 @@ These features only pay off once real agent runs exist to measure and protect. E
 **RAG**
 
 - An embeddings endpoint (cloud and local) and a vector store abstraction (SQLite-vec or pgvector first). *Status: embeddings endpoint existed; SQLite vector store with brute-force cosine done (`src/rag/store.py`, per-owner collections, dimension-mismatch safe, bounded size); SQLite-vec/pgvector open.*
-- Document ingestion: text, Markdown, PDF and HTML with chunking, metadata and re-indexing. *Status: done for text, Markdown and HTML; PDF needs optional `pypdf`, untested; unchanged sources skip re-embedding; no ingestion API yet.*
+- Document ingestion: text, Markdown, PDF and HTML with chunking, metadata and re-indexing. *Status: done for text, Markdown and HTML; PDF needs optional `pypdf`, untested; unchanged sources skip re-embedding; ingestion API done (`api/rag_api.py`: `POST /v1/rag/{collection}/documents`, list, delete, `POST .../search`; scopes `rag:read`/`rag:write`, per-caller collections).*
 - A retrieval tool in the tools layer, so any agent can search a collection with citations. *Status: done (`rag/tool.py`, bound to one owner and collection, results wrapped as untrusted); registered from `rag:` in `config/tools.yml`, one `search_<name>` tool per collection).*
 
 **Guardrails**

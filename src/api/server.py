@@ -11,6 +11,7 @@ from api import (
     local_models_api,
     memory_api,
     openai_compat,
+    rag_api,
     routes,
     runs_api,
     tools_api,
@@ -170,6 +171,7 @@ app.include_router(tools_api.router)
 app.include_router(runs_api.router)
 app.include_router(local_models_api.router)
 app.include_router(memory_api.router)
+app.include_router(rag_api.router)
 
 
 def _load_rate_limits():
