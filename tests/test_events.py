@@ -125,3 +125,105 @@ def test_budget_alerts_rearm_after_window_reset():
     m.record("k", cost_usd=1)
     m.record("k", cost_usd=6)
     assert got == ["budget.warning", "budget.warning"]
+
+
+# ---- Slack and email ----
+def _run_sinks(*sinks, events):
+    async def go():
+        bus = EventBus()
+        for s in sinks:
+            bus.subscribe(s)
+        for t, kw in events:
+            bus.emit(t, **kw)
+        await asyncio.gather(*bus.tasks)
+
+    asyncio.run(go())
+
+
+def test_slack_default_alerts_only_and_no_secrets():
+    from utils.events import SlackSink
+
+    got = []
+    sink = SlackSink(
+        "http://slack/h",
+        transport=httpx.MockTransport(lambda r: got.append(json.loads(r.content)) or httpx.Response(200)),
+    )
+    _run_sinks(
+        sink,
+        events=[
+            ("run.finished", {"run_id": "r", "status": "completed", "reason": "completed"}),
+            ("run.finished", {"run_id": "r2", "status": "failed", "reason": "max_steps"}),
+            ("budget.exceeded", {"subject": "key1", "used_usd": 10.5, "cap_usd": 10}),
+        ],
+    )
+    texts = [g["text"] for g in got]
+    assert len(texts) == 2 and "r2" in texts[0] and "key1" in texts[1] and "$10.5" in texts[1]
+
+
+def test_slack_explicit_events_override_default():
+    from utils.events import SlackSink
+
+    got = []
+    sink = SlackSink(
+        "http://s", ["run.finished"], transport=httpx.MockTransport(lambda r: got.append(1) or httpx.Response(200))
+    )
+    _run_sinks(sink, events=[("run.finished", {"status": "completed"}), ("provider.outage", {"provider": "x"})])
+    assert len(got) == 1
+
+
+def test_email_sink_sends_alert_via_starttls_and_login():
+    from utils.events import EmailSink
+
+    log = []
+
+    class FakeSMTP:
+        def __init__(self, host, port, timeout):
+            log.append(("connect", host, port))
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def starttls(self, context):
+            log.append("tls")
+
+        def login(self, u, p):
+            log.append(("login", u))
+
+        def send_message(self, msg):
+            log.append(("send", msg["To"], msg["Subject"]))
+
+    sink = EmailSink("mail.x", "caips@x", ["a@x", "b@x"], user="u", password="p", smtp_factory=FakeSMTP)
+    _run_sinks(sink, events=[("provider.outage", {"provider": "openai"}), ("run.finished", {"status": "completed"})])
+    assert log == [
+        ("connect", "mail.x", 587),
+        "tls",
+        ("login", "u"),
+        ("send", "a@x, b@x", "[CaiPS] Provider openai: outage"),
+    ]
+
+
+def test_failing_slack_does_not_break_other_sinks():
+    from utils.events import SlackSink
+
+    got = []
+    bad = SlackSink("http://s", transport=httpx.MockTransport(lambda r: httpx.Response(500)))
+    _run_sinks(bad, got.append, events=[("provider.outage", {"provider": "p"})])
+    assert len(got) == 1
+
+
+def test_env_configures_slack_and_email(monkeypatch):
+    from utils.events import EmailSink, SlackSink
+
+    bus = EventBus()
+    monkeypatch.setenv("CAIPS_SLACK_WEBHOOK_URL", "http://s")
+    monkeypatch.setenv("CAIPS_SMTP_HOST", "h")
+    bus.configure_from_env()  # email half-configured: ignored
+    assert [type(s) for s in bus.sinks] == [SlackSink]
+    monkeypatch.setenv("CAIPS_SMTP_FROM", "f@x")
+    monkeypatch.setenv("CAIPS_ALERT_EMAIL_TO", "a@x")
+    bus2 = EventBus()
+    bus2.configure_from_env()
+    assert [type(s) for s in bus2.sinks] == [SlackSink, EmailSink]
