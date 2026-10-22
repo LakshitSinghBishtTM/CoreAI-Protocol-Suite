@@ -1,5 +1,7 @@
 # Agents
 
+> **Status.** Two things are called "agents" in this repo. The **agent harness** (`src/harness/`, API under `/v1/runs`) is the supported one: a tool-use loop with step, cost, token and deadline limits, checkpoints, approvals, pause/resume/cancel and a kill switch. It is opt-in; copy `config/agents.example.yml` to `config/agents.yml`. The **legacy agents** (`src/agents/`, `/v1/agents`) only manage lifecycle and have no tools. The rest of this page is the original design vision and is not all implemented; where it disagrees with the code, the code wins. See [tools.md](tools.md) and the README status table.
+
 ## Overview
 
 The CoreAI Agent Framework provides persistent execution environments for autonomous and semi-autonomous workloads.

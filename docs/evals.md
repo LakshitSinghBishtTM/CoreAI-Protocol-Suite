@@ -3,7 +3,7 @@
 Replay tasks against the gateway and score them. Cost and latency are recorded next to quality.
 
 ```bash
-python -m evals evals/ --base-url http://localhost:8000 --model fast --out run.json
+python -m evals evals/ --base-url http://localhost:8743 --model fast --out run.json
 python -m evals evals/ --model fast --baseline run.json   # exit 1 if any task regressed
 ```
 

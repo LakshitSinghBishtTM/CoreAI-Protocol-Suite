@@ -6,8 +6,9 @@ This document previously described a `runtime/` package in detail - a Runtime En
 
 What actually handles execution:
 
-- **Completion requests** (`/v1/completions`) are routed directly by `coreai/router.py` to one of the five provider adapters in `providers/`, which call the hosted provider APIs (OpenAI, Anthropic, Gemini, Grok, DeepSeek). There is no local model inference and nothing resembling the pipeline this file used to describe sitting between the router and those providers.
-- **Agent tasks** are coordinated by `agents/agent_manager.py` and delivered through the Distributed Agent Protocol, sealed and verified via the Secure Transport Protocol before delivery. See [protocols.md](protocols.md).
+- **Completion requests** (`/v1/completions`) are routed directly by `coreai/router.py` to one of the five provider adapters in `providers/`, which call the hosted provider APIs (OpenAI, Anthropic, Gemini, Grok, DeepSeek). Local models are reached through the same router: `providers/local.py` talks to OpenAI-compatible servers (LM Studio, Ollama, `llama-server`, vLLM), and `localrt/` manages GGUF models and a llama.cpp supervisor. See [local-models.md](local-models.md). Nothing resembling the pipeline this file used to describe sits between the router and the providers.
+- **Agent runs** (`/v1/runs`) are executed by the harness in `harness/`: a tool-use loop with limits, checkpoints and approvals. See [agents.md](agents.md).
+- **Legacy agent tasks** are coordinated by `agents/agent_manager.py` and delivered through the Distributed Agent Protocol, sealed and verified via the Secure Transport Protocol before delivery. See [protocols.md](protocols.md).
 
 If CoreAI grows a real multi-node execution layer in the future, this is where it should be documented again - against the actual implementation, not ahead of it.
 

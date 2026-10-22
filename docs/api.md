@@ -567,7 +567,7 @@ API key:
 
 ```python
 from openai import OpenAI
-client = OpenAI(base_url="http://localhost:8000/v1", api_key="<CaiPS token>")
+client = OpenAI(base_url="http://localhost:8743/v1", api_key="<CaiPS token>")
 client.chat.completions.create(model="gpt-4o", messages=[{"role": "user", "content": "hi"}])
 ```
 
@@ -621,7 +621,7 @@ The test suite runs the official OpenAI Python SDK against the gateway
 ## Anthropic-compatible API
 
 `POST /v1/messages` follows Anthropic's Messages API, so an Anthropic SDK
-works by changing the base URL (`base_url="http://localhost:8000"`) and
+works by changing the base URL (`base_url="http://localhost:8743"`) and
 passing a CaiPS token as `auth_token` (or an API key as `x-api-key`). The
 official SDK is exercised against it in `tests/test_vision_and_messages.py`,
 including streaming.

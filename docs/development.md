@@ -227,14 +227,14 @@ Optional:
 Clone the repository:
 
 ```
-git clone <repository>
-cd CoreAI_Protocol_Suite
+git clone https://github.com/LakshitSinghBishtTM/CoreAI-Protocol-Suite
+cd CoreAI-Protocol-Suite
 ```
 
-Install dependencies:
+Install the package and development tools (Python 3.11 or newer; the code lives in `src/`):
 
 ```
-pip install -r requirements.txt
+pip install -e .[dev]
 ```
 
 Configure environment variables:
@@ -243,7 +243,7 @@ Configure environment variables:
 cp .env.example .env
 ```
 
-Populate required credentials and runtime configuration values.
+Set `SECRET_KEY` and at least one provider key. The server does not read `.env` itself; run `set -a; source .env; set +a` first.
 
 ---
 

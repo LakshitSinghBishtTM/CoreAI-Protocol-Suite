@@ -4,6 +4,11 @@
 
 The previous `1.0.0` label did not match the project's state; versions now start at 0.1.0 (alpha).
 
+### Changed (documentation refresh)
+- README: describes the current feature set (OpenAI- and Anthropic-compatible APIs, tools and MCP, agent harness, local models, memory, RAG, budgets, metrics, CLI and SDKs, deploy assets), a full route table, more configuration variables, and `src/` layout commands.
+- Documented that `/metrics` needs an admin token and that the CLI and SDKs default to port 8000 while the server uses 8743.
+- Fixed stale instructions in `docs/development.md`, `docs/runtime.md`, `docs/cli.md`, `docs/evals.md` and `docs/api.md`; added `docs/README.md` as an index.
+
 ### Added (Phase 7: agent harness)
 - `src/harness/`: tool-use loop with step, cost, token and deadline limits, context compaction with a pinned task, sqlite checkpoints after every step, human approvals, stall detection, kill switch and a per-run trace. Local-model agents get tighter caps.
 - Run API (`api/runs_api.py`): `POST /v1/runs`, `GET /v1/runs[/{id}[/events|/stream]]`, `cancel`, `pause`, `resume`, and admin-only `POST /v1/runs/kill`. Opt-in: enabled by `config/agents.yml` (see `config/agents.example.yml`). Callers can only start agents whose tools they are granted; model calls count against the owner's budget; runs interrupted by a restart resume at startup.

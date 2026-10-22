@@ -3,7 +3,7 @@
 A thin command line over the HTTP API: each command is one documented request, so the CLI and the API cannot drift apart.
 
 ```bash
-export CAIPS_URL=http://localhost:8000      # default
+export CAIPS_URL=http://localhost:8743      # the CLI's own default is :8000; the server listens on :8743
 export CAIPS_API_KEY=...                    # bearer token
 caips health
 caips providers | jq '.[].name'
