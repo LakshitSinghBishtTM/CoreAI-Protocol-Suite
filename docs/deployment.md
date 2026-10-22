@@ -642,3 +642,26 @@ CoreAI is designed to operate as infrastructure rather than as a standalone appl
 Deployment architecture should prioritize reliability, observability, scalability, and operational simplicity.
 
 The platform's separation of orchestration, runtime execution, protocol communication, and persistence enables deployments to evolve incrementally as workload requirements grow, from single-node development environments to large-scale distributed production systems.
+## Kubernetes
+
+Two options, both in `deploy/`:
+
+- **Helm chart** `deploy/helm/caips`: Deployment, Service, PVC, optional Secret, ServiceAccount and Ingress.
+- **Plain manifests** `deploy/k8s/caips.yaml`: PVC, Deployment and Service.
+
+```
+# build and push the image from the Dockerfile first, then:
+kubectl create secret generic caips-secrets --from-literal=OPENAI_API_KEY=...
+helm install caips deploy/helm/caips \
+  --set image.repository=registry.example.com/caips --set image.tag=1.0.0 \
+  --set existingSecret=caips-secrets
+```
+
+Notes:
+
+- One replica by default: SQLite lives on a ReadWriteOnce volume and the rollout strategy is `Recreate`.
+  Running more replicas needs shared state (Postgres, Redis), which you configure through environment variables.
+- Probes use `/healthz` (liveness) and `/readyz` (readiness). The pod runs as UID 1000 with all capabilities dropped.
+- Provider keys, `CAIPS_EVENT_WEBHOOK_SECRET` and SMTP passwords belong in the Secret, not in `env:`
+  (see `docs/events.md` for the notification variables).
+- The chart has not been rendered with `helm template` in CI yet: run `helm lint deploy/helm/caips` before first use.

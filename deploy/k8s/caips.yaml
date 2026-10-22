@@ -1,0 +1,58 @@
+# Plain manifests (no Helm). Create the secret first:
+#   kubectl create secret generic caips-secrets --from-literal=OPENAI_API_KEY=... [--from-literal=...]
+# Build and push the image from the repo Dockerfile, then set the image below.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: { name: caips-data }
+spec:
+  accessModes: [ReadWriteOnce]
+  resources: { requests: { storage: 2Gi } }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: caips, labels: { app: caips } }
+spec:
+  replicas: 1            # SQLite on a ReadWriteOnce volume: keep at 1
+  strategy: { type: Recreate }
+  selector: { matchLabels: { app: caips } }
+  template:
+    metadata: { labels: { app: caips } }
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: caips
+          image: caips:latest   # set to your registry image and pin a version
+          ports: [{ name: http, containerPort: 8743 }]
+          env:
+            - { name: DB_PATH, value: /data/coreai.db }
+          envFrom:
+            - secretRef: { name: caips-secrets }
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          readinessProbe:
+            httpGet: { path: /readyz, port: http }
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { memory: 1Gi }
+          volumeMounts: [{ name: data, mountPath: /data }]
+      volumes:
+        - name: data
+          persistentVolumeClaim: { claimName: caips-data }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: caips }
+spec:
+  selector: { app: caips }
+  ports: [{ name: http, port: 8743, targetPort: http }]

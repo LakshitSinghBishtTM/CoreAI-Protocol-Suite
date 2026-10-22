@@ -1,0 +1,60 @@
+image:
+  repository: caips            # build from the repo Dockerfile and push to your registry
+  tag: ""                      # defaults to Chart.appVersion; pin a version in production
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+
+# One replica: the default storage is SQLite on a ReadWriteOnce volume.
+# More than one replica needs shared state (Postgres/Redis) configured through env.
+replicaCount: 1
+
+service:
+  type: ClusterIP
+  port: 8743
+
+# Provider keys and other secrets. Prefer an existing Secret you manage yourself;
+# its keys become environment variables (OPENAI_API_KEY, ANTHROPIC_API_KEY, ...).
+existingSecret: ""
+# Or let the chart create one (values end up in Helm release history; avoid in production):
+secret:
+  create: false
+  data: {}
+
+# Plain (non-secret) environment variables, e.g. CAIPS_SLACK_EVENTS, CAIPS_PLUGINS.
+env: {}
+
+persistence:
+  enabled: true
+  size: 2Gi
+  storageClass: ""
+  existingClaim: ""
+
+resources:
+  requests: { cpu: 100m, memory: 256Mi }
+  limits: { memory: 1Gi }
+
+serviceAccount:
+  create: true
+  name: ""
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  seccompProfile: { type: RuntimeDefault }
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities: { drop: ["ALL"] }
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  host: caips.example.com
+  tls: []        # - secretName: caips-tls
+                 #   hosts: [caips.example.com]
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

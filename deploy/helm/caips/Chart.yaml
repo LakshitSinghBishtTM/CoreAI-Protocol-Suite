@@ -1,0 +1,6 @@
+apiVersion: v2
+name: caips
+description: CaiPS gateway (OpenAI-compatible LLM gateway with routing, failover and budgets)
+type: application
+version: 0.1.0
+appVersion: "latest"
