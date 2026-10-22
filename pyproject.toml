@@ -29,6 +29,7 @@ dev = [
     "redis>=5.0.0",  # so the Redis cache tests run in CI
     "asyncpg>=0.29.0",  # Postgres db_query tests
     "pgserver>=0.1.4",  # throwaway Postgres for tests
+    "psycopg[binary]>=3.1",  # Postgres run store tests
     "pytest>=8.2.0",
     "pytest-asyncio>=0.23.0",
     "pytest-cov>=5.0.0",
@@ -38,7 +39,7 @@ dev = [
     "build>=1.2.0",
     "opentelemetry-sdk>=1.25.0",  # so the tracing tests run in CI
 ]
-postgres = ["asyncpg>=0.29.0"]
+postgres = ["asyncpg>=0.29.0", "psycopg[binary]>=3.1"]
 # Redis cache backend (falls back to in-memory cache when absent).
 redis = ["redis>=5.0.0"]
 # Optional OpenTelemetry tracing (see docs/operations.md).
