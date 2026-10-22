@@ -137,6 +137,9 @@ def build_runtime(config: Optional[dict], embed=None) -> ToolsRuntime:
     fetcher = HttpFetcher(domains) if domains else None
     register_builtins(registry, workspace, fetcher)
     _register_extras(registry, cfg)
+    from utils.plugins import register_tool_plugins
+
+    register_tool_plugins(registry, cfg.get("plugins"))
     _register_rag(registry, cfg, embed)
     _register_memory(registry, cfg)
     for name, per_min in (cfg.get("rate_per_minute") or {}).items():

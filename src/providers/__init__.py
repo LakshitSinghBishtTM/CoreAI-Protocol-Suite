@@ -103,6 +103,9 @@ def load_providers(
     Returns ProviderLoadResult with .providers, .skipped, .failed.
     """
     result = ProviderLoadResult()
+    from utils.plugins import register_provider_plugins
+
+    register_provider_plugins(PROVIDER_MAP)
     targets = list(enabled) if enabled is not None else list(PROVIDER_MAP.keys())
 
     for name in targets:
