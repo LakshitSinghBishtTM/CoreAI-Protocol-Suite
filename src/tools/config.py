@@ -60,7 +60,7 @@ class ToolsRuntime:
 
 
 def _register_extras(registry: ToolRegistry, cfg: dict) -> None:
-    from .extra import ShellRunner, SqliteReader, WebSearch, register_extras
+    from .extra import DatabaseReader, ShellRunner, WebSearch, register_extras
 
     search = db = shell = None
     ws = cfg.get("web_search") or {}
@@ -73,7 +73,7 @@ def _register_extras(registry: ToolRegistry, cfg: dict) -> None:
             ws.get("results_path", "results"), int(ws.get("max_results", 5)),
         )  # fmt: skip
     if cfg.get("databases"):
-        db = SqliteReader(cfg["databases"])
+        db = DatabaseReader(cfg["databases"])
     sh = cfg.get("shell") or {}
     if sh.get("allowed_commands"):
         shell = ShellRunner(

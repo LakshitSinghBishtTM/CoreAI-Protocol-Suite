@@ -17,7 +17,7 @@ permission level (`read_only`, `write`, `destructive`) for everyone.
 | `file_read`, `file_write` | `workspace:` | stays inside the folder (no `..`, no symlink escape), size capped |
 | `http_fetch` | `http_allowed_domains:` | allow-listed domains, public addresses only, no redirects, size capped |
 | `web_search` | `web_search:` | queries one configured JSON endpoint (e.g. SearXNG); at most 10 results, snippets capped |
-| `db_query` | `databases:` | one SELECT only; file opened read-only plus SQLite authorizer; 200 rows; runaway queries cut off |
+| `db_query` | `databases:` | one SELECT only; value is a SQLite file path or a `postgresql://` DSN (`$VAR` expanded; needs the `postgres` extra). SQLite: read-only open plus authorizer. Postgres: read-only transaction, 10 s statement timeout. 200 rows max |
 | `shell_run` | `shell:` | allow-listed programs only, no shell (no pipes or substitution), empty environment, 20 s timeout, **always needs approval** and `max_permission: destructive` |
 
 ## Every call is checked

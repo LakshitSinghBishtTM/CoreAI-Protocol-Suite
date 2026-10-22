@@ -82,11 +82,7 @@ class SqliteReader:
         path = self.databases.get(database)
         if path is None:
             raise ToolError("invalid_arguments", f"Unknown database '{database}'.")
-        stmt = sql.strip().rstrip(";").strip()
-        if ";" in stmt or not stmt.lower().startswith(("select", "with")):
-            raise ToolError(
-                "invalid_arguments", "Only a single SELECT statement is allowed."
-            )
+        stmt = _single_select(sql)
         conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=5)
         try:
             conn.execute("PRAGMA query_only = ON")
@@ -119,6 +115,78 @@ class SqliteReader:
         if more:
             out.append(f"[more than {MAX_ROWS} rows; add LIMIT]")
         return "\n".join(out)
+
+
+def _single_select(sql: str) -> str:
+    stmt = sql.strip().rstrip(";").strip()
+    if ";" in stmt or not stmt.lower().startswith(("select", "with")):
+        raise ToolError("invalid_arguments", "Only a single SELECT statement is allowed.")
+    return stmt
+
+
+def _format_rows(cols: list[str], rows: list) -> str:
+    more = len(rows) > MAX_ROWS
+    out = ["\t".join(cols)]
+    out += ["\t".join(str(c)[:MAX_CELL_CHARS] for c in row) for row in rows[:MAX_ROWS]]
+    if more:
+        out.append(f"[more than {MAX_ROWS} rows; add LIMIT]")
+    return "\n".join(out)
+
+
+class PostgresReader:
+    """Read-only SQL against Postgres: read-only transaction, statement timeout, row cap."""
+
+    def __init__(self, dsns: dict[str, str], statement_timeout_ms: int = 10_000):
+        self.dsns = {k: os.path.expandvars(v) for k, v in dsns.items()}
+        self.statement_timeout_ms = statement_timeout_ms
+
+    async def query(self, database: str, sql: str) -> str:
+        dsn = self.dsns.get(database)
+        if dsn is None:
+            raise ToolError("invalid_arguments", f"Unknown database '{database}'.")
+        stmt = _single_select(sql)
+        try:
+            import asyncpg
+        except ImportError as exc:
+            raise ToolError("tool_failed", "Postgres needs the 'postgres' extra (asyncpg).") from exc
+        try:
+            conn = await asyncpg.connect(
+                dsn, timeout=5,
+                server_settings={
+                    "statement_timeout": str(self.statement_timeout_ms),
+                    "default_transaction_read_only": "on",
+                },
+            )  # fmt: skip
+            try:
+                async with conn.transaction(readonly=True):
+                    prepared = await conn.prepare(stmt)
+                    cols = [a.name for a in prepared.get_attributes()]
+                    cursor = await prepared.cursor()
+                    rows = [tuple(r.values()) for r in await cursor.fetch(MAX_ROWS + 1)]
+            finally:
+                await conn.close()
+        except (asyncpg.PostgresError, OSError, asyncio.TimeoutError) as exc:
+            raise ToolError("tool_failed", f"SQL error: {exc}") from exc
+        return _format_rows(cols, rows)
+
+
+def _is_postgres(value: str | Path) -> bool:
+    return str(value).startswith(("postgres://", "postgresql://"))
+
+
+class DatabaseReader:
+    """Routes ``db_query`` to SQLite files or Postgres DSNs by the configured value."""
+
+    def __init__(self, databases: dict[str, str | Path]):
+        pg = {k: str(v) for k, v in databases.items() if _is_postgres(v)}
+        self.sqlite = SqliteReader({k: v for k, v in databases.items() if k not in pg})
+        self.pg = PostgresReader(pg)
+        self.databases = {**self.sqlite.databases, **self.pg.dsns}
+
+    async def query(self, database: str, sql: str) -> str:
+        if database in self.pg.dsns:
+            return await self.pg.query(database, sql)
+        return await asyncio.to_thread(self.sqlite.query, database, sql)
 
 
 class ShellRunner:
