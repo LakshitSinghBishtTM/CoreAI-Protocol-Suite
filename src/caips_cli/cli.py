@@ -65,7 +65,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = rn.add_parser("start")
     p.add_argument("agent")
     p.add_argument("task")
-    for name in ("status", "events", "cancel", "pause", "resume"):
+    for name in ("status", "events", "cancel", "pause", "resume", "watch"):
         p = rn.add_parser(name)
         p.add_argument("run_id")
     p = rn.add_parser("kill", help="stop all active runs (admin)")
@@ -102,6 +102,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("job_id")
     p = ft.add_parser("cancel")
     p.add_argument("job_id")
+
+    p = sub.add_parser("chat", help="stream a chat completion to stdout")
+    p.add_argument("model")
+    p.add_argument("prompt")
 
     p = sub.add_parser("eval", help="run an eval suite (see docs/evals.md)")
     p.add_argument("tasks")
@@ -185,6 +189,60 @@ def _plan(a: argparse.Namespace) -> tuple[str, str, Optional[dict]]:
     raise CliError(f"unhandled command {c}")
 
 
+def _sse(lines):
+    """Yield the decoded JSON payload of each ``data:`` line; stop at ``[DONE]``."""
+    for line in lines:
+        if not line.startswith("data:"):
+            continue
+        data = line[5:].strip()
+        if data == "[DONE]":
+            return
+        try:
+            yield json.loads(data)
+        except ValueError:
+            continue
+
+
+def _stream(a, key, transport, out, err) -> int:
+    """`runs watch` prints one JSON event per line; `chat` prints text deltas."""
+    if a.cmd == "chat":
+        method, path = "POST", "/v1/chat/completions"
+        body: Optional[dict] = {
+            "model": a.model,
+            "stream": True,
+            "messages": [{"role": "user", "content": a.prompt}],
+        }
+    else:
+        method, path, body = "GET", f"/v1/runs/{quote(a.run_id, safe='')}/stream", None
+    headers = {"Authorization": f"Bearer {key}"} if key else {}
+    try:
+        with httpx.Client(
+            base_url=a.url, headers=headers, timeout=a.timeout, transport=transport
+        ) as c:
+            with c.stream(method, path, json=body) as r:
+                if r.status_code >= 400:
+                    r.read()
+                    print(f"caips: HTTP {r.status_code}: {r.text}", file=err)
+                    return 1
+                for ev in _sse(r.iter_lines()):
+                    if a.cmd == "chat":
+                        if ev.get("error"):
+                            print(f"caips: stream error: {ev['error']}", file=err)
+                            return 1
+                        for ch in ev.get("choices") or []:
+                            out.write((ch.get("delta") or {}).get("content") or "")
+                        out.flush()
+                    else:
+                        print(json.dumps(ev), file=out)
+                        out.flush()
+    except httpx.HTTPError as e:
+        print(f"caips: cannot reach {a.url}: {e}", file=err)
+        return 1
+    if a.cmd == "chat":
+        out.write("\n")
+    return 0
+
+
 def main(
     argv: Optional[list[str]] = None, transport: Any = None, out=None, err=None
 ) -> int:
@@ -204,6 +262,8 @@ def main(
         )
         args += ["--baseline", a.baseline] if a.baseline else []
         return asyncio.run(eval_main(args, transport=transport))
+    if a.cmd == "chat" or (a.cmd == "runs" and a.sub == "watch"):
+        return _stream(a, key, transport, out, err)
     try:
         method, path, body = _plan(a)
         headers = {"Authorization": f"Bearer {key}"} if key else {}

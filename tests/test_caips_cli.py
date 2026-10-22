@@ -173,3 +173,47 @@ def test_closed_pipe_is_quiet():
         err=io.StringIO(),
     )
     assert code == 0
+
+
+def _sse_transport(text, status=200):
+    return httpx.MockTransport(lambda req: httpx.Response(status, text=text))
+
+
+def test_chat_streams_deltas_and_stops_at_done():
+    sse = (
+        'data: {"choices":[{"delta":{"content":"Hel"}}]}\n\n'
+        'data: {"choices":[{"delta":{"content":"lo"}}]}\n\n'
+        "data: [DONE]\n\n"
+        'data: {"choices":[{"delta":{"content":"IGNORED"}}]}\n\n'
+    )
+    out, err = io.StringIO(), io.StringIO()
+    code = main(["chat", "fast", "hi"], transport=_sse_transport(sse), out=out, err=err)
+    assert code == 0 and out.getvalue() == "Hello\n"
+
+
+def test_chat_stream_error_event_exits_1():
+    sse = 'data: {"error":{"message":"boom"}}\n\n'
+    out, err = io.StringIO(), io.StringIO()
+    code = main(["chat", "fast", "hi"], transport=_sse_transport(sse), out=out, err=err)
+    assert code == 1 and "boom" in err.getvalue()
+
+
+def test_runs_watch_prints_one_event_per_line():
+    sse = 'data: {"type":"step","n":1}\n\ndata: {"type":"done"}\n\n'
+    out, err = io.StringIO(), io.StringIO()
+    code = main(
+        ["runs", "watch", "r1"], transport=_sse_transport(sse), out=out, err=err
+    )
+    assert code == 0
+    assert [json.loads(x)["type"] for x in out.getvalue().splitlines()] == [
+        "step",
+        "done",
+    ]
+
+
+def test_watch_http_error():
+    out, err = io.StringIO(), io.StringIO()
+    code = main(
+        ["runs", "watch", "r1"], transport=_sse_transport("nope", 404), out=out, err=err
+    )
+    assert code == 1 and "404" in err.getvalue()
