@@ -230,6 +230,12 @@ class RoutingConfig:
 DEFAULT_ALIASES = {"fast": "low_latency", "cheap": "bulk", "best": "high_quality"}
 
 
+def _breaker_event(name: str, state: str) -> None:
+    from utils.events import bus
+
+    bus.emit("provider.outage" if state == "open" else "provider.recovered", provider=name)
+
+
 class Router:
     """Intelligent router that selects providers based on strategy."""
 
@@ -284,6 +290,7 @@ class Router:
                 failure_threshold=self.config.circuit_failure_threshold,
                 reset_timeout=self.config.circuit_reset_seconds,
                 clock=clock,
+                on_change=_breaker_event,
             )
             for name in providers
         }

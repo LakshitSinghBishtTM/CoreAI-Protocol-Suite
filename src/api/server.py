@@ -100,6 +100,12 @@ async def lifespan(app: FastAPI):
     )
     app_state["orchestrator"] = Orchestrator()
     app_state["budgets"] = _load_budgets()
+    from utils.events import bus, watch_budgets
+
+    bus.clear()
+    bus.configure_from_env()
+    if app_state["budgets"] is not None:
+        watch_budgets(app_state["budgets"], bus.emit)
 
     kernel = init_kernel(app_state["router"], app_state["orchestrator"])
     await kernel.start()

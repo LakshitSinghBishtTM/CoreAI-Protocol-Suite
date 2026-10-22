@@ -17,6 +17,7 @@ from typing import Awaitable, Callable, Optional
 from providers.base import CompletionRequest, CompletionResponse, Message
 from tools.executor import _run_one
 from tools.registry import Permission, ToolRegistry
+from utils.events import bus
 
 from . import context
 from .config import AgentDef
@@ -327,11 +328,21 @@ class HarnessRunner:
             step=state["step"],
             cost_usd=round(state["cost_usd"], 6),
         )
+        self._notify_finished(rid, status, reason, state["cost_usd"])
         return self.status(rid)
 
     def _finish(self, rid, status, reason):
         self.store.set(rid, status=status, stop_reason=reason, control="")
         self.store.event(rid, "run_finished", reason=reason)
+        self._notify_finished(rid, status, reason, None)
+
+    def _notify_finished(self, rid, status, reason, cost):
+        run = self.store.get(rid) or {}
+        bus.emit(
+            "run.finished", run_id=rid, agent=run.get("agent"), owner=run.get("owner"),
+            status=status, reason=reason,
+            cost_usd=round(cost if cost is not None else run.get("cost_usd") or 0.0, 6),
+        )  # fmt: skip
 
     def _agent(self, name: str) -> AgentDef:
         try:

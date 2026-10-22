@@ -30,6 +30,7 @@ class CircuitBreaker:
         reset_timeout: float = 30.0,
         half_open_max_calls: int = 1,
         clock: Callable[[], float] = time.monotonic,
+        on_change: Optional[Callable[[str, str], None]] = None,
     ):
         if failure_threshold < 1:
             raise ValueError("failure_threshold must be at least 1")
@@ -38,6 +39,7 @@ class CircuitBreaker:
         self.reset_timeout = reset_timeout
         self.half_open_max_calls = half_open_max_calls
         self._clock = clock
+        self.on_change = on_change
 
         self._state = CircuitState.CLOSED
         self._failures = 0
@@ -83,8 +85,11 @@ class CircuitBreaker:
             return
         if state is CircuitState.HALF_OPEN:
             self._probes_in_flight = max(0, self._probes_in_flight - 1)
+        was_half_open = state is CircuitState.HALF_OPEN
         self._state = CircuitState.CLOSED
         self._failures = 0
+        if was_half_open:
+            self._changed("closed")
 
     def record_failure(self) -> None:
         state = self.state
@@ -115,6 +120,14 @@ class CircuitBreaker:
         self._opened_at = self._clock()
         self._probes_in_flight = 0
         self.total_opened += 1
+        self._changed("open")
+
+    def _changed(self, new: str) -> None:
+        if self.on_change is not None:
+            try:
+                self.on_change(self.name, new)
+            except Exception:  # a notification must never break request handling
+                pass
 
     def snapshot(self) -> dict:
         return {
