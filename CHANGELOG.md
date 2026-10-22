@@ -13,7 +13,8 @@ The previous `1.0.0` label did not match the project's state; versions now start
 
 ### Added (terminal UI)
 - `caips-tui` / `caips tui` (`src/caips_tui/`): a Textual terminal UI over the HTTP API. Chat in all three dialects (OpenAI `/v1/chat/completions`, native `/v1/completions`, Anthropic `/v1/messages`) with streaming, Esc to stop, `/retry`, routing explain, thumbs feedback and transcript export; plus sections for providers, models, usage, status/metrics, runs (with live follow, pause, approve, kill), tool approvals, tools (MCP call), agents, tasks, memory, RAG, feedback, local models, fine-tuning, evals and admin (audit, shutdown). Destructive actions ask first. See `docs/tui.md`.
-- Optional extra: `pip install 'coreai-protocol-suite[tui]'`. The API key is read from `CAIPS_API_KEY` or `--api-key-file`, never from a flag.
+- Optional extra: `pip install 'coreai-protocol-suite[tui]'`.
+- API token is entered in the TUI (hidden prompt on first start, `Ctrl+K` to change) or via `caips login`, and saved per gateway in `~/.config/caips/credentials.json` (0600). `CAIPS_API_KEY` and `--api-key-file` still override it; the token is never a command-line flag.
 - Not yet: key and budget management and routing-policy editing (no API for them yet), and a task list (the API has no list endpoint, so the Tasks section follows ids it has seen).
 
 ### Added (Phase 7: agent harness)

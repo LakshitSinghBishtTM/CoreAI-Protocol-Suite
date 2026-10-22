@@ -1,7 +1,8 @@
 """caips: a thin CLI over the HTTP API. Everything it does is one documented request,
 so the CLI and the API cannot drift apart.
 
-Environment: ``CAIPS_URL`` (default http://localhost:8000), ``CAIPS_API_KEY``.
+Environment: ``CAIPS_URL`` (default http://localhost:8000). The token comes from ``caips login``
+(stored in ~/.config/caips, mode 0600) or, overriding it, ``CAIPS_API_KEY``.
 Output is JSON on stdout (pipe to ``jq``); errors go to stderr; exit code 1 on any
 HTTP error, 2 on bad usage.
 """
@@ -40,6 +41,8 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--timeout", type=float, default=60)
     sub = ap.add_subparsers(dest="cmd", required=True)
 
+    sub.add_parser("login", help="save the API token for --url (hidden prompt or stdin)")
+    sub.add_parser("logout", help="forget the saved token for --url")
     sub.add_parser("health", help="liveness and readiness")
     sub.add_parser("providers", help="configured providers and their health")
     sub.add_parser("usage", help="usage summary")
@@ -261,7 +264,25 @@ def main(
         a = build_parser().parse_args(argv)
     except SystemExit as e:
         return int(e.code or 0)
-    key = os.getenv("CAIPS_API_KEY")
+    if a.cmd in ("login", "logout"):
+        from caips_cli import credentials
+
+        if a.cmd == "logout":
+            print("removed" if credentials.delete(a.url) else "no saved token", file=err)
+            return 0
+        import getpass
+
+        tok = (
+            getpass.getpass("API token: ") if sys.stdin.isatty() else sys.stdin.readline()
+        ).strip()
+        if not tok:
+            print("caips: empty token", file=err)
+            return 2
+        print(f"saved to {credentials.save(a.url, tok)}", file=err)
+        return 0
+    from caips_cli import credentials
+
+    key = credentials.resolve(a.url)
     if a.cmd == "tui":
         try:
             from caips_tui.app import main as tui_main

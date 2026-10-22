@@ -5,16 +5,22 @@ An interactive terminal UI over the HTTP API. Like the [`caips` CLI](cli.md), ev
 ```bash
 pip install -e '.[tui]'                 # adds Textual
 export CAIPS_URL=http://localhost:8000  # default
-export CAIPS_API_KEY=...                # bearer token; or: --api-key-file PATH
 caips-tui                               # or: caips tui [--section runs]
 ```
 
-The key is never accepted as a command-line flag (other users could read it from the process list). The sidebar shows whether a key is set and whether the gateway answers `/health`.
+## API token
+
+You do not export a token to use the TUI. On first start, with no token found, it asks for one in a hidden prompt (`Esc` skips). Press `Ctrl+K` any time to set or replace it. The token is saved per gateway URL in `~/.config/caips/credentials.json` (mode `0600`; `$CAIPS_CONFIG_DIR` overrides the directory), and the `caips` CLI uses the same file. `caips login` and `caips logout` manage it from the shell.
+
+Lookup order: `--api-key-file PATH`, then `CAIPS_API_KEY` (for CI and containers), then the saved token. The token is never accepted as a command-line flag (other users could read it from the process list). The sidebar shows whether a token is set and whether the gateway answers `/health`.
+
+This is the *gateway* token. Provider keys (`OPENAI_API_KEY` and friends) are still server settings; the API has no endpoint to set them, so the TUI cannot.
 
 ## Keys
 
 | Key | Action |
 | --- | --- |
+| `Ctrl+K` | set or replace the API token |
 | `Ctrl+B` | focus the section list (`↑`/`↓` switch section, `Enter` moves into it) |
 | `Tab` / `Shift+Tab` | next / previous control |
 | `F5`, `Ctrl+R` | refresh the section |

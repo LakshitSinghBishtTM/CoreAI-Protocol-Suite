@@ -100,7 +100,8 @@ curl -X POST localhost:8743/v1/completions \
 The `caips` CLI and the SDKs default to `http://localhost:8000`, not the port above. Point them at the server with `CAIPS_URL` (or `--url`):
 
 ```bash
-export CAIPS_URL=http://localhost:8743 CAIPS_API_KEY="$TOKEN"
+export CAIPS_URL=http://localhost:8743
+echo "$TOKEN" | caips login      # saved to ~/.config/caips (0600); or run `caips tui` and paste it there
 caips health
 ```
 

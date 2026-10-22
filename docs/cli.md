@@ -4,7 +4,7 @@ A thin command line over the HTTP API: each command is one documented request, s
 
 ```bash
 export CAIPS_URL=http://localhost:8743      # the CLI's own default is :8000; the server listens on :8743
-export CAIPS_API_KEY=...                    # bearer token
+caips login                                 # prompts for the bearer token (hidden), saves it
 caips health
 caips providers | jq '.[].name'
 caips local pull TheBloke/some-model-GGUF:Q4_K_M    # admin
@@ -14,6 +14,8 @@ caips finetune estimate data.jsonl --base-model gpt-4o-mini
 caips finetune submit data.jsonl --base-model gpt-4o-mini --max-cost 5
 caips eval evals/ --model fast --baseline last.json
 ```
+
+The token is saved in `~/.config/caips/credentials.json` (mode `0600`), per `--url`; `caips logout` removes it. `CAIPS_API_KEY`, if set, overrides it (CI, containers). For scripts, `caips login < token-file` reads stdin.
 
 Output is JSON on stdout. Errors go to stderr. Exit codes: `0` ok, `1` HTTP or network error, `2` bad usage or input file.
 `--url` overrides `CAIPS_URL`. Ids are percent-encoded before they go into a URL path.

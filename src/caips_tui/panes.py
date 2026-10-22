@@ -1016,7 +1016,6 @@ class EvalsPane(Pane):
     def __init__(self, *a: Any, **kw: Any):
         super().__init__(*a, **kw)
         self.proc: Optional[asyncio.subprocess.Process] = None
-        self.api_key = os.getenv("CAIPS_API_KEY", "")
 
     def body(self) -> ComposeResult:
         yield from self.inputs(self.FIELDS)
@@ -1068,8 +1067,8 @@ class EvalsPane(Pane):
         env["PYTHONPATH"] = os.pathsep.join(
             p for p in (src, env.get("PYTHONPATH", "")) if p
         )
-        if self.api_key:
-            env["CAIPS_API_KEY"] = self.api_key  # via the environment, never argv
+        if self.client.api_key:
+            env["CAIPS_API_KEY"] = self.client.api_key  # via the environment, never argv
         try:
             self.proc = await asyncio.create_subprocess_exec(
                 *self.command(),

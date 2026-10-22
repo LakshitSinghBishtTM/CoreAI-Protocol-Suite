@@ -1,6 +1,6 @@
 """The Textual application: a section sidebar, one pane per API area, and entry points.
 
-Run ``caips-tui`` (or ``caips tui``). Settings: ``CAIPS_URL`` and ``CAIPS_API_KEY``.
+Run ``caips-tui`` (or ``caips tui``). Settings: ``CAIPS_URL``; the token is entered in the UI (Ctrl+K) or taken from ``CAIPS_API_KEY``.
 """
 
 from __future__ import annotations
@@ -16,9 +16,10 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
-from textual.widgets import ContentSwitcher, Footer, Header, OptionList, Static
+from textual.widgets import ContentSwitcher, Footer, Header, Input, OptionList, Static
 from textual.widgets.option_list import Option
 
+from caips_cli import credentials
 from caips_tui.chat import ChatPane
 from caips_tui.client import ApiError, Client
 from caips_tui.panes import (
@@ -67,12 +68,14 @@ Ctrl+B    focus the section list (↑/↓ switch section, Enter moves into it)
 Tab       next control          Shift+Tab   previous control
 F5 / Ctrl+R   refresh the current section
 Esc       stop a chat reply     F1   this help      Ctrl+Q   quit
+Ctrl+K    set API token
 
 Every button makes one documented API request. Sections that need the admin
 scope (Stats, Approvals, Local models, Fine-tuning, Admin) show the server's
 error if your token lacks it. Destructive actions ask first.
 
-Set CAIPS_URL and CAIPS_API_KEY in the environment; the key is never shown."""
+Ctrl+K    set or replace the API token (saved to ~/.config/caips, mode 0600)
+CAIPS_API_KEY in the environment overrides the saved token; it is never shown."""
 
 
 class HelpScreen(ModalScreen[None]):
@@ -86,6 +89,25 @@ class HelpScreen(ModalScreen[None]):
         yield Static(HELP)
 
     def action_close(self) -> None:
+        self.dismiss(None)
+
+
+class KeyScreen(ModalScreen[Optional[str]]):
+    BINDINGS = [Binding("escape", "skip", "Skip")]
+    DEFAULT_CSS = """
+    KeyScreen { align: center middle; }
+    KeyScreen > Vertical { width: 64; height: auto; padding: 1 2; border: thick $primary; background: $surface; }
+    """
+
+    def compose(self) -> ComposeResult:
+        with Vertical():
+            yield Static("Gateway API token\nEnter to save, Esc to skip. Input is hidden.")
+            yield Input(password=True, placeholder="token", id="token")
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        self.dismiss(event.value.strip() or None)
+
+    def action_skip(self) -> None:
         self.dismiss(None)
 
 
@@ -132,6 +154,7 @@ class CaipsTui(App[None]):
     """
     BINDINGS = [
         Binding("ctrl+b", "focus_sidebar", "Sections"),
+        Binding("ctrl+k", "set_key", "API key"),
         Binding("f5,ctrl+r", "refresh", "Refresh"),
         Binding("f1", "help", "Help"),
     ]
@@ -165,6 +188,22 @@ class CaipsTui(App[None]):
         nav.highlighted = [s[0] for s in SECTIONS].index(self.start_section)
         self.set_interval(15, self.check_connection)
         self.run_worker(self.check_connection(), group="conn", exclusive=True)
+        if not self.client.has_key:
+            self.action_set_key()
+
+    def action_set_key(self) -> None:
+        def done(key: Optional[str]) -> None:
+            if not key:
+                return
+            self.client.set_key(key)
+            try:
+                credentials.save(self.client.base_url, key)
+            except OSError as e:
+                self.notify(f"token not saved: {e.strerror or e}", severity="warning")
+            self.run_worker(self.check_connection(), group="conn", exclusive=True)
+            self.run_worker(self.pane(self.section).refresh_data(), group="refresh", exclusive=True)
+
+        self.push_screen(KeyScreen(), done)
 
     async def on_unmount(self) -> None:
         await self.client.aclose()
@@ -218,8 +257,9 @@ class CaipsTui(App[None]):
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(
         prog="caips-tui",
-        description="Terminal UI for a CaiPS gateway. The API key is read from CAIPS_API_KEY "
-        "(or --api-key-file); it is never accepted on the command line, where other users could see it.",
+        description="Terminal UI for a CaiPS gateway. The token is entered inside the UI and saved "
+        "(see `caips login`); CAIPS_API_KEY or --api-key-file override it. It is never accepted "
+        "on the command line, where other users could see it.",
         allow_abbrev=False,  # so `--api-key SECRET` is an error, not a silent match for --api-key-file
     )
     ap.add_argument("--url", default=os.getenv("CAIPS_URL", "http://localhost:8000"))
@@ -244,7 +284,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Optional[list[str]] = None, transport: Any = None) -> int:
     args = build_parser().parse_args(argv)
-    key = os.getenv("CAIPS_API_KEY") or None
+    key = credentials.resolve(args.url)
     if args.api_key_file:
         try:
             key = Path(args.api_key_file).expanduser().read_text().strip() or None

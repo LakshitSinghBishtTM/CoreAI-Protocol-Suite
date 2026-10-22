@@ -52,7 +52,7 @@ class Client:
         transport: Optional[httpx.AsyncBaseTransport] = None,
     ):
         self.base_url = base_url.rstrip("/")
-        self.has_key = bool(api_key)
+        self.api_key = api_key or ""
         headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
         self._http = httpx.AsyncClient(
             base_url=self.base_url,
@@ -60,6 +60,14 @@ class Client:
             timeout=timeout,
             transport=transport,
         )
+
+    @property
+    def has_key(self) -> bool:
+        return bool(self.api_key)
+
+    def set_key(self, key: str) -> None:
+        self.api_key = key
+        self._http.headers["Authorization"] = f"Bearer {key}"
 
     async def aclose(self) -> None:
         await self._http.aclose()
