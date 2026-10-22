@@ -209,3 +209,34 @@ async def test_trace_diff_and_stream():
     assert diff_traces(store.events(a["id"]), store2.events(b["id"]))
     seen = [e["type"] async for e in r.stream(a["id"])]
     assert seen[0] == "run_started" and seen[-1] == "run_finished"
+
+
+@pytest.mark.asyncio
+async def test_agent_memory_recalled_into_prompt_owner_scoped():
+    from memory import MemoryStore
+
+    mem = MemoryStore(":memory:")
+    mem.remember("alice", "color", "alice likes teal", ns="prefs")
+    mem.remember("bob", "color", "bob likes red", ns="prefs")
+    mem.remember("alice", "color", "other ns teal", ns="other")
+    route = Script(resp("done"))
+    runner, _ = make(route, memory_ns="prefs")
+    runner.memory = mem
+    await runner.run("a", "what color do I like", owner="alice")
+    sysmsg = route.requests[0].system_prompt
+    assert "alice likes teal" in sysmsg
+    assert "bob likes red" not in sysmsg and "other ns" not in sysmsg
+    assert sysmsg.startswith("sys")
+
+
+@pytest.mark.asyncio
+async def test_agent_memory_off_by_default():
+    from memory import MemoryStore
+
+    mem = MemoryStore(":memory:")
+    mem.remember("alice", "color", "teal", ns="prefs")
+    route = Script(resp("done"))
+    runner, _ = make(route)  # no memory_ns
+    runner.memory = mem
+    await runner.run("a", "color", owner="alice")
+    assert route.requests[0].system_prompt == "sys"

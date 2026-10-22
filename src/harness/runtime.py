@@ -40,17 +40,17 @@ class HarnessRuntime:
         await asyncio.gather(*self.tasks.values(), return_exceptions=True)
 
 
-def build_runtime(cfg: dict, route, registry) -> HarnessRuntime:
+def build_runtime(cfg: dict, route, registry, memory=None) -> HarnessRuntime:
     agents = {
         n: AgentDef.from_dict({"name": n, **d})
         for n, d in (cfg.get("agents") or {}).items()
     }
     store = RunStore(cfg.get("db", "data/runs.db"))
-    return HarnessRuntime(HarnessRunner(route, registry, store, agents))
+    return HarnessRuntime(HarnessRunner(route, registry, store, agents, memory=memory))
 
 
 def load_harness_runtime(
-    route, registry, path: Optional[str] = None
+    route, registry, path: Optional[str] = None, memory=None
 ) -> Optional[HarnessRuntime]:
     path = path or os.getenv("COREAI_AGENTS_FILE", "config/agents.yml")
     if not os.path.exists(path):
@@ -62,4 +62,4 @@ def load_harness_runtime(
     db = cfg.get("db", "data/runs.db")
     if db != ":memory:":
         os.makedirs(os.path.dirname(db) or ".", exist_ok=True)
-    return build_runtime(cfg, route, registry)
+    return build_runtime(cfg, route, registry, memory)

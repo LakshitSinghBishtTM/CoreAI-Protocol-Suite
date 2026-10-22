@@ -123,6 +123,7 @@ async def lifespan(app: FastAPI):
     app_state["harness"] = load_harness_runtime(
         runs_api.gateway_route(app_state["router"]),
         tools_rt.registry if tools_rt is not None else ToolRegistry(),
+        memory=memory_api.get_store(),
     )  # None unless config/agents.yml exists
     if app_state["harness"] is not None:
         logger.info(

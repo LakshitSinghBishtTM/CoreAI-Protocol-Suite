@@ -43,11 +43,19 @@ EVENT_TYPES = (
 
 
 def sign(secret: str, timestamp: str, body: str) -> str:
-    return hmac.new(secret.encode(), f"{timestamp}.{body}".encode(), hashlib.sha256).hexdigest()
+    return hmac.new(
+        secret.encode(), f"{timestamp}.{body}".encode(), hashlib.sha256
+    ).hexdigest()
 
 
 class WebhookSink:
-    def __init__(self, url: str, secret: str, events: Optional[Iterable[str]] = None, transport=None):
+    def __init__(
+        self,
+        url: str,
+        secret: str,
+        events: Optional[Iterable[str]] = None,
+        transport=None,
+    ):
         if not secret:
             raise ValueError("event webhook needs a signing secret")
         self.url, self.secret, self.transport = url, secret, transport
@@ -64,26 +72,35 @@ class WebhookSink:
             "X-CaiPS-Signature": sign(self.secret, ts, body),
         }
         async with httpx.AsyncClient(timeout=5, transport=self.transport) as http:
-            (await http.post(self.url, content=body, headers=headers)).raise_for_status()
+            (
+                await http.post(self.url, content=body, headers=headers)
+            ).raise_for_status()
 
 
-ALERT_EVENTS = ("budget.warning", "budget.exceeded", "provider.outage", "provider.recovered")
+ALERT_EVENTS = (
+    "budget.warning",
+    "budget.exceeded",
+    "provider.outage",
+    "provider.recovered",
+)
 
 
 def is_alert(event: dict) -> bool:
     """Default for chat and email: alerts, plus runs that failed (not clean finishes)."""
-    return event["type"] in ALERT_EVENTS or (event["type"] == "run.finished" and event.get("status") == "failed")
+    return event["type"] in ALERT_EVENTS or (
+        event["type"] == "run.finished" and event.get("status") == "failed"
+    )
 
 
 def format_event(event: dict) -> tuple[str, str]:
     """(subject, body) in plain text. Contains no secrets: only ids, names and amounts."""
     t = event["type"]
     if t == "run.finished":
-        subject = f"Run {event.get('run_id')} {event.get('status')} ({event.get('reason')})"
-    elif t.startswith("budget."):
         subject = (
-            f"Budget {t.split('.')[1]}: {event.get('subject')} at ${event.get('used_usd')} of ${event.get('cap_usd')}"
+            f"Run {event.get('run_id')} {event.get('status')} ({event.get('reason')})"
         )
+    elif t.startswith("budget."):
+        subject = f"Budget {t.split('.')[1]}: {event.get('subject')} at ${event.get('used_usd')} of ${event.get('cap_usd')}"
     elif t.startswith("provider."):
         subject = f"Provider {event.get('provider')}: {t.split('.')[1]}"
     else:
@@ -95,7 +112,9 @@ def format_event(event: dict) -> tuple[str, str]:
 class SlackSink:
     """Slack incoming webhook. ``events`` limits types; default is alerts only."""
 
-    def __init__(self, url: str, events: Optional[Iterable[str]] = None, transport=None):
+    def __init__(
+        self, url: str, events: Optional[Iterable[str]] = None, transport=None
+    ):
         self.url, self.transport = url, transport
         self.events = set(events) if events else None
 
@@ -106,7 +125,9 @@ class SlackSink:
             return
         subject, body = format_event(event)
         async with httpx.AsyncClient(timeout=5, transport=self.transport) as http:
-            (await http.post(self.url, json={"text": f"*{subject}*\n```{body}```"})).raise_for_status()
+            (
+                await http.post(self.url, json={"text": f"*{subject}*\n```{body}```"})
+            ).raise_for_status()
 
 
 class EmailSink:
@@ -121,7 +142,11 @@ class EmailSink:
 
     def _send(self, subject: str, body: str) -> None:
         msg = EmailMessage()
-        msg["From"], msg["To"], msg["Subject"] = self.sender, ", ".join(self.to), f"[CaiPS] {subject}"
+        msg["From"], msg["To"], msg["Subject"] = (
+            self.sender,
+            ", ".join(self.to),
+            f"[CaiPS] {subject}",
+        )
         msg.set_content(body)
         with self.smtp_factory(self.host, self.port, timeout=10) as smtp:
             if self.starttls:
@@ -192,14 +217,25 @@ class EventBus:
         if url:
             secret = os.getenv("CAIPS_EVENT_WEBHOOK_SECRET", "")
             if secret:
-                self.subscribe(WebhookSink(url, secret, csv("CAIPS_EVENT_WEBHOOK_EVENTS") or None))
+                self.subscribe(
+                    WebhookSink(url, secret, csv("CAIPS_EVENT_WEBHOOK_EVENTS") or None)
+                )
             else:
-                logger.warning("CAIPS_EVENT_WEBHOOK_URL set without CAIPS_EVENT_WEBHOOK_SECRET; webhook disabled")
+                logger.warning(
+                    "CAIPS_EVENT_WEBHOOK_URL set without CAIPS_EVENT_WEBHOOK_SECRET; webhook disabled"
+                )
         slack = os.getenv("CAIPS_SLACK_WEBHOOK_URL", "").strip()
         if slack:
             self.subscribe(SlackSink(slack, csv("CAIPS_SLACK_EVENTS") or None))
-        host, sender = os.getenv("CAIPS_SMTP_HOST", "").strip(), os.getenv("CAIPS_SMTP_FROM", "").strip()
-        to = [a.strip() for a in os.getenv("CAIPS_ALERT_EMAIL_TO", "").split(",") if a.strip()]
+        host, sender = (
+            os.getenv("CAIPS_SMTP_HOST", "").strip(),
+            os.getenv("CAIPS_SMTP_FROM", "").strip(),
+        )
+        to = [
+            a.strip()
+            for a in os.getenv("CAIPS_ALERT_EMAIL_TO", "").split(",")
+            if a.strip()
+        ]
         if host and sender and to:
             self.subscribe(
                 EmailSink(
@@ -209,7 +245,9 @@ class EventBus:
                 )
             )  # fmt: skip
         elif host or sender or to:
-            logger.warning("email alerts need CAIPS_SMTP_HOST, CAIPS_SMTP_FROM and CAIPS_ALERT_EMAIL_TO; disabled")
+            logger.warning(
+                "email alerts need CAIPS_SMTP_HOST, CAIPS_SMTP_FROM and CAIPS_ALERT_EMAIL_TO; disabled"
+            )
 
 
 def watch_budgets(manager: Any, emit: Callable[..., Any]) -> None:

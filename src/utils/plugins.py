@@ -48,7 +48,9 @@ def load_plugins(group: str, allowed: Optional[Iterable[str]] = None) -> dict[st
     return loaded
 
 
-def register_provider_plugins(provider_map: dict, allowed: Optional[Iterable[str]] = None) -> list[str]:
+def register_provider_plugins(
+    provider_map: dict, allowed: Optional[Iterable[str]] = None
+) -> list[str]:
     """Add plugin providers to ``provider_map`` as (class, env_var); built-ins are never replaced."""
     added = []
     for name, cls in load_plugins(PROVIDER_GROUP, allowed).items():
@@ -56,14 +58,18 @@ def register_provider_plugins(provider_map: dict, allowed: Optional[Iterable[str
         if not env_var:
             logger.warning(f"provider plugin '{name}' has no 'env_var'; skipped")
         elif name in provider_map:
-            logger.warning(f"provider plugin '{name}' clashes with an existing provider; skipped")
+            logger.warning(
+                f"provider plugin '{name}' clashes with an existing provider; skipped"
+            )
         else:
             provider_map[name] = (cls, env_var)
             added.append(name)
     return added
 
 
-def register_tool_plugins(registry: Any, allowed: Optional[Iterable[str]] = None) -> list[str]:
+def register_tool_plugins(
+    registry: Any, allowed: Optional[Iterable[str]] = None
+) -> list[str]:
     """Register tools from plugin factories; they are tagged ``owner='plugin:<name>'``."""
     added = []
     for name, factory in load_plugins(TOOL_GROUP, allowed).items():
@@ -79,5 +85,7 @@ def register_tool_plugins(registry: Any, allowed: Optional[Iterable[str]] = None
                 registry.register(tool)  # a name clash raises: first registration wins
                 added.append(tool.name)
             except Exception as exc:
-                logger.warning(f"tool '{getattr(tool, 'name', '?')}' from plugin '{name}' skipped: {exc}")
+                logger.warning(
+                    f"tool '{getattr(tool, 'name', '?')}' from plugin '{name}' skipped: {exc}"
+                )
     return added

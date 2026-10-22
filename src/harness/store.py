@@ -56,14 +56,18 @@ class RunStore:
                 import psycopg
                 from psycopg.rows import dict_row
             except ImportError as exc:  # pragma: no cover
-                raise RuntimeError("Postgres run store needs the 'postgres' extra (psycopg).") from exc
+                raise RuntimeError(
+                    "Postgres run store needs the 'postgres' extra (psycopg)."
+                ) from exc
             self._integrity = psycopg.errors.UniqueViolation
             self._db = psycopg.connect(path, autocommit=True, row_factory=dict_row)
             for stmt in filter(None, (x.strip() for x in SCHEMA.split(";"))):
                 self._db.execute(stmt)
         else:
             self._integrity = sqlite3.IntegrityError
-            self._db = sqlite3.connect(path, check_same_thread=False, isolation_level=None)
+            self._db = sqlite3.connect(
+                path, check_same_thread=False, isolation_level=None
+            )
             self._db.row_factory = sqlite3.Row
             self._db.executescript(SCHEMA)
 
@@ -162,7 +166,8 @@ class RunStore:
         with self._lock:
             for attempt in range(5):  # another process may take the same seq
                 seq = self._x(
-                    "SELECT COALESCE(MAX(seq),0)+1 AS n FROM events WHERE run_id=?", (rid,)
+                    "SELECT COALESCE(MAX(seq),0)+1 AS n FROM events WHERE run_id=?",
+                    (rid,),
                 ).fetchone()["n"]
                 try:
                     self._x(

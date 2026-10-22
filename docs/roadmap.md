@@ -174,7 +174,7 @@ Rebuild `agents/` as a small, inspectable harness on top of the gateway and tool
 
 - Plan, call the model, run tools, observe, repeat, until done or a limit is hit. *Status: done (`src/harness/runner.py`; no separate planning step yet, the model plans in-loop).*
 - Hard limits per run: max steps, token and cost budget, and wall-clock deadline. Budgets are enforced by the gateway, not just the agent. *Status: done in harness (steps, cost, tokens, deadline); each model call is checked against and recorded in the owner's gateway budget and usage ledger (`runs_api.gateway_route`), and the run's own cap is passed in request metadata.*
-- Agent definitions as config: system prompt, model or routing policy, allowed tools, limits, and memory settings. *Status: done (`harness/config.py`, `AgentDef.from_dict`); memory settings still open.*
+- Agent definitions as config: system prompt, model or routing policy, allowed tools, limits, and memory settings. *Status: done (`harness/config.py`, `AgentDef.from_dict`); memory settings done (`memory_ns`, `memory_recall`: owner-scoped recall into the system prompt, labeled untrusted).
 - Run API: start, status, cancel, pause, resume, and stream events. *Status: done (`HarnessRunner` and `api/runs_api.py`: `/v1/runs` start, list, status, events, SSE stream, cancel, pause, resume).*
 
 **Context and state**

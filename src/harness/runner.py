@@ -43,7 +43,9 @@ class HarnessRunner:
         agents: Optional[dict[str, AgentDef]] = None,
         caller: str = "agent",
         max_permission: Permission = Permission.DESTRUCTIVE,
+        memory=None,
     ):
+        self.memory = memory  # optional memory.MemoryStore; read-only here
         self.route, self.registry, self.store = route, registry, store
         self.agents = agents or {}
         self.caller, self.max_permission = caller, max_permission
@@ -167,10 +169,31 @@ class HarnessRunner:
             self.store.event(rid, "run_finished", reason="error", step=state["step"])
             return self.status(rid)
 
+    def _system(self, rid, agent: AgentDef, msgs) -> str:
+        """System prompt plus recalled memories (owner-scoped, labeled untrusted)."""
+        if not (self.memory and agent.memory_ns and agent.memory_recall > 0):
+            return agent.system_prompt
+        task = next((m.content for m in msgs if m.role == "user" and m.content), "")
+        owner = self.store.get(rid)["owner"]
+        found = self.memory.search(
+            owner, str(task), ns=agent.memory_ns, limit=agent.memory_recall
+        )
+        if not found:
+            return agent.system_prompt
+        from guardrails.injection import wrap_untrusted
+
+        text = "\n".join(f"- {m['key']}: {m['value']}" for m in found)
+        return (
+            agent.system_prompt
+            + "\n\nRelevant stored memories:\n"
+            + wrap_untrusted(text, f"memory:{agent.memory_ns}", kind="memory")
+        )
+
     async def _model(self, rid, agent: AgentDef, msgs, state) -> CompletionResponse:
+        system = self._system(rid, agent, msgs)
         summarizer = self._summarizer(agent) if agent.summarize else None
         ctx, changed = await context.compact(
-            msgs, system=agent.system_prompt, max_tokens=agent.context_tokens,
+            msgs, system=system, max_tokens=agent.context_tokens,
             keep_recent=agent.keep_recent, summarizer=summarizer,
         )  # fmt: skip
         if changed:
@@ -179,7 +202,7 @@ class HarnessRunner:
                 rid,
                 "context_compacted",
                 messages=len(ctx),
-                tokens=context.count(ctx, agent.system_prompt),
+                tokens=context.count(ctx, system),
             )
         meta = {
             "run_id": rid,
@@ -192,7 +215,7 @@ class HarnessRunner:
             )
         req = CompletionRequest(
             messages=list(ctx), model=agent.model, max_tokens=agent.max_tokens,
-            temperature=agent.temperature, system_prompt=agent.system_prompt,
+            temperature=agent.temperature, system_prompt=system,
             tools=self.registry.specs(agent.allowed_tools) or None, metadata=meta,
         )  # fmt: skip
         run = self.store.get(rid)

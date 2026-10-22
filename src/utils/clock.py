@@ -1,4 +1,5 @@
 """Naive-UTC clock helper replacing the deprecated ``datetime.utcnow()``."""
+
 from datetime import datetime, timezone
 
 

@@ -120,7 +120,9 @@ class SqliteReader:
 def _single_select(sql: str) -> str:
     stmt = sql.strip().rstrip(";").strip()
     if ";" in stmt or not stmt.lower().startswith(("select", "with")):
-        raise ToolError("invalid_arguments", "Only a single SELECT statement is allowed.")
+        raise ToolError(
+            "invalid_arguments", "Only a single SELECT statement is allowed."
+        )
     return stmt
 
 
@@ -148,7 +150,9 @@ class PostgresReader:
         try:
             import asyncpg
         except ImportError as exc:
-            raise ToolError("tool_failed", "Postgres needs the 'postgres' extra (asyncpg).") from exc
+            raise ToolError(
+                "tool_failed", "Postgres needs the 'postgres' extra (asyncpg)."
+            ) from exc
         try:
             conn = await asyncpg.connect(
                 dsn, timeout=5,

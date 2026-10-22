@@ -27,7 +27,12 @@ class CaipsClient:
         transport: httpx.BaseTransport | None = None,
     ):
         headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
-        self._http = httpx.Client(base_url=base_url.rstrip("/"), headers=headers, timeout=timeout, transport=transport)
+        self._http = httpx.Client(
+            base_url=base_url.rstrip("/"),
+            headers=headers,
+            timeout=timeout,
+            transport=transport,
+        )
 
     def close(self) -> None:
         self._http.close()
@@ -50,7 +55,11 @@ class CaipsClient:
 
     # chat
     def chat(self, model: str, messages: list[dict], **params: Any) -> dict:
-        return self._req("POST", "/v1/chat/completions", json={"model": model, "messages": messages, **params})
+        return self._req(
+            "POST",
+            "/v1/chat/completions",
+            json={"model": model, "messages": messages, **params},
+        )
 
     def models(self) -> list[dict]:
         return self._req("GET", "/v1/models")["data"]
@@ -60,7 +69,11 @@ class CaipsClient:
         return self._req("GET", "/v1/tools")["data"]
 
     def mcp(self, method: str, params: dict | None = None, id: int = 1) -> dict:
-        return self._req("POST", "/mcp", json={"jsonrpc": "2.0", "id": id, "method": method, "params": params or {}})
+        return self._req(
+            "POST",
+            "/mcp",
+            json={"jsonrpc": "2.0", "id": id, "method": method, "params": params or {}},
+        )
 
     def call_tool(self, name: str, arguments: dict | None = None) -> dict:
         resp = self.mcp("tools/call", {"name": name, "arguments": arguments or {}})
@@ -94,4 +107,6 @@ class CaipsClient:
         return r["data"] if isinstance(r, dict) and "data" in r else r
 
     def decide(self, approval_id: str, approve: bool) -> dict:
-        return self._req("POST", f"/v1/tools/approvals/{approval_id}", json={"approve": approve})
+        return self._req(
+            "POST", f"/v1/tools/approvals/{approval_id}", json={"approve": approve}
+        )

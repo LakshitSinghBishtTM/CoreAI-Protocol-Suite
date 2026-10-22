@@ -233,7 +233,9 @@ DEFAULT_ALIASES = {"fast": "low_latency", "cheap": "bulk", "best": "high_quality
 def _breaker_event(name: str, state: str) -> None:
     from utils.events import bus
 
-    bus.emit("provider.outage" if state == "open" else "provider.recovered", provider=name)
+    bus.emit(
+        "provider.outage" if state == "open" else "provider.recovered", provider=name
+    )
 
 
 class Router:
