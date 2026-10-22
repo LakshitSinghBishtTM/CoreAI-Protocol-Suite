@@ -8,6 +8,7 @@ The previous `1.0.0` label did not match the project's state; versions now start
 - README: describes the current feature set (OpenAI- and Anthropic-compatible APIs, tools and MCP, agent harness, local models, memory, RAG, budgets, metrics, CLI and SDKs, deploy assets), a full route table, more configuration variables, and `src/` layout commands.
 - Documented that `/metrics` needs an admin token and that the CLI and SDKs default to port 8000 while the server uses 8743.
 - `docs/api.md`: added a route index, corrected the response header table (removed `X-Response-Time`, which is not sent; added `X-CaiPS-Provider`, `X-CaiPS-Cost-USD`, rate-limit headers) and added 502 and 504 to the status codes.
+- Added status notes to `docs/deployment.md`, `concepts.md`, `protocols.md` and `security.md` separating what is built from design material, and noted that SQL migrations are not run at startup.
 - Fixed stale instructions in `docs/development.md`, `docs/runtime.md`, `docs/cli.md`, `docs/evals.md` and `docs/api.md`; added `docs/README.md` as an index.
 
 ### Added (Phase 7: agent harness)

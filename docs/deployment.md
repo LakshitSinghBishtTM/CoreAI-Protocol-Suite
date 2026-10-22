@@ -1,5 +1,8 @@
 # Deployment
 
+> **Status.** What exists today: a single gateway process (`uvicorn api.server:app`, port 8743), a `Dockerfile`, `docker-compose.yml`, Kubernetes manifests (`deploy/k8s/caips.yaml`), a Helm chart (`deploy/helm/caips`) and Prometheus/Grafana assets (`deploy/prometheus`, `deploy/grafana`). The default SQLite storage allows one replica; for more, set `DATABASE_URL` to Postgres. The **Distributed Deployment** topology and **Distributed Runtime Configuration** below are design material: there is no coordinator, worker registration or cross-node execution in the code. Circuit-breaker state is per process. For metrics and logs see [operations.md](operations.md).
+
+
 ## Overview
 
 CoreAI Protocol Suite is designed to support deployment across a range of operational environments, from single-node development systems to distributed production clusters.
@@ -373,7 +376,7 @@ Initialization typically includes:
 
 ## Migrations
 
-Schema evolution should occur through migration workflows.
+Schema evolution should occur through migration workflows. Note that the SQL files in `migrations/` are not run automatically at startup today; apply them as part of your release process.
 
 Migration procedures should be:
 

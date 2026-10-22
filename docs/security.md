@@ -1,5 +1,8 @@
 # Security
 
+> **Status.** What is enforced today: JWT or `X-API-Key` authentication with per-endpoint scopes, rate limiting, per-key budgets, request validation, log masking of bearer tokens and keys, signed webhooks, an audit log, optional prompt-injection and PII guardrails, and a sandbox plus human approvals for tools. Run the gateway behind TLS. Sections on distributed-node trust and runtime isolation describe intended design, not current behavior. Report vulnerabilities as described in [SECURITY.md](../SECURITY.md).
+
+
 ## Overview
 
 Security within CoreAI is implemented as a layered architecture that spans authentication, transport security, protocol integrity, runtime isolation, validation, and operational controls.

@@ -1,5 +1,8 @@
 # Protocols
 
+> **Status.** Experimental. DAP and STP live in `src/protocols/` (see its README), are not used by the request path, and run in a single process with no cross-node transport. Their custom cryptography is **unaudited**; do not rely on it for real trust boundaries. For authentication of the HTTP API see [security.md](security.md).
+
+
 ## Overview
 
 CoreAI Protocol Suite is built around a protocol-oriented architecture.

@@ -1,5 +1,8 @@
 # Concepts
 
+> **Status.** This page is the conceptual model. Built today: the gateway (providers, router, failover, caching, limits, budgets), tools and MCP, the agent harness, local models, and the usual operations tooling; see the README status table. The Distributed Runtime, Coordinator and worker concepts are design only and are not implemented. The DAP and STP protocols exist in `src/protocols/` but are experimental and not used on the request path.
+
+
 ## Overview
 
 CoreAI Protocol Suite is composed of several independent subsystems that work together to provide routing, orchestration, execution, communication, and observability for AI workloads.
