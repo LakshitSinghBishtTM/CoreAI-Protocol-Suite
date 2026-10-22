@@ -107,6 +107,16 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("model")
     p.add_argument("prompt")
 
+    p = sub.add_parser(
+        "tui",
+        help="interactive terminal UI (needs: pip install 'coreai-protocol-suite[tui]')",
+    )
+    p.add_argument(
+        "--section",
+        default="chat",
+        help="section to open first (see `caips-tui --help`)",
+    )
+
     p = sub.add_parser("eval", help="run an eval suite (see docs/evals.md)")
     p.add_argument("tasks")
     p.add_argument("--model", default=None)
@@ -252,6 +262,18 @@ def main(
     except SystemExit as e:
         return int(e.code or 0)
     key = os.getenv("CAIPS_API_KEY")
+    if a.cmd == "tui":
+        try:
+            from caips_tui.app import main as tui_main
+        except ImportError as e:  # textual is an optional extra
+            print(
+                f"caips: the TUI needs Textual ({e.name or e}); install with: pip install 'coreai-protocol-suite[tui]'",
+                file=err,
+            )
+            return 2
+        return tui_main(
+            ["--url", a.url, "--timeout", str(a.timeout), "--section", a.section]
+        )
     if a.cmd == "eval":
         import asyncio
 

@@ -11,6 +11,11 @@ The previous `1.0.0` label did not match the project's state; versions now start
 - Added status notes to `docs/deployment.md`, `concepts.md`, `protocols.md` and `security.md` separating what is built from design material, and noted that SQL migrations are not run at startup.
 - Fixed stale instructions in `docs/development.md`, `docs/runtime.md`, `docs/cli.md`, `docs/evals.md` and `docs/api.md`; added `docs/README.md` as an index.
 
+### Added (terminal UI)
+- `caips-tui` / `caips tui` (`src/caips_tui/`): a Textual terminal UI over the HTTP API. Chat in all three dialects (OpenAI `/v1/chat/completions`, native `/v1/completions`, Anthropic `/v1/messages`) with streaming, Esc to stop, `/retry`, routing explain, thumbs feedback and transcript export; plus sections for providers, models, usage, status/metrics, runs (with live follow, pause, approve, kill), tool approvals, tools (MCP call), agents, tasks, memory, RAG, feedback, local models, fine-tuning, evals and admin (audit, shutdown). Destructive actions ask first. See `docs/tui.md`.
+- Optional extra: `pip install 'coreai-protocol-suite[tui]'`. The API key is read from `CAIPS_API_KEY` or `--api-key-file`, never from a flag.
+- Not yet: key and budget management and routing-policy editing (no API for them yet), and a task list (the API has no list endpoint, so the Tasks section follows ids it has seen).
+
 ### Added (Phase 7: agent harness)
 - `src/harness/`: tool-use loop with step, cost, token and deadline limits, context compaction with a pinned task, sqlite checkpoints after every step, human approvals, stall detection, kill switch and a per-run trace. Local-model agents get tighter caps.
 - Run API (`api/runs_api.py`): `POST /v1/runs`, `GET /v1/runs[/{id}[/events|/stream]]`, `cancel`, `pause`, `resume`, and admin-only `POST /v1/runs/kill`. Opt-in: enabled by `config/agents.yml` (see `config/agents.example.yml`). Callers can only start agents whose tools they are granted; model calls count against the owner's budget; runs interrupted by a restart resume at startup.

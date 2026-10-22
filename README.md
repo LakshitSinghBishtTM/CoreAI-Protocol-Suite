@@ -144,7 +144,7 @@ All routes except the health probes need authentication. The scope a route needs
 
 Scopes and request bodies for each route are in [docs/api.md](docs/api.md).
 
-Interactive docs are at `/docs` while the server runs.
+Interactive docs are at `/docs` while the server runs. For a terminal UI over the same API, see [docs/tui.md](docs/tui.md).
 
 ### Error responses
 

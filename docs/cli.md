@@ -24,3 +24,5 @@ Not yet covered: keys and budgets, routing policies, and a table output mode.
 
 - `caips chat MODEL "prompt"` streams a chat completion, printing text as it arrives. A mid-stream error event exits 1.
 - `caips runs watch RUN_ID` follows `/v1/runs/{id}/stream` and prints one JSON event per line until the run ends or blocks.
+
+For an interactive view of the same API, run `caips tui` (or `caips-tui`); see [tui.md](tui.md).
