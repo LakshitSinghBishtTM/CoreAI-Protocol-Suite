@@ -80,6 +80,30 @@ Requests are validated before reaching orchestration or execution systems.
 
 ---
 
+# Route index
+
+The default port is 8743. Routes marked "opt-in" exist only when their config file is present (see the README). The sections below describe the native API in detail; the OpenAI- and Anthropic-compatible routes are at the end.
+
+| Area | Routes |
+| --- | --- |
+| Completions | `POST /v1/completions`, `POST /v1/completions/stream`, `POST /v1/routing/explain` |
+| OpenAI-compatible | `POST /v1/chat/completions`, `POST /v1/embeddings`, `GET /v1/models` |
+| Anthropic-compatible | `POST /v1/messages` |
+| Registry and providers | `GET /v1/models/details`, `GET /v1/providers` |
+| Usage | `GET /v1/usage`, `GET /v1/usage/report` |
+| Tasks | `POST /v1/tasks`, `GET` and `DELETE /v1/tasks/{id}` |
+| Agent runs (opt-in) | `/v1/runs`, `/v1/runs/{id}`, `/events`, `/stream`, `/cancel`, `/pause`, `/resume`, `POST /v1/runs/kill` |
+| Tools (opt-in) | `GET /v1/tools`, `POST /mcp`, `/v1/tools/approvals` |
+| Local models | `GET /v1/local/models`, `.../{id}`, `POST .../pull`, `DELETE .../{id}`, `POST .../{id}/unload` |
+| Memory, RAG, feedback | `/v1/memory`, `/v1/rag/{collection}/documents` and `/search`, `/v1/feedback` |
+| Legacy agents | `POST` and `GET /v1/agents`, `DELETE /v1/agents/{id}` |
+| Admin | `GET /v1/stats`, `GET /v1/admin/audit`, `POST /v1/admin/shutdown`, `/v1/finetune/estimate`, `/v1/finetune/jobs` |
+| Operations | `GET /health`, `/healthz`, `/readyz` (no auth), `GET /metrics` (admin) |
+
+Interactive OpenAPI docs are served at `/docs`.
+
+---
+
 # Base URL
 
 Production deployments expose the API through a configurable endpoint.
@@ -339,6 +363,8 @@ Running
 
 # Agent API
 
+> The supported agent API is the harness run API under `/v1/runs` (see [agents.md](agents.md)). The `/v1/agents` routes are the legacy lifecycle API and are experimental.
+
 ## Overview
 
 The Agent API provides visibility into agent activity and execution state.
@@ -469,9 +495,11 @@ Instead, clients should use status codes and error categories.
 | 404  | Resource not found      |
 | 409  | Resource conflict       |
 | 422  | Validation failure      |
-| 429  | Rate limited            |
+| 429  | Rate limited, or a budget or provider limit reached |
 | 500  | Internal platform error |
-| 503  | Service unavailable     |
+| 502  | Provider unreachable, returned a 5xx, or rejected the gateway's key |
+| 503  | Service unavailable: provider overloaded, every provider failed or is circuit-broken, or the server is draining |
+| 504  | Provider timed out or the request deadline was exceeded |
 
 ---
 
@@ -512,10 +540,14 @@ CoreAI may include operational metadata within response headers.
 
 Examples include:
 
-| Header          | Purpose             |
-| --------------- | ------------------- |
-| X-Request-ID    | Request correlation |
-| X-Response-Time | Execution latency   |
+| Header                | Purpose                                                    |
+| --------------------- | ---------------------------------------------------------- |
+| X-Request-ID          | Request correlation (a safe client-supplied value is kept) |
+| X-CaiPS-Provider      | Provider that served the request                           |
+| X-CaiPS-Cost-USD      | Cost of a non-streaming response                           |
+| X-RateLimit-Limit     | Requests allowed per minute                                |
+| X-RateLimit-Remaining | Requests left this minute                                  |
+| Retry-After           | Set on 429 and 503 when the wait is known                  |
 
 These headers support monitoring and troubleshooting workflows.
 
