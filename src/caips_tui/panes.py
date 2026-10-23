@@ -13,7 +13,7 @@ from typing import Any, Optional
 from rich.text import Text
 from textual.app import ComposeResult
 from textual.containers import Grid
-from textual.widgets import Button, RichLog
+from textual.widgets import Button, Input, RichLog
 
 from caips_tui.client import ApiError, q
 from caips_tui.widgets import Action, Field, Pane, TablePane
@@ -29,6 +29,83 @@ def read_jsonl(path: str) -> list[dict]:
         return _jsonl(path)
     except OSError as e:
         raise CliError(f"cannot read {path}: {e.strerror or e}")
+
+
+class KeysPane(TablePane):
+    TITLE = "Keys"
+    HELP = (
+        "Provider API keys (admin). Pick a provider id from Catalog, add as many keys per "
+        "provider as you like (they rotate; an exhausted key is skipped), or add a Local "
+        "or Custom server. Keys are encrypted on the server and never shown again."
+    )
+    PATH = "/v1/keys"
+    ID_KEY = "id"
+    COLUMNS = [
+        ("Provider", "provider"),
+        ("Label", "label"),
+        ("Key", "key"),
+        ("Source", "source"),
+        ("Loaded", "loaded"),
+        ("Endpoint", "base_url"),
+        ("Model", "model"),
+    ]
+    FIELDS = [
+        Field("provider", "provider id (openai, qwen, local, custom, ...)"),
+        Field("label", "label / server name (optional for cloud)"),
+        Field("key", "API key (hidden)", password=True),
+        Field("base_url", "base URL (local/custom, optional override)"),
+        Field("model", "default model (optional)"),
+    ]
+    ACTIONS = [
+        Action("add", "Add key"),
+        Action("catalog", "Catalog"),
+        Action(
+            "remove",
+            "Remove",
+            needs_row=True,
+            confirm="Remove the {provider} key '{label}'?",
+            variant="error",
+        ),
+    ]
+
+    async def act_add(self, row: Optional[dict]) -> None:
+        provider = self.val("provider")
+        if not provider:
+            self.say("Give a provider id (press Catalog to list them).", error=True)
+            return
+        body = {
+            "provider": provider,
+            "api_key": self.query_one("#fld-key", Input).value,
+            "label": self.val("label"),
+            "base_url": self.val("base_url"),
+            "model": self.val("model"),
+        }
+        ok, data = await self.api("POST", "/v1/keys", json=body)
+        if not ok:
+            return
+        self.set_val("key", "")  # never leave the secret in the widget
+        note = "" if data.get("loaded") else f" (not loaded: {data.get('problem') or 'see server log'})"
+        self.say(f"added {data.get('provider')}/{data.get('label')}{note}", error=bool(note))
+        await self.refresh_data()
+
+    async def act_catalog(self, row: Optional[dict]) -> None:
+        ok, data = await self.api("GET", "/v1/keys/catalog")
+        if not ok:
+            return
+        groups: dict[str, list[str]] = {}
+        names = {"us": "United States", "cn": "China", "self": "Self-hosted", "any": "Any OpenAI-compatible"}
+        for lab in data.get("data", []):
+            groups.setdefault(names.get(lab["region"], lab["region"]), []).append(
+                f"{lab['id']:<11} {lab['label']}"
+            )
+        self.render_detail({k: v for k, v in groups.items()})
+        self.say("provider ids are in the left column of the detail view")
+
+    async def act_remove(self, row: dict) -> None:
+        ok, _ = await self.api("DELETE", f"/v1/keys/{q(row['id'])}")
+        if ok:
+            self.say(f"removed {row.get('provider')}/{row.get('label')}")
+            await self.refresh_data()
 
 
 # ---------------------------------------------------------------- overview

@@ -4,7 +4,7 @@ services:
   api:
     build: .
     ports:
-      - "8743:8743"
+      - "6969:6969"
     environment:
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}

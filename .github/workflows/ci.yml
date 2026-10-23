@@ -140,11 +140,11 @@ jobs:
         run: docker build -t caips:${{ github.sha }} .
       - name: Smoke test container
         run: |
-          docker run -d --name caips-test -p 8743:8743 \
+          docker run -d --name caips-test -p 6969:6969 \
             -e ENVIRONMENT=test \
             -e SECRET_KEY=ci-test-secret-not-a-real-key \
             -e OPENAI_API_KEY=dummy-key-for-smoke-test \
             caips:${{ github.sha }}
           sleep 5
-          curl --fail http://localhost:8743/health || (docker logs caips-test && exit 1)
+          curl --fail http://localhost:6969/health || (docker logs caips-test && exit 1)
           docker stop caips-test

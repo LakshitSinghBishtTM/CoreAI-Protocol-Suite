@@ -14,4 +14,4 @@ Start here, then follow the guide for what you are doing. For setup and a first 
 | [cli.md](cli.md), [evals.md](evals.md), [plugins.md](plugins.md) | `caips` CLI, eval runner, entry-point plugins |
 | [development.md](development.md), [roadmap.md](roadmap.md) | Contributing workflow and the plan |
 
-The server listens on port 8743. The `caips` CLI and the SDKs default to port 8000, so set `CAIPS_URL` (or pass a base URL) when you use them.
+The server listens on port 6969, and the `caips` CLI, the TUI and the SDKs default to it. Set `CAIPS_URL` (or pass a base URL) for another host or port.

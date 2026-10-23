@@ -27,7 +27,7 @@ spec:
       containers:
         - name: caips
           image: caips:latest   # set to your registry image and pin a version
-          ports: [{ name: http, containerPort: 8743 }]
+          ports: [{ name: http, containerPort: 6969 }]
           env:
             - { name: DB_PATH, value: /data/coreai.db }
           envFrom:
@@ -55,4 +55,4 @@ kind: Service
 metadata: { name: caips }
 spec:
   selector: { app: caips }
-  ports: [{ name: http, port: 8743, targetPort: http }]
+  ports: [{ name: http, port: 6969, targetPort: http }]

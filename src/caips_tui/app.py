@@ -32,6 +32,7 @@ from caips_tui.panes import (
     LocalPane,
     MemoryPane,
     ModelsPane,
+    KeysPane,
     ProvidersPane,
     RagPane,
     RunsPane,
@@ -45,6 +46,7 @@ from caips_tui.widgets import Pane
 SECTIONS: list[tuple[str, str, type[Pane]]] = [
     ("chat", "Chat", ChatPane),
     ("providers", "Providers", ProvidersPane),
+    ("keys", "Keys", KeysPane),
     ("models", "Models", ModelsPane),
     ("usage", "Usage", UsagePane),
     ("status", "Status", StatusPane),
@@ -262,7 +264,7 @@ def build_parser() -> argparse.ArgumentParser:
         "on the command line, where other users could see it.",
         allow_abbrev=False,  # so `--api-key SECRET` is an error, not a silent match for --api-key-file
     )
-    ap.add_argument("--url", default=os.getenv("CAIPS_URL", "http://localhost:8000"))
+    ap.add_argument("--url", default=os.getenv("CAIPS_URL", "http://localhost:6969"))
     ap.add_argument(
         "--api-key-file",
         help="read the bearer token from this file instead of CAIPS_API_KEY",

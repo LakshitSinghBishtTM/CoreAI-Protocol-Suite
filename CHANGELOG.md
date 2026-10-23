@@ -4,9 +4,20 @@
 
 The previous `1.0.0` label did not match the project's state; versions now start at 0.1.0 (alpha).
 
+### Added (key manager)
+- Provider keys are no longer required at startup: the server starts with none and logs a warning. `/readyz` reports not ready until a provider exists.
+- `/v1/keys` (admin): add, list and remove keys at runtime, and `GET /v1/keys/catalog`. Keys are encrypted at rest (`CAIPS_KEYSTORE`, `CAIPS_KEYSTORE_SECRET`), applied to the running router immediately, and never returned.
+- Catalog of US labs (OpenAI, Anthropic, Google, xAI, Meta, NVIDIA, Perplexity), Chinese labs (DeepSeek, Alibaba Qwen, Moonshot, Zhipu, MiniMax, ByteDance, Baidu, Tencent, StepFun, 01.AI, Baichuan), plus `local` and `custom` servers. Labs without a native SDK use their OpenAI-compatible endpoint (`providers/compat.py`); endpoints are not tested against live services.
+- Several keys per provider (`providers/pool.py`): rotation, with a 60 s cooldown for a key that gets an auth, quota or rate-limit error.
+- TUI **Keys** section and `caips keys list|catalog|add|rm`.
+- `Router.set_provider` / `drop_provider` for runtime changes.
+
+### Changed
+- Default port is now 6969 for the server, `caips`, `caips-tui`, the SDKs, Docker, Helm, Kubernetes and CI (was 8743 for the server and 8000 for clients).
+
 ### Changed (documentation refresh)
 - README: describes the current feature set (OpenAI- and Anthropic-compatible APIs, tools and MCP, agent harness, local models, memory, RAG, budgets, metrics, CLI and SDKs, deploy assets), a full route table, more configuration variables, and `src/` layout commands.
-- Documented that `/metrics` needs an admin token and that the CLI and SDKs default to port 8000 while the server uses 8743.
+- Documented that `/metrics` needs an admin token and that the CLI and SDKs default to port 8000 while the server uses 6969.
 - `docs/api.md`: added a route index, corrected the response header table (removed `X-Response-Time`, which is not sent; added `X-CaiPS-Provider`, `X-CaiPS-Cost-USD`, rate-limit headers) and added 502 and 504 to the status codes.
 - Added status notes to `docs/deployment.md`, `concepts.md`, `protocols.md` and `security.md` separating what is built from design material, and noted that SQL migrations are not run at startup.
 - Fixed stale instructions in `docs/development.md`, `docs/runtime.md`, `docs/cli.md`, `docs/evals.md` and `docs/api.md`; added `docs/README.md` as an index.

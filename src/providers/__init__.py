@@ -10,6 +10,9 @@ from loguru import logger
 # Explicit submodule imports so patch("providers.openai.OpenAIProvider") works
 from . import anthropic, deepseek, gemini, grok, openai
 from .anthropic import AnthropicProvider
+from .catalog import BY_ID, CATALOG, EXTRA_ENV
+from .compat import CompatProvider
+from .pool import KeyPoolProvider
 from .base import (
     BaseProvider,
     CompletionRequest,
@@ -37,6 +40,8 @@ __all__ = [
     "PROVIDER_MAP",
     "load_providers",
     "load_providers_or_raise",
+    "fingerprint",
+    "CATALOG",
 ]
 
 PROVIDER_MAP: dict[str, tuple] = {
@@ -95,8 +100,98 @@ class ProviderLoadResult:
         return self.providers.get(key, default)
 
 
+def fingerprint(p: BaseProvider) -> tuple:
+    """Identity of a provider's credentials and endpoint, to tell whether a reload changed it."""
+    return tuple(
+        (m.api_key, getattr(m, "base_url", ""), m.default_model)
+        for m in getattr(p, "members", [p])
+    )
+
+
+def _build(lab_id: str, key: str, name: str, entry: dict | None = None) -> BaseProvider:
+    lab = BY_ID[lab_id]
+    entry = entry or {}
+    if lab.kind == "native":
+        return PROVIDER_MAP[lab_id][0](api_key=key)
+    return CompatProvider(
+        key,
+        name,
+        entry.get("base_url") or lab.base_url,
+        entry.get("model") or lab.model,
+    )
+
+
+def _load_store(result: "ProviderLoadResult") -> None:
+    """Keys added at runtime (see coreai/keystore.py), merged with environment keys.
+
+    Several keys for one lab become a KeyPoolProvider under the lab's own name,
+    so model pinning, pricing and circuit breaking keep working unchanged.
+    """
+    try:
+        from coreai.keystore import load_secrets
+
+        entries = load_secrets()
+    except Exception as e:
+        logger.warning(f"  [FAIL] key store — {e}")
+        result.failed["keystore"] = str(e)
+        return
+    by_lab: dict[str, list[dict]] = {}
+    for e in entries:
+        by_lab.setdefault(e.get("provider", ""), []).append(e)
+    # compat labs may also come from their own environment variable
+    for lab_id, env_var in EXTRA_ENV.items():
+        env_key = os.getenv(env_var, "").strip()
+        if env_key:
+            by_lab.setdefault(lab_id, []).insert(
+                0, {"label": "env", "api_key": env_key, "provider": lab_id}
+            )
+    for lab_id, items in by_lab.items():
+        lab = BY_ID.get(lab_id)
+        if lab is None:
+            continue
+        if lab.kind in ("native", "compat"):
+            members = [result.providers[lab_id]] if lab_id in result.providers else []
+            labels = ["env"] if members else []
+            for e in items:
+                if e["label"] == "env" and members:
+                    continue  # native env key already loaded above
+                try:
+                    members.append(_build(lab_id, e["api_key"], lab_id, e))
+                    labels.append(e["label"])
+                except Exception as exc:
+                    result.failed[f"{lab_id}/{e['label']}"] = str(exc)
+            if not members:
+                continue
+            p = members[0] if len(members) == 1 else KeyPoolProvider(lab_id, members, labels)
+            p.managed = True
+            result.providers[lab_id] = p
+            result.skipped.pop(lab_id, None)
+            logger.info(f"  [OK]   {lab_id} loaded ({len(members)} key(s))")
+        else:  # local / custom: one provider per entry, named by its label
+            for e in items:
+                name = e["label"]
+                if name in result.providers:
+                    result.failed[name] = "name clashes with another provider"
+                    continue
+                try:
+                    if lab.kind == "local":
+                        from .local import LocalProvider
+
+                        p = LocalProvider(name, e["base_url"], e.get("api_key", ""), default_model=e.get("model", ""))
+                    else:
+                        p = CompatProvider(e["api_key"], name, e["base_url"], e.get("model", ""))
+                except Exception as exc:
+                    result.failed[name] = str(exc)
+                    continue
+                p.managed = True
+                result.providers[name] = p
+                logger.info(f"  [OK]   {name} ({lab.kind}, {e['base_url']})")
+
+
 def load_providers(
     enabled: list[str] | None = None,
+    *,
+    include_local_yml: bool = True,
 ) -> ProviderLoadResult:
     """
     Load all providers that have API keys set in env.
@@ -131,7 +226,11 @@ def load_providers(
             result.failed[name] = reason
 
     if enabled is None:
-        _load_local(result)
+        for p in result.providers.values():
+            p.managed = True
+        _load_store(result)
+        if include_local_yml:
+            _load_local(result)
     return result
 
 

@@ -9,6 +9,7 @@ from agents.agent_manager import init_agent_manager
 from api import (
     anthropic_compat,
     feedback_api,
+    keys_api,
     local_models_api,
     memory_api,
     openai_compat,
@@ -61,12 +62,14 @@ async def lifespan(app: FastAPI):
     _db.init_db()
     app_state["db"] = True
 
-    providers = load_providers()
+    providers = load_providers().providers  # the live dict; the key manager edits it
     if not providers:
-        logger.error("No providers loaded! Check API keys in .env")
-        raise RuntimeError("No providers available")
-
-    logger.info(f"Loaded providers: {list(providers.keys())}")
+        logger.warning(
+            "No providers configured yet. Add API keys in the TUI (Keys section), "
+            "with `caips keys add`, or set e.g. OPENAI_API_KEY."
+        )
+    else:
+        logger.info(f"Loaded providers: {list(providers.keys())}")
     for p in providers.values():
         if getattr(p, "is_local", False):
             await p.refresh_models()  # never raises; a dead server is skipped
@@ -181,6 +184,7 @@ app.include_router(local_models_api.router)
 app.include_router(memory_api.router)
 app.include_router(feedback_api.router)
 app.include_router(rag_api.router)
+app.include_router(keys_api.router)
 
 
 def _load_rate_limits():
@@ -382,4 +386,4 @@ async def metrics(ctx: AuthContext = Depends(require_scope("admin"))):
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8743)
+    uvicorn.run(app, host="0.0.0.0", port=6969)

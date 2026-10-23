@@ -5,7 +5,7 @@ set -euo pipefail
 export SECRET_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')"
 export OPENAI_API_KEY="sk-quickstart-dummy"
 export ENVIRONMENT=test
-PORT="${PORT:-8743}"
+PORT="${PORT:-6969}"
 uvicorn api.server:app --port "$PORT" >/tmp/caips-quickstart.log 2>&1 &
 PID=$!
 trap 'kill $PID 2>/dev/null || true' EXIT

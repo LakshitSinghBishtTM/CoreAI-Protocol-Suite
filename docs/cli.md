@@ -3,7 +3,7 @@
 A thin command line over the HTTP API: each command is one documented request, so the CLI and the API cannot drift apart.
 
 ```bash
-export CAIPS_URL=http://localhost:8743      # the CLI's own default is :8000; the server listens on :8743
+export CAIPS_URL=http://localhost:6969      # the default; set it only for another host or port
 caips login                                 # prompts for the bearer token (hidden), saves it
 caips health
 caips providers | jq '.[].name'
@@ -20,7 +20,21 @@ The token is saved in `~/.config/caips/credentials.json` (mode `0600`), per `--u
 Output is JSON on stdout. Errors go to stderr. Exit codes: `0` ok, `1` HTTP or network error, `2` bad usage or input file.
 `--url` overrides `CAIPS_URL`. Ids are percent-encoded before they go into a URL path.
 
-Not yet covered: keys and budgets, routing policies, and a table output mode.
+## Provider keys
+
+```bash
+caips keys catalog                       # provider ids by region
+caips keys add openai                    # hidden prompt; or: echo "$KEY" | caips keys add openai
+caips keys add openai --label work       # a second key for the same provider
+caips keys add custom --label mylab --base-url https://llm.example.com/v1 --model m1
+caips keys add local --label ollama      # preset URL; no key needed
+caips keys list                          # masked: only the last 4 characters
+caips keys rm KEY_ID
+```
+
+These need an `admin` token. The key is never accepted as a flag. See the README for how several keys per provider behave.
+
+Not yet covered: budgets, routing policies, and a table output mode.
 
 ## Streaming
 

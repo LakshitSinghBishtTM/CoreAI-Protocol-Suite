@@ -1,4 +1,4 @@
-"""``python -m evals evals/ --base-url http://localhost:8000 --model fast [--baseline old.json]``
+"""``python -m evals evals/ --base-url http://localhost:6969 --model fast [--baseline old.json]``
 
 Runs the suite through a running gateway's OpenAI-compatible API, prints a summary,
 writes JSON, and exits 1 on regressions against a baseline (for scheduled CI).
@@ -58,7 +58,7 @@ def _with_model(req, model):
 async def main(argv: list[str] | None = None, transport=None) -> int:
     ap = argparse.ArgumentParser(prog="evals")
     ap.add_argument("tasks")
-    ap.add_argument("--base-url", default="http://localhost:8000")
+    ap.add_argument("--base-url", default="http://localhost:6969")
     ap.add_argument("--model", default=None)
     ap.add_argument("--tag", action="append")
     ap.add_argument(

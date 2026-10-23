@@ -13,7 +13,7 @@ const TERMINAL = new Set(["completed", "failed", "cancelled"]);
 export class CaipsClient {
   private base: string;
   constructor(
-    baseUrl = "http://localhost:8000",
+    baseUrl = "http://localhost:6969",
     private apiKey?: string,
     private fetchImpl: typeof fetch = fetch,
   ) {

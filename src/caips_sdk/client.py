@@ -21,7 +21,7 @@ class CaipsError(Exception):
 class CaipsClient:
     def __init__(
         self,
-        base_url: str = "http://localhost:8000",
+        base_url: str = "http://localhost:6969",
         api_key: str | None = None,
         timeout: float = 60.0,
         transport: httpx.BaseTransport | None = None,

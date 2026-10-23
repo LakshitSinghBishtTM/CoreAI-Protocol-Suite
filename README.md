@@ -51,6 +51,7 @@ It is **alpha software**. The gateway core works and is unit tested. Several oth
 | Component | Status | Notes |
 | --- | --- | --- |
 | Router, failover, circuit breaker, retry, limiter | Alpha | Tested with simulated failures, and with the real Anthropic, OpenAI and Gemini SDK error types over mock HTTP transports. Not yet exercised against a live provider outage. |
+| Key manager (`/v1/keys`, `coreai/keystore.py`, `providers/pool.py`) | Alpha | Runtime key add/remove with multi-key rotation. Tested with fakes; the extra labs are not tested against live endpoints. |
 | Providers and cache | Alpha | Anthropic and OpenAI have request/response contract tests; Gemini, Grok and DeepSeek do not yet. |
 | API server and auth | Alpha | Error mapping, streaming and provider health are tested; roughly two thirds of the route code is covered. |
 | Task orchestrator | Alpha | Queue and dispatch exist; limited tests. |
@@ -76,40 +77,50 @@ cd CoreAI-Protocol-Suite
 pip install -e .
 
 export SECRET_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')"
-export OPENAI_API_KEY="sk-..."   # set at least one provider key
-
-uvicorn api.server:app --port 8743
+uvicorn api.server:app --port 6969
 ```
 
 The code lives in `src/` (the install exposes `api`, `coreai`, `providers`, ... as top-level packages). The wheel contains code only: `config/` and `migrations/` are read from the checkout, or from `$COREAI_HOME`.
 
-The server refuses to start if no provider key is set. It reads real environment variables and does **not** load `.env` files itself. To keep settings in a file, copy `.env.example` to `.env`, fill it in, and run `set -a; source .env; set +a` before starting (Docker users can pass `--env-file .env`).
+The server starts with no provider keys. Add them afterwards from the TUI (`caips tui`, **Keys** section) or with `caips keys add openai`; they take effect immediately, without a restart (see [Provider keys](#provider-keys)). Until a provider exists `/readyz` returns 503 (so Kubernetes readiness probes stay red), while `/health` stays 200. Exporting `OPENAI_API_KEY` and the other variables below still works and is the usual choice for Docker and CI. The server reads real environment variables and does **not** load `.env` files itself. To keep settings in a file, copy `.env.example` to `.env`, fill it in, and run `set -a; source .env; set +a` before starting (Docker users can pass `--env-file .env`).
 
 There is no token-issuing endpoint yet, so mint a token yourself with the same `SECRET_KEY`:
 
 ```bash
 TOKEN=$(python -c "from api.auth import create_access_token; print(create_access_token('user:me', ['completions:read', 'completions:write']))")
 
-curl localhost:8743/health
-curl -H "Authorization: Bearer $TOKEN" localhost:8743/v1/providers
-curl -X POST localhost:8743/v1/completions \
+curl localhost:6969/health
+curl -H "Authorization: Bearer $TOKEN" localhost:6969/v1/providers
+curl -X POST localhost:6969/v1/completions \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
   -d '{"messages":[{"role":"user","content":"Hello"}]}'
 ```
 
-The `caips` CLI and the SDKs default to `http://localhost:8000`, not the port above. Point them at the server with `CAIPS_URL` (or `--url`):
+The `caips` CLI, the TUI and the SDKs all default to `http://localhost:6969`, the same port as the server. For another host or port, set `CAIPS_URL` (or `--url`):
 
 ```bash
-export CAIPS_URL=http://localhost:8743
+export CAIPS_URL=http://localhost:6969
 echo "$TOKEN" | caips login      # saved to ~/.config/caips (0600); or run `caips tui` and paste it there
 caips health
 ```
+
+### Provider keys
+
+Keys are managed inside the app, not at startup: **TUI → Keys**, or `caips keys list|catalog|add|rm` (the key is read from a hidden prompt or stdin, never a flag). Each key is encrypted on the server and applied to the running gateway at once. List the ids with `caips keys catalog`.
+
+| Region | Provider ids |
+| --- | --- |
+| United States | `openai`, `anthropic`, `gemini`, `grok` (xAI), `meta`, `nvidia`, `perplexity` |
+| China | `deepseek`, `qwen` (Alibaba), `moonshot` (Kimi), `zhipu` (GLM), `minimax`, `doubao` (ByteDance), `baidu` (ERNIE), `tencent` (Hunyuan), `stepfun`, `yi` (01.AI), `baichuan` |
+| Yours | `local` (Ollama, LM Studio, llama-server, vLLM; label it with the preset name or give a base URL) and `custom` (any OpenAI-compatible endpoint: name, base URL, model, key) |
+
+You can add several keys for one provider. Requests rotate across them, and a key that hits an auth, quota or rate-limit error is skipped for 60 seconds, so one exhausted key does not fail the request. Anything else is handled by the normal retry, failover and circuit-breaker logic. Non-native labs use their OpenAI-compatible endpoint; the default base URLs and models are in `src/providers/catalog.py` and can be overridden per key. They were set from each lab's public docs and have **not** been tested against the live services. Models missing from `config/pricing.yml` are billed as $0 until you add prices.
 
 ### Docker
 
 ```bash
 docker build -t caips .
-docker run -p 8743:8743 --env-file .env caips
+docker run -p 6969:6969 --env-file .env caips
 # or, with SQLite on a named volume:
 cp .env.example .env && docker compose up
 ```
@@ -138,6 +149,7 @@ All routes except the health probes need authentication. The scope a route needs
 | `/v1/runs` (start, list, status, events, stream, cancel, pause, resume) | Agent harness runs; opt-in |
 | `GET /v1/tools`, `POST /mcp`, `/v1/tools/approvals` | Tools, MCP endpoint, tool-call approvals; opt-in |
 | `/v1/local/models` | List, pull, remove and unload local GGUF models |
+| `/v1/keys`, `/v1/keys/catalog` | Add, list and remove provider API keys at runtime (`admin`; secrets are never returned) |
 | `/v1/memory`, `/v1/rag/{collection}`, `/v1/feedback` | Memory, retrieval and feedback stores |
 | `POST /v1/agents`, `GET /v1/agents`, `DELETE /v1/agents/{id}` | Legacy experimental agents `[agents:read, agents:write]` |
 | `GET /v1/stats`, `GET /v1/admin/audit`, `POST /v1/admin/shutdown` | Statistics, audit log, shutdown `[admin]` |
@@ -168,7 +180,9 @@ See `.env.example` for a template. The main variables:
 | Variable | Purpose |
 | --- | --- |
 | `SECRET_KEY` | Signs JWTs. Required. |
-| `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `GROK_API_KEY`, `DEEPSEEK_API_KEY` | Enable each provider. At least one is required. |
+| `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `GROK_API_KEY`, `DEEPSEEK_API_KEY`, and `<LAB>_API_KEY` for the others in the table below | Optional. Enable a provider from the environment instead of the Keys section. An environment key and stored keys for the same lab are used together. |
+| `CAIPS_KEYSTORE` | File for keys added through the Keys section (default `data/provider_keys.json`, mode 0600; `/data/provider_keys.json` in the Docker image, so mount `/data` to keep keys). |
+| `CAIPS_KEYSTORE_SECRET` | Encrypts that file. Defaults to `SECRET_KEY`; changing it makes stored keys unreadable (they are skipped, not guessed). |
 | `DATABASE_URL` | Postgres URL. Empty means SQLite (install `.[postgres]` for Postgres). |
 | `DB_PATH` | SQLite file location. |
 | `JWT_EXPIRY_MINS` | Token lifetime. |

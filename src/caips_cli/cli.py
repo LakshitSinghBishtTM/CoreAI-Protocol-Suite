@@ -1,7 +1,7 @@
 """caips: a thin CLI over the HTTP API. Everything it does is one documented request,
 so the CLI and the API cannot drift apart.
 
-Environment: ``CAIPS_URL`` (default http://localhost:8000). The token comes from ``caips login``
+Environment: ``CAIPS_URL`` (default http://localhost:6969). The token comes from ``caips login``
 (stored in ~/.config/caips, mode 0600) or, overriding it, ``CAIPS_API_KEY``.
 Output is JSON on stdout (pipe to ``jq``); errors go to stderr; exit code 1 on any
 HTTP error, 2 on bad usage.
@@ -37,12 +37,24 @@ def _jsonl(path: str) -> list[dict]:
 
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(prog="caips", description=__doc__.split("\n\n")[0])
-    ap.add_argument("--url", default=os.getenv("CAIPS_URL", "http://localhost:8000"))
+    ap.add_argument("--url", default=os.getenv("CAIPS_URL", "http://localhost:6969"))
     ap.add_argument("--timeout", type=float, default=60)
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     sub.add_parser("login", help="save the API token for --url (hidden prompt or stdin)")
     sub.add_parser("logout", help="forget the saved token for --url")
+    ky = sub.add_parser("keys", help="provider API keys (admin)").add_subparsers(
+        dest="sub", required=True
+    )
+    ky.add_parser("list", help="stored and environment keys (masked)")
+    ky.add_parser("catalog", help="provider ids you can add keys for")
+    p = ky.add_parser("add", help="add a key; the key is read from a hidden prompt or stdin")
+    p.add_argument("provider")
+    p.add_argument("--label", default="")
+    p.add_argument("--base-url", default="")
+    p.add_argument("--model", default="")
+    p = ky.add_parser("rm", help="remove a stored key by id")
+    p.add_argument("key_id")
     sub.add_parser("health", help="liveness and readiness")
     sub.add_parser("providers", help="configured providers and their health")
     sub.add_parser("usage", help="usage summary")
@@ -140,6 +152,26 @@ def _plan(a: argparse.Namespace) -> tuple[str, str, Optional[dict]]:
     }
     if c in simple:
         return "GET", simple[c], None
+    if c == "keys":
+        if s == "list":
+            return "GET", "/v1/keys", None
+        if s == "catalog":
+            return "GET", "/v1/keys/catalog", None
+        if s == "rm":
+            return "DELETE", f"/v1/keys/{q(a.key_id)}", None
+        import getpass
+
+        secret = (
+            getpass.getpass(f"{a.provider} API key (blank for none): ")
+            if sys.stdin.isatty()
+            else sys.stdin.readline()
+        ).strip()
+        return (
+            "POST",
+            "/v1/keys",
+            {"provider": a.provider, "api_key": secret, "label": a.label,
+             "base_url": a.base_url, "model": a.model},
+        )
     if c == "local":
         return {
             "list": ("GET", "/v1/local/models", None),

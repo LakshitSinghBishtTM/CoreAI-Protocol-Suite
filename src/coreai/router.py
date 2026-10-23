@@ -329,6 +329,45 @@ class Router:
         )
 
     # ------------------------------------------------------------------ #
+    # Runtime provider changes (key manager)
+    # ------------------------------------------------------------------ #
+
+    def set_provider(self, name: str, provider: BaseProvider) -> None:
+        """Add a provider, or swap the object behind an existing name (keeping its
+        breaker, health and stats). Mutates the shared ``providers`` dict in place."""
+        if name in self.providers:
+            self.providers[name] = provider
+            return
+        self.providers[name] = provider
+        self.limiter.register_provider(
+            name, self.config.rate_limits.get(name) or RateLimitConfig()
+        )
+        self.breakers[name] = CircuitBreaker(
+            name,
+            failure_threshold=self.config.circuit_failure_threshold,
+            reset_timeout=self.config.circuit_reset_seconds,
+            clock=self._clock,
+            on_change=_breaker_event,
+        )
+        self.health[name] = HealthTracker(
+            self.config.health_half_life_seconds, clock=self._clock
+        )
+        self.provider_stats[name] = {
+            "requests": 0,
+            "errors": 0,
+            "total_cost": 0.0,
+            "latency_ms_history": [],
+            "error_kinds": {},
+            "error_statuses": {},
+        }
+
+    def drop_provider(self, name: str) -> None:
+        self.providers.pop(name, None)
+        self.limiter.limiters.pop(name, None)
+        for table in (self.breakers, self.health, self.provider_stats):
+            table.pop(name, None)
+
+    # ------------------------------------------------------------------ #
     # Public API
     # ------------------------------------------------------------------ #
 

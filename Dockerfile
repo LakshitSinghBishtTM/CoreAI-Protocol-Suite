@@ -6,7 +6,7 @@
 # Build:
 #   docker build -t coreai:latest .
 # Run:
-#   docker run -d -p 8743:8743 --env-file .env coreai:latest
+#   docker run -d -p 6969:6969 --env-file .env coreai:latest
 
 # ---------------------------------------------------------------------------
 # Stage 1: build dependencies into a virtualenv
@@ -41,6 +41,7 @@ WORKDIR /app
 # No apt packages: the healthcheck uses Python, which keeps the image small.
 RUN useradd --create-home --uid 1000 --shell /usr/sbin/nologin coreai
 RUN mkdir /data && chown coreai:coreai /data
+ENV CAIPS_KEYSTORE=/data/provider_keys.json
 
 COPY --from=builder /opt/venv /opt/venv
 
@@ -51,9 +52,9 @@ COPY --chown=coreai:coreai migrations/ ./migrations/
 
 USER coreai
 
-EXPOSE 8743
+EXPOSE 6969
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD python -c "import urllib.request as u; u.urlopen('http://localhost:8743/health', timeout=4)" || exit 1
+    CMD python -c "import urllib.request as u; u.urlopen('http://localhost:6969/health', timeout=4)" || exit 1
 
-CMD ["uvicorn", "api.server:app", "--host", "0.0.0.0", "--port", "8743"]
+CMD ["uvicorn", "api.server:app", "--host", "0.0.0.0", "--port", "6969"]

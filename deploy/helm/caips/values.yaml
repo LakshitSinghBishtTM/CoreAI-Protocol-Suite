@@ -10,7 +10,7 @@ replicaCount: 1
 
 service:
   type: ClusterIP
-  port: 8743
+  port: 6969
 
 # Provider keys and other secrets. Prefer an existing Secret you manage yourself;
 # its keys become environment variables (OPENAI_API_KEY, ANTHROPIC_API_KEY, ...).

@@ -30,7 +30,7 @@ spec:
           securityContext: {{- toYaml .Values.securityContext | nindent 12 }}
           ports:
             - name: http
-              containerPort: 8743
+              containerPort: 6969
           env:
             - name: DB_PATH
               value: /data/coreai.db

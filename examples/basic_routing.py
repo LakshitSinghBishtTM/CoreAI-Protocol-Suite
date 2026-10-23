@@ -2,7 +2,7 @@
 
 from openai import OpenAI
 
-client = OpenAI(base_url="http://localhost:8000/v1", api_key="YOUR_CAIPS_TOKEN")
+client = OpenAI(base_url="http://localhost:6969/v1", api_key="YOUR_CAIPS_TOKEN")
 
 for alias in ("fast", "cheap", "best"):  # virtual models -> routing policies
     r = client.chat.completions.create(

@@ -120,7 +120,7 @@ budget config loads.
       authorization:
         credentials_file: /etc/prometheus/caips_token   # a JWT with scope "admin"
       static_configs:
-        - targets: ["caips:8743"]
+        - targets: ["caips:6969"]
   ```
 
 JWTs expire (60 minutes by default, `JWT_EXPIRY_MINS`), so a long-lived scraper

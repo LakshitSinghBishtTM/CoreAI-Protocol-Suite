@@ -172,7 +172,7 @@ async def test_app_boots_with_every_section_and_switches():
     )
     async with app.run_test(size=SIZE) as pilot:
         await settle(app, pilot)
-        assert len(SECTIONS) == 17
+        assert len(SECTIONS) == 18
         for sid, _, _ in SECTIONS:
             assert app.pane(sid) is not None
         assert "online" in str(app.query_one("#conn", Static).render())
@@ -495,6 +495,32 @@ async def test_agents_register_and_terminate():
         }
         await pane.perform("terminate")
         assert srv.calls("DELETE", "/v1/agents/ag1")
+
+
+async def test_keys_pane_add_clears_secret_and_remove():
+    app, srv = make(
+        {
+            ("GET", "/v1/keys"): (
+                200,
+                {"data": [{"id": "ab12", "provider": "openai", "label": "1", "key": "…1234",
+                           "source": "store", "loaded": True}]},
+            ),
+            ("POST", "/v1/keys"): (201, {"provider": "qwen", "label": "1", "loaded": True}),
+            ("DELETE", "/v1/keys/ab12"): (200, {"deleted": "ab12"}),
+        },
+        section="keys",
+    )
+    async with app.run_test(size=SIZE) as pilot:
+        await settle(app, pilot)
+        pane = app.pane("keys")
+        pane.query_one("#fld-provider", Input).value = "qwen"
+        pane.query_one("#fld-key", Input).value = "q-secret-1234"
+        assert pane.query_one("#fld-key", Input).password
+        await pane.perform("add")
+        assert srv.calls("POST", "/v1/keys")[0][3]["api_key"] == "q-secret-1234"
+        assert pane.query_one("#fld-key", Input).value == ""
+        await pane.perform("remove")
+        assert srv.calls("DELETE", "/v1/keys/ab12")
 
 
 async def test_memory_pane():

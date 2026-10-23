@@ -46,7 +46,7 @@ def _detail(r: httpx.Response) -> Any:
 class Client:
     def __init__(
         self,
-        base_url: str = "http://localhost:8000",
+        base_url: str = "http://localhost:6969",
         api_key: Optional[str] = None,
         timeout: float = 60.0,
         transport: Optional[httpx.AsyncBaseTransport] = None,

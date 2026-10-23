@@ -82,7 +82,7 @@ Requests are validated before reaching orchestration or execution systems.
 
 # Route index
 
-The default port is 8743. Routes marked "opt-in" exist only when their config file is present (see the README). The sections below describe the native API in detail; the OpenAI- and Anthropic-compatible routes are at the end.
+The default port is 6969. Routes marked "opt-in" exist only when their config file is present (see the README). The sections below describe the native API in detail; the OpenAI- and Anthropic-compatible routes are at the end.
 
 | Area | Routes |
 | --- | --- |
@@ -94,6 +94,7 @@ The default port is 8743. Routes marked "opt-in" exist only when their config fi
 | Tasks | `POST /v1/tasks`, `GET` and `DELETE /v1/tasks/{id}` |
 | Agent runs (opt-in) | `/v1/runs`, `/v1/runs/{id}`, `/events`, `/stream`, `/cancel`, `/pause`, `/resume`, `POST /v1/runs/kill` |
 | Tools (opt-in) | `GET /v1/tools`, `POST /mcp`, `/v1/tools/approvals` |
+| Provider keys | `GET /v1/keys`, `GET /v1/keys/catalog`, `POST /v1/keys`, `DELETE /v1/keys/{id}` (admin; secrets never returned) |
 | Local models | `GET /v1/local/models`, `.../{id}`, `POST .../pull`, `DELETE .../{id}`, `POST .../{id}/unload` |
 | Memory, RAG, feedback | `/v1/memory`, `/v1/rag/{collection}/documents` and `/search`, `/v1/feedback` |
 | Legacy agents | `POST` and `GET /v1/agents`, `DELETE /v1/agents/{id}` |
@@ -599,7 +600,7 @@ API key:
 
 ```python
 from openai import OpenAI
-client = OpenAI(base_url="http://localhost:8743/v1", api_key="<CaiPS token>")
+client = OpenAI(base_url="http://localhost:6969/v1", api_key="<CaiPS token>")
 client.chat.completions.create(model="gpt-4o", messages=[{"role": "user", "content": "hi"}])
 ```
 
@@ -653,7 +654,7 @@ The test suite runs the official OpenAI Python SDK against the gateway
 ## Anthropic-compatible API
 
 `POST /v1/messages` follows Anthropic's Messages API, so an Anthropic SDK
-works by changing the base URL (`base_url="http://localhost:8743"`) and
+works by changing the base URL (`base_url="http://localhost:6969"`) and
 passing a CaiPS token as `auth_token` (or an API key as `x-api-key`). The
 official SDK is exercised against it in `tests/test_vision_and_messages.py`,
 including streaming.
