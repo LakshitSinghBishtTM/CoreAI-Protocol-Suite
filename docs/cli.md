@@ -10,6 +10,7 @@ caips providers | jq '.[].name'
 caips local pull TheBloke/some-model-GGUF:Q4_K_M    # admin
 caips runs start calc "What is 17 * 23?"
 caips approvals list
+caips explain "hello" --model fast          # dry run: routing decision, nothing sent
 caips policies                              # admin, read-only
 caips budgets --subject user:bob            # admin: limits and current usage
 caips audit --limit 20 --action policy      # admin

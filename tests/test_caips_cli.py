@@ -40,6 +40,22 @@ def run(argv, srv=None, monkeypatch=None):
         (["health"], "GET", "/readyz", None),
         (["providers"], "GET", "/v1/providers", None),
         (["models"], "GET", "/v1/models", None),
+        (
+            ["explain", "hi"],
+            "POST",
+            "/v1/routing/explain",
+            {"messages": [{"role": "user", "content": "hi"}]},
+        ),
+        (
+            ["explain", "hi", "--model", "fast", "--policy", "cheap"],
+            "POST",
+            "/v1/routing/explain",
+            {
+                "messages": [{"role": "user", "content": "hi"}],
+                "model": "fast",
+                "policy": "cheap",
+            },
+        ),
         (["policies"], "GET", "/v1/admin/policies", None),
         (["budgets"], "GET", "/v1/admin/budgets", None),
         (

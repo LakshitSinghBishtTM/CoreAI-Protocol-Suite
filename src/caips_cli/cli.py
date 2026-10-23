@@ -65,6 +65,13 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("policies", help="active routing policies (admin)")
     p = sub.add_parser("budgets", help="budget limits and usage (admin)")
     p.add_argument("--subject", default=None, help="key subject (default: yourself)")
+    p = sub.add_parser(
+        "explain", help="dry run: where would this request route, and why"
+    )
+    p.add_argument("prompt")
+    p.add_argument("--model", default=None)
+    p.add_argument("--policy", default=None)
+    p.add_argument("--provider", default=None)
     p = sub.add_parser("audit", help="recent audit events (admin)")
     p.add_argument("--limit", type=int, default=50)
     p.add_argument("--action", default=None)
@@ -170,6 +177,12 @@ def _plan(a: argparse.Namespace) -> tuple[str, str, Optional[dict]]:
             "/v1/admin/budgets" + (f"?subject={q(a.subject)}" if a.subject else ""),
             None,
         )
+    if c == "explain":
+        payload: dict[str, Any] = {"messages": [{"role": "user", "content": a.prompt}]}
+        for k in ("model", "policy", "provider"):
+            if getattr(a, k):
+                payload[k] = getattr(a, k)
+        return "POST", "/v1/routing/explain", payload
     if c == "audit":
         extra = f"&action={q(a.action)}" if a.action else ""
         return "GET", f"/v1/admin/audit?limit={int(a.limit)}{extra}", None

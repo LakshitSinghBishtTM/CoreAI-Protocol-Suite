@@ -6,6 +6,7 @@ The previous `1.0.0` label did not match the project's state; versions now start
 
 ### Added (admin read API and CLI)
 - `GET /v1/admin/budgets` (limits and current usage, optional `?subject=`) and `GET /v1/admin/policies` (active routing policies, reload count, last error). Admin scope, read-only.
+- `caips explain PROMPT [--model] [--policy] [--provider]`: CLI for the `POST /v1/routing/explain` dry run.
 - `caips policies`, `caips budgets [--subject]` and `caips audit [--limit] [--action]`. Editing budgets and policies from the CLI is not done.
 
 ### Added (key manager)
