@@ -837,6 +837,49 @@ async def trigger_shutdown(
 
 
 @router.get(
+    "/admin/policies",
+    summary="Active routing policies (read-only)",
+    tags=["admin"],
+)
+async def list_policies(ctx: AuthContext = Depends(require_scope("admin"))):
+    from api.server import get_router as _get_router
+
+    store = _get_router().policies
+    if store is None:
+        return {"policies": [], "loaded": False}
+    current = store.current()
+    return {
+        "loaded": True,
+        "last_error": store.last_error,
+        "reloads": store.reloads,
+        "policies": [current.policies[n].to_dict() for n in current.names()],
+    }
+
+
+@router.get(
+    "/admin/budgets",
+    summary="Budget limits and current usage for the caller or a subject",
+    tags=["admin"],
+)
+async def get_budget_status(
+    subject: Optional[str] = Query(None, max_length=128),
+    ctx: AuthContext = Depends(require_scope("admin")),
+):
+    from api.server import app_state
+
+    manager = app_state.get("budgets")
+    if manager is None:
+        return {"enabled": False}
+    target = subject or ctx.subject
+    return {
+        "enabled": True,
+        "subject": target,
+        "status": manager.status(target),
+        "stats": manager.stats(),
+    }
+
+
+@router.get(
     "/admin/audit",
     summary="Recent audit events, newest first",
     tags=["admin"],

@@ -10,6 +10,9 @@ caips providers | jq '.[].name'
 caips local pull TheBloke/some-model-GGUF:Q4_K_M    # admin
 caips runs start calc "What is 17 * 23?"
 caips approvals list
+caips policies                              # admin, read-only
+caips budgets --subject user:bob            # admin: limits and current usage
+caips audit --limit 20 --action policy      # admin
 caips finetune estimate data.jsonl --base-model gpt-4o-mini
 caips finetune submit data.jsonl --base-model gpt-4o-mini --max-cost 5
 caips eval evals/ --model fast --baseline last.json

@@ -41,14 +41,18 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--timeout", type=float, default=60)
     sub = ap.add_subparsers(dest="cmd", required=True)
 
-    sub.add_parser("login", help="save the API token for --url (hidden prompt or stdin)")
+    sub.add_parser(
+        "login", help="save the API token for --url (hidden prompt or stdin)"
+    )
     sub.add_parser("logout", help="forget the saved token for --url")
     ky = sub.add_parser("keys", help="provider API keys (admin)").add_subparsers(
         dest="sub", required=True
     )
     ky.add_parser("list", help="stored and environment keys (masked)")
     ky.add_parser("catalog", help="provider ids you can add keys for")
-    p = ky.add_parser("add", help="add a key; the key is read from a hidden prompt or stdin")
+    p = ky.add_parser(
+        "add", help="add a key; the key is read from a hidden prompt or stdin"
+    )
     p.add_argument("provider")
     p.add_argument("--label", default="")
     p.add_argument("--base-url", default="")
@@ -58,6 +62,12 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("health", help="liveness and readiness")
     sub.add_parser("providers", help="configured providers and their health")
     sub.add_parser("usage", help="usage summary")
+    sub.add_parser("policies", help="active routing policies (admin)")
+    p = sub.add_parser("budgets", help="budget limits and usage (admin)")
+    p.add_argument("--subject", default=None, help="key subject (default: yourself)")
+    p = sub.add_parser("audit", help="recent audit events (admin)")
+    p.add_argument("--limit", type=int, default=50)
+    p.add_argument("--action", default=None)
     sub.add_parser("models", help="models the gateway can route to")
 
     lm = sub.add_parser("local", help="managed local GGUF models").add_subparsers(
@@ -152,6 +162,17 @@ def _plan(a: argparse.Namespace) -> tuple[str, str, Optional[dict]]:
     }
     if c in simple:
         return "GET", simple[c], None
+    if c == "policies":
+        return "GET", "/v1/admin/policies", None
+    if c == "budgets":
+        return (
+            "GET",
+            "/v1/admin/budgets" + (f"?subject={q(a.subject)}" if a.subject else ""),
+            None,
+        )
+    if c == "audit":
+        extra = f"&action={q(a.action)}" if a.action else ""
+        return "GET", f"/v1/admin/audit?limit={int(a.limit)}{extra}", None
     if c == "keys":
         if s == "list":
             return "GET", "/v1/keys", None
@@ -169,8 +190,13 @@ def _plan(a: argparse.Namespace) -> tuple[str, str, Optional[dict]]:
         return (
             "POST",
             "/v1/keys",
-            {"provider": a.provider, "api_key": secret, "label": a.label,
-             "base_url": a.base_url, "model": a.model},
+            {
+                "provider": a.provider,
+                "api_key": secret,
+                "label": a.label,
+                "base_url": a.base_url,
+                "model": a.model,
+            },
         )
     if c == "local":
         return {
@@ -300,12 +326,16 @@ def main(
         from caips_cli import credentials
 
         if a.cmd == "logout":
-            print("removed" if credentials.delete(a.url) else "no saved token", file=err)
+            print(
+                "removed" if credentials.delete(a.url) else "no saved token", file=err
+            )
             return 0
         import getpass
 
         tok = (
-            getpass.getpass("API token: ") if sys.stdin.isatty() else sys.stdin.readline()
+            getpass.getpass("API token: ")
+            if sys.stdin.isatty()
+            else sys.stdin.readline()
         ).strip()
         if not tok:
             print("caips: empty token", file=err)

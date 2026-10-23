@@ -40,6 +40,20 @@ def run(argv, srv=None, monkeypatch=None):
         (["health"], "GET", "/readyz", None),
         (["providers"], "GET", "/v1/providers", None),
         (["models"], "GET", "/v1/models", None),
+        (["policies"], "GET", "/v1/admin/policies", None),
+        (["budgets"], "GET", "/v1/admin/budgets", None),
+        (
+            ["budgets", "--subject", "a b"],
+            "GET",
+            "/v1/admin/budgets?subject=a%20b",
+            None,
+        ),
+        (
+            ["audit", "--limit", "5", "--action", "x"],
+            "GET",
+            "/v1/admin/audit?limit=5&action=x",
+            None,
+        ),
         (["local", "list"], "GET", "/v1/local/models", None),
         (
             ["local", "pull", "org/repo:Q4_K_M"],
