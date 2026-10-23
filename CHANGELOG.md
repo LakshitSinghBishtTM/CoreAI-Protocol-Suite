@@ -4,6 +4,10 @@
 
 The previous `1.0.0` label did not match the project's state; versions now start at 0.1.0 (alpha).
 
+### Added (admin read API and CLI)
+- `GET /v1/admin/budgets` (limits and current usage, optional `?subject=`) and `GET /v1/admin/policies` (active routing policies, reload count, last error). Admin scope, read-only.
+- `caips policies`, `caips budgets [--subject]` and `caips audit [--limit] [--action]`. Editing budgets and policies from the CLI is not done.
+
 ### Added (key manager)
 - Provider keys are no longer required at startup: the server starts with none and logs a warning. `/readyz` reports not ready until a provider exists.
 - `/v1/keys` (admin): add, list and remove keys at runtime, and `GET /v1/keys/catalog`. Keys are encrypted at rest (`CAIPS_KEYSTORE`, `CAIPS_KEYSTORE_SECRET`), applied to the running router immediately, and never returned.
@@ -31,7 +35,7 @@ The previous `1.0.0` label did not match the project's state; versions now start
 ### Added (Phase 7: agent harness)
 - `src/harness/`: tool-use loop with step, cost, token and deadline limits, context compaction with a pinned task, sqlite checkpoints after every step, human approvals, stall detection, kill switch and a per-run trace. Local-model agents get tighter caps.
 - Run API (`api/runs_api.py`): `POST /v1/runs`, `GET /v1/runs[/{id}[/events|/stream]]`, `cancel`, `pause`, `resume`, and admin-only `POST /v1/runs/kill`. Opt-in: enabled by `config/agents.yml` (see `config/agents.example.yml`). Callers can only start agents whose tools they are granted; model calls count against the owner's budget; runs interrupted by a restart resume at startup.
-- Not yet: Postgres run storage, agent memory, sub-agents, scheduled runs, removal of `agents/emergency_shutdown.py`.
+- Not yet: Postgres run storage, agent memory, sub-agents, scheduled runs. `agents/emergency_shutdown.py` stays: it is the tested drain kill switch (`POST /v1/admin/shutdown`), distinct from the run kill switch.
 
 ### Added (Phase 4, part 1: OpenAI-compatible chat and models)
 - `POST /v1/chat/completions` (`api/openai_compat.py`): OpenAI request and response shapes, SSE streaming with `stream_options.include_usage`, OpenAI error envelope, and an error event plus `[DONE]` (no `finish_reason`) when a stream fails midway. Budgets, usage ledger and metering apply as for `/v1/completions`. Verified with the official OpenAI Python SDK in tests, not against a live provider.
