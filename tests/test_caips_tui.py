@@ -502,10 +502,23 @@ async def test_keys_pane_add_clears_secret_and_remove():
         {
             ("GET", "/v1/keys"): (
                 200,
-                {"data": [{"id": "ab12", "provider": "openai", "label": "1", "key": "…1234",
-                           "source": "store", "loaded": True}]},
+                {
+                    "data": [
+                        {
+                            "id": "ab12",
+                            "provider": "openai",
+                            "label": "1",
+                            "key": "…1234",
+                            "source": "store",
+                            "loaded": True,
+                        }
+                    ]
+                },
             ),
-            ("POST", "/v1/keys"): (201, {"provider": "qwen", "label": "1", "loaded": True}),
+            ("POST", "/v1/keys"): (
+                201,
+                {"provider": "qwen", "label": "1", "loaded": True},
+            ),
             ("DELETE", "/v1/keys/ab12"): (200, {"deleted": "ab12"}),
         },
         section="keys",
@@ -1328,3 +1341,42 @@ def test_caips_tui_subcommand_explains_missing_textual(monkeypatch):
     err = io.StringIO()
     assert main(["tui"], err=err) == 2
     assert "pip install" in err.getvalue() and "[tui]" in err.getvalue()
+
+
+async def test_theme_toggle_and_latency_readout():
+    app = CaipsTui(
+        Client(
+            "http://gw",
+            api_key="tok",
+            transport=httpx.MockTransport(lambda r: httpx.Response(200, json={})),
+        )
+    )
+    async with app.run_test(size=SIZE) as pilot:
+        await settle(app, pilot)
+        assert app.theme == "caips-dark"
+        assert " ms" in str(app.query_one("#conn", Static).render())
+        await pilot.press("ctrl+t")
+        assert app.theme == "caips-light"
+        await pilot.press("ctrl+t")
+        assert app.theme == "caips-dark"
+
+
+async def test_command_palette_lists_every_section_and_jumps():
+    from caips_tui.app import SectionCommands
+
+    app = CaipsTui(
+        Client(
+            "http://gw",
+            api_key="tok",
+            transport=httpx.MockTransport(lambda r: httpx.Response(200, json={})),
+        )
+    )
+    async with app.run_test(size=SIZE) as pilot:
+        await settle(app, pilot)
+        provider = SectionCommands(app.screen)
+        names = [e[0] for e in provider._entries()]
+        assert all(f"Go to {label}" in names for _, label, _ in SECTIONS)
+        assert {"Refresh section", "Toggle light/dark theme"} <= set(names)
+        await app.goto("usage")
+        await settle(app, pilot)
+        assert app.section == "usage"

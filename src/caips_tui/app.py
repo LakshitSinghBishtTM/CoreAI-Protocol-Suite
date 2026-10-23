@@ -8,14 +8,17 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+import time
 from pathlib import Path
 from typing import Any, Optional
 
 from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.binding import Binding
+from textual.command import DiscoveryHit, Hit, Hits, Provider
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
+from textual.theme import Theme
 from textual.widgets import ContentSwitcher, Footer, Header, Input, OptionList, Static
 from textual.widgets.option_list import Option
 
@@ -66,6 +69,8 @@ SECTIONS: list[tuple[str, str, type[Pane]]] = [
 
 HELP = """CaiPS terminal UI
 
+Ctrl+P    command palette: jump to any section or action
+Ctrl+T    toggle light/dark theme
 Ctrl+B    focus the section list (↑/↓ switch section, Enter moves into it)
 Tab       next control          Shift+Tab   previous control
 F5 / Ctrl+R   refresh the current section
@@ -78,6 +83,79 @@ error if your token lacks it. Destructive actions ask first.
 
 Ctrl+K    set or replace the API token (saved to ~/.config/caips, mode 0600)
 CAIPS_API_KEY in the environment overrides the saved token; it is never shown."""
+
+
+THEMES = [
+    Theme(
+        name="caips-dark",
+        primary="#4f8cff",
+        secondary="#7c8aa5",
+        accent="#2dd4bf",
+        foreground="#d7dde8",
+        background="#0f141b",
+        surface="#151b24",
+        panel="#1b2330",
+        success="#34d399",
+        warning="#fbbf24",
+        error="#f87171",
+        dark=True,
+    ),
+    Theme(
+        name="caips-light",
+        primary="#2457d6",
+        secondary="#5b6b86",
+        accent="#0f9488",
+        foreground="#1b2330",
+        background="#f4f6fa",
+        surface="#ffffff",
+        panel="#e8edf5",
+        success="#15803d",
+        warning="#b45309",
+        error="#b91c1c",
+        dark=False,
+    ),
+]
+
+
+class SectionCommands(Provider):
+    """Command palette (Ctrl+P): jump to any section or run a global action."""
+
+    def _entries(self) -> list[tuple[str, str, Any]]:
+        app = self.app
+        out: list[tuple[str, str, Any]] = [
+            (
+                f"Go to {label}",
+                f"Open the {label} section",
+                (lambda sid=sid: app.goto(sid)),
+            )
+            for sid, label, _ in SECTIONS
+        ]
+        out += [
+            ("Refresh section", "Reload the current section (F5)", app.action_refresh),
+            (
+                "Set API token",
+                "Enter or replace the token (Ctrl+K)",
+                app.action_set_key,
+            ),
+            (
+                "Toggle light/dark theme",
+                "Switch theme (Ctrl+T)",
+                app.action_toggle_theme,
+            ),
+            ("Show help", "Keys and tips (F1)", app.action_help),
+        ]
+        return out
+
+    async def discover(self) -> Hits:
+        for name, help_, fn in self._entries():
+            yield DiscoveryHit(name, fn, help=help_)
+
+    async def search(self, query: str) -> Hits:
+        matcher = self.matcher(query)
+        for name, help_, fn in self._entries():
+            score = matcher.match(name)
+            if score > 0:
+                yield Hit(score, matcher.highlight(name), fn, help=help_)
 
 
 class HelpScreen(ModalScreen[None]):
@@ -103,7 +181,9 @@ class KeyScreen(ModalScreen[Optional[str]]):
 
     def compose(self) -> ComposeResult:
         with Vertical():
-            yield Static("Gateway API token\nEnter to save, Esc to skip. Input is hidden.")
+            yield Static(
+                "Gateway API token\nEnter to save, Esc to skip. Input is hidden."
+            )
             yield Input(password=True, placeholder="token", id="token")
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
@@ -117,9 +197,23 @@ class CaipsTui(App[None]):
     TITLE = "CaiPS"
     HORIZONTAL_BREAKPOINTS = [(0, "-narrow"), (110, "-wide")]
     CSS = """
-    #side { width: 18; border-right: solid $primary-darken-2; }
-    #nav { height: 1fr; background: transparent; }
-    #conn { height: 2; padding: 0 1; }
+    Screen { background: $background; }
+    Header { background: $panel; color: $foreground; }
+    Footer { background: $panel; }
+    #side { width: 22; background: $surface; border-right: tall $panel; }
+    #brand { height: 3; padding: 1 1 0 1; color: $accent; text-style: bold; }
+    #nav { height: 1fr; background: transparent; border: none; padding: 0; }
+    #nav > .option-list--option { padding: 0 2; }
+    #nav > .option-list--option-highlighted { background: $primary 30%; color: $foreground; text-style: bold; }
+    #nav:focus > .option-list--option-highlighted { background: $primary; color: $background; }
+    #conn { height: 3; padding: 0 1; border-top: tall $panel; background: $panel 60%; }
+    DataTable { background: $surface; }
+    DataTable > .datatable--header { background: $panel; text-style: bold; color: $accent; }
+    DataTable > .datatable--cursor { background: $primary 40%; }
+    DataTable:focus > .datatable--cursor { background: $primary; color: $background; }
+    Button { border: none; }
+    Button:hover { text-style: bold; }
+    Input:focus { border: none; }
     Pane { padding: 0 1; height: 1fr; }
     .pane-title { text-style: bold; color: $accent; }
     .pane-help { color: $text-muted; }
@@ -159,7 +253,9 @@ class CaipsTui(App[None]):
         Binding("ctrl+k", "set_key", "API key"),
         Binding("f5,ctrl+r", "refresh", "Refresh"),
         Binding("f1", "help", "Help"),
+        Binding("ctrl+t", "toggle_theme", "Theme"),
     ]
+    COMMANDS = {SectionCommands}
 
     def __init__(self, client: Client, section: str = "chat"):
         super().__init__()
@@ -170,9 +266,10 @@ class CaipsTui(App[None]):
         self.section = self.start_section
 
     def compose(self) -> ComposeResult:
-        yield Header(show_clock=True)
+        yield Header(show_clock=True, icon="◆")
         with Horizontal():
             with Vertical(id="side"):
+                yield Static("◆ CaiPS\n[dim]Protocol Suite[/]", id="brand")
                 yield OptionList(
                     *[Option(label, id=sid) for sid, label, _ in SECTIONS], id="nav"
                 )
@@ -185,6 +282,10 @@ class CaipsTui(App[None]):
         yield Footer()
 
     async def on_mount(self) -> None:
+        for t in THEMES:
+            self.register_theme(t)
+        self.theme = "caips-dark"
+        self.online: Optional[bool] = None
         self.sub_title = self.client.base_url
         nav = self.query_one("#nav", OptionList)
         nav.highlighted = [s[0] for s in SECTIONS].index(self.start_section)
@@ -203,7 +304,9 @@ class CaipsTui(App[None]):
             except OSError as e:
                 self.notify(f"token not saved: {e.strerror or e}", severity="warning")
             self.run_worker(self.check_connection(), group="conn", exclusive=True)
-            self.run_worker(self.pane(self.section).refresh_data(), group="refresh", exclusive=True)
+            self.run_worker(
+                self.pane(self.section).refresh_data(), group="refresh", exclusive=True
+            )
 
         self.push_screen(KeyScreen(), done)
 
@@ -239,6 +342,14 @@ class CaipsTui(App[None]):
             self.pane(self.section).refresh_data(), group="refresh", exclusive=True
         )
 
+    async def goto(self, sid: str) -> None:
+        nav = self.query_one("#nav", OptionList)
+        nav.highlighted = [s[0] for s in SECTIONS].index(sid)
+        self.pane(sid).focus_primary()
+
+    def action_toggle_theme(self) -> None:
+        self.theme = "caips-light" if self.theme == "caips-dark" else "caips-dark"
+
     def action_help(self) -> None:
         self.push_screen(HelpScreen())
 
@@ -246,14 +357,28 @@ class CaipsTui(App[None]):
     async def check_connection(self) -> None:
         conn = self.query_one("#conn", Static)
         auth = "key set" if self.client.has_key else "no API key"
+        started = time.monotonic()
         try:
             await self.client.request("GET", "/health")
         except ApiError as e:
             conn.update(Text.assemble(("● offline\n", "bold red"), (auth, "dim")))
             conn.tooltip = str(e)
+            if self.online is True:
+                self.notify("Connection lost", severity="error", title="CaiPS")
+            self.online = False
         else:
-            conn.update(Text.assemble(("● online\n", "bold green"), (auth, "dim")))
+            ms = (time.monotonic() - started) * 1000
+            conn.update(
+                Text.assemble(
+                    ("● online", "bold green"),
+                    (f"  {ms:.0f} ms\n", "dim"),
+                    (auth, "dim"),
+                )
+            )
             conn.tooltip = None
+            if self.online is False:
+                self.notify("Connection restored", title="CaiPS")
+            self.online = True
 
 
 def build_parser() -> argparse.ArgumentParser:

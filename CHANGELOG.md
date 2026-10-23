@@ -4,6 +4,12 @@
 
 The previous `1.0.0` label did not match the project's state; versions now start at 0.1.0 (alpha).
 
+### Changed (TUI)
+- Dark and light themes (`caips-dark`, `caips-light`), toggled with Ctrl+T.
+- Command palette (Ctrl+P): jump to any section or run refresh, set token, toggle theme, help.
+- Sidebar status shows round-trip latency; connection loss and recovery raise a notification.
+- Restyled sidebar, tables and focus states; brand header.
+
 ### Added (admin read API and CLI)
 - `GET /v1/admin/budgets` (limits and current usage, optional `?subject=`) and `GET /v1/admin/policies` (active routing policies, reload count, last error). Admin scope, read-only.
 - `caips explain PROMPT [--model] [--policy] [--provider]`: CLI for the `POST /v1/routing/explain` dry run.
