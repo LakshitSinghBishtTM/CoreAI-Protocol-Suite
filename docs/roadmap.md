@@ -308,9 +308,9 @@ The last phase turns the layers into something both self-hosters and teams can a
 
 **Deployment**
 
-- Helm chart and Kubernetes manifests, a Terraform example, and a single-binary or single-container local mode.
+- Helm chart and Kubernetes manifests, a Terraform example (`deploy/terraform/`, unvalidated; Helm chart in `deploy/helm/`), and a single-binary or single-container local mode.
 - SQLite by default for single-node and self-hosted use, with optional Postgres and Redis for horizontal scaling, and zero-downtime config reload.
-- Backup and restore for the database and model registry, plus a documented upgrade path between versions.
+- Backup and restore for the database and model registry, plus a documented upgrade path between versions. *Status: SQLite and config backup, verify and restore done (`python -m coreai.backup`, `docs/deployment.md`); model files are listed but not copied; Postgres not covered.*
 - Optional OpenAPI-driven docs site and a public status page template.
 
 **Exit criteria:** a new team can deploy CaiPS with the Helm chart, create a tenant, add providers and a local model, run an agent with approvals, and see its cost, all through the UI.

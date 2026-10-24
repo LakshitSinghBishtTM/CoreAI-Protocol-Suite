@@ -668,3 +668,23 @@ Notes:
 - Provider keys, `CAIPS_EVENT_WEBHOOK_SECRET` and SMTP passwords belong in the Secret, not in `env:`
   (see `docs/events.md` for the notification variables).
 - The chart has not been rendered with `helm template` in CI yet: run `helm lint deploy/helm/caips` before first use.
+
+---
+
+## Backup and restore (SQLite state and config)
+
+```
+python -m coreai.backup create backup.tar.gz [--db EXTRA.db] [--config config] [--models models/]
+python -m coreai.backup verify backup.tar.gz
+python -m coreai.backup restore backup.tar.gz --to /restore/dir [--force]
+```
+
+Databases are copied with SQLite's online backup API, so a running gateway yields a
+consistent snapshot. `config/` is included except secret-looking files (`secrets*`,
+`.env*`, `*.pem`, `*.key`). GGUF files are listed in the manifest but not copied. Every file
+has a SHA-256 in the manifest, checked by `verify` and before `restore` writes anything;
+restore refuses to overwrite without `--force`. Postgres is not covered (use `pg_dump`).
+Restore into a stopped instance, then start it.
+
+Upgrade path: back up, deploy the new version (migrations run at startup), check
+`/readyz`; to roll back, redeploy the old version and restore the backup.
