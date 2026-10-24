@@ -4,7 +4,7 @@ import json
 from types import SimpleNamespace
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -275,3 +275,23 @@ async def run_workflow_endpoint(
         allowed=sorted(needed), caller=ctx.subject, approved=set(body.approved),
         max_cost_usd=wf["max_cost_usd"],
     )  # fmt: skip
+
+
+@router.post("/v1/triggers/{name}/fire", status_code=202, summary="Signed inbound webhook trigger")
+async def fire_trigger(name: str, request: Request, rt=Depends(get_harness)):
+    """No bearer token: the HMAC signature is the credential (same scheme as
+    outbound webhooks). Unknown, non-webhook and bad-signature all look alike."""
+    tm = rt.triggers
+    body = await request.body()
+    if len(body) > 64_000:
+        raise HTTPException(status_code=413, detail="Body too large.")
+    try:
+        started = tm.fire_webhook(
+            name,
+            body,
+            request.headers.get("X-CaiPS-Timestamp", ""),
+            request.headers.get("X-CaiPS-Signature", ""),
+        ) if tm else (_ for _ in ()).throw(KeyError(name))
+    except (KeyError, PermissionError):
+        raise HTTPException(status_code=401, detail="Invalid trigger or signature.")
+    return {"started": started}

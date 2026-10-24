@@ -36,3 +36,13 @@ agents:
 #     steps:
 #       - {id: calc, tool: calculator, args: {expression: "${input}"}}
 #       - {id: say, prompt: "Explain this result in one sentence: ${calc}"}
+
+# More trigger kinds (set exactly one of every_s, cron, webhook_secret_env, event):
+#   weekday-digest:
+#     cron: "0 8 * * 1-5"             # UTC, five fields
+#     agent: reporter
+#     task: "Daily digest."
+#   from-ci:
+#     webhook_secret_env: CI_HOOK_SECRET   # POST /v1/triggers/from-ci/fire, HMAC-signed
+#     agent: reporter
+#     task: "Build $status on $branch: summarize."

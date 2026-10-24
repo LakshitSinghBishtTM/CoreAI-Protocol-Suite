@@ -41,9 +41,12 @@ triggers:
     task: "Provider $provider is down; summarize impact."
 ```
 
-Exactly one of `every_s` or `event`. A trigger never overlaps itself and is capped by
+Exactly one of `every_s`, `cron` (five fields, UTC), `webhook_secret_env` or `event`. A trigger never overlaps itself and is capped by
 `max_per_hour` (default 6); skipped firings are counted. Event fields are inserted into the
-task as short plain text. Not supported yet: cron expressions, inbound webhooks.
+task as short plain text. Webhook triggers take `POST /v1/triggers/{name}/fire` with `X-CaiPS-Timestamp` and
+`X-CaiPS-Signature` (HMAC-SHA256 of `"<timestamp>.<body>"`, 5 minute window); the signature
+is the only credential, and unknown names and bad signatures both return 401. Top-level
+JSON fields fill `$name` placeholders in the task. Cron has no names (`mon`) or `@daily`.
 
 ## Fixed-step workflows
 
