@@ -95,7 +95,7 @@ async def test_webhook_failure_never_breaks_approvals():
     a = store.request("alice", "wipe", {})
     for t in list(hook.tasks):
         await t
-    assert store.get(a.id) is a  # still there and decidable
+    assert store.get(a.id) == a  # still there and decidable (store returns copies)
     store.decide(a.id, True, "root")
     with pytest.raises(ValueError):
         ApprovalWebhook("http://h", "")  # secretless webhooks are refused
