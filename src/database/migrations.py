@@ -11,7 +11,6 @@ Usage:
 
 import asyncio
 import sys
-from utils.clock import utcnow as _utcnow
 from pathlib import Path
 from typing import Optional
 
@@ -19,6 +18,7 @@ from loguru import logger
 from sqlalchemy import text
 
 from coreai._paths import data_dir  # noqa: E402
+from utils.clock import utcnow as _utcnow
 
 from .db import get_session, init_db, ping
 

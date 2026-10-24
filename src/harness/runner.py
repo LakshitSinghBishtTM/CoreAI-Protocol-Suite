@@ -23,7 +23,6 @@ from . import context
 from .config import AgentDef
 from .store import RunStore
 
-
 REVIEW_TOOL = "request_human_review"
 REVIEW_SPEC = {
     "type": "function",
@@ -269,9 +268,11 @@ class HarnessRunner:
                 msgs.append(
                     Message(
                         "tool",
-                        "Human reviewer approved: proceed."
-                        if decision
-                        else "Human reviewer declined; choose another approach.",
+                        (
+                            "Human reviewer approved: proceed."
+                            if decision
+                            else "Human reviewer declined; choose another approach."
+                        ),
                         tool_call_id=call.get("id", ""),
                     )
                 )

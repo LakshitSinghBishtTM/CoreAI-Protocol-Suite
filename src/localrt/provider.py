@@ -63,7 +63,9 @@ class ManagedLocalProvider(LocalProvider):
             max_queue=max_queue,
         )
         self.registry, self.supervisor = registry, supervisor
-        self.binary = binary or shutil.which("llama-server") or ""
+        from . import runtime as _rt
+
+        self.binary = binary or _rt.find() or shutil.which("llama-server") or ""
         self.hw = hw or hardware.detect()
         self._ready, self.load_timeout_s = ready, load_timeout_s
         self._lock = asyncio.Lock()

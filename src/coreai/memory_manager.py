@@ -5,11 +5,12 @@ Handles trimming, summarization triggers, and memory persistence.
 """
 
 from dataclasses import dataclass, field
-from utils.clock import utcnow as _utcnow
 from datetime import datetime
 from typing import Optional
 
 from loguru import logger
+
+from utils.clock import utcnow as _utcnow
 
 
 @dataclass

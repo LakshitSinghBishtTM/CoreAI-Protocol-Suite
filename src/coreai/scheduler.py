@@ -6,12 +6,13 @@ Handles cache eviction, stats snapshots, health checks, and log rotation trigger
 
 import asyncio
 from dataclasses import dataclass, field
-from utils.clock import utcnow as _utcnow
 from datetime import datetime, timedelta
 from enum import Enum
 from typing import Awaitable, Callable, Optional
 
 from loguru import logger
+
+from utils.clock import utcnow as _utcnow
 
 
 class JobStatus(str, Enum):

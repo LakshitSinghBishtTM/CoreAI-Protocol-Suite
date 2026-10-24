@@ -84,8 +84,14 @@ class KeysPane(TablePane):
         if not ok:
             return
         self.set_val("key", "")  # never leave the secret in the widget
-        note = "" if data.get("loaded") else f" (not loaded: {data.get('problem') or 'see server log'})"
-        self.say(f"added {data.get('provider')}/{data.get('label')}{note}", error=bool(note))
+        note = (
+            ""
+            if data.get("loaded")
+            else f" (not loaded: {data.get('problem') or 'see server log'})"
+        )
+        self.say(
+            f"added {data.get('provider')}/{data.get('label')}{note}", error=bool(note)
+        )
         await self.refresh_data()
 
     async def act_catalog(self, row: Optional[dict]) -> None:
@@ -93,7 +99,12 @@ class KeysPane(TablePane):
         if not ok:
             return
         groups: dict[str, list[str]] = {}
-        names = {"us": "United States", "cn": "China", "self": "Self-hosted", "any": "Any OpenAI-compatible"}
+        names = {
+            "us": "United States",
+            "cn": "China",
+            "self": "Self-hosted",
+            "any": "Any OpenAI-compatible",
+        }
         for lab in data.get("data", []):
             groups.setdefault(names.get(lab["region"], lab["region"]), []).append(
                 f"{lab['id']:<11} {lab['label']}"
@@ -1145,7 +1156,9 @@ class EvalsPane(Pane):
             p for p in (src, env.get("PYTHONPATH", "")) if p
         )
         if self.client.api_key:
-            env["CAIPS_API_KEY"] = self.client.api_key  # via the environment, never argv
+            env["CAIPS_API_KEY"] = (
+                self.client.api_key
+            )  # via the environment, never argv
         try:
             self.proc = await asyncio.create_subprocess_exec(
                 *self.command(),

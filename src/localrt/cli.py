@@ -21,12 +21,30 @@ def main(argv: list[str] | None = None) -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("list")
     sub.add_parser("hardware")
+    sub.add_parser("runtime", help="show the llama-server in use")
+    ri = sub.add_parser("install-runtime", help="download a prebuilt llama-server")
+    ri.add_argument("--tag", required=True, help="llama.cpp release tag, or 'latest'")
+    ri.add_argument("--backend", default="cpu", help="cpu, vulkan, cuda, ...")
     for name in ("inspect", "delete"):
         sub.add_parser(name).add_argument("model")
     sub.add_parser("pull").add_argument("model", help="org/repo:QUANT")
     args = ap.parse_args(argv)
 
     directory = Path(args.dir)
+    if args.cmd == "runtime":
+        from . import runtime
+
+        print(json.dumps({"llama_server": runtime.find()}))
+        return 0
+    if args.cmd == "install-runtime":
+        from . import runtime
+
+        try:
+            print(json.dumps({"llama_server": runtime.install(args.tag, args.backend)}))
+        except runtime.RuntimeError_ as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        return 0
     if args.cmd == "hardware":
         from . import hardware
 

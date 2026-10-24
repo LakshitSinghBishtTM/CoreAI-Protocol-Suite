@@ -67,7 +67,10 @@ def mask(key: str) -> str:
 
 
 def public(e: dict, secret: Optional[str] = None) -> dict:
-    out = {k: e.get(k, "") for k in ("id", "provider", "label", "base_url", "model", "created")}
+    out = {
+        k: e.get(k, "")
+        for k in ("id", "provider", "label", "base_url", "model", "created")
+    }
     out["key"] = mask(secret) if secret else ("" if not e.get("token") else "…")
     return out
 
@@ -128,23 +131,33 @@ def add(
     if lab.kind in ("local", "custom"):
         # each one is its own provider, named by its label
         if not NAME_RE.fullmatch(label):
-            raise KeyStoreError("label (the provider name) must be a-z, 0-9, '-' or '_'")
+            raise KeyStoreError(
+                "label (the provider name) must be a-z, 0-9, '-' or '_'"
+            )
         if label in BY_ID:
             raise KeyStoreError(f"label '{label}' is reserved")
         from providers.local import PRESETS
 
         base_url = base_url or PRESETS.get(label, "")
         if not base_url:
-            raise KeyStoreError("base_url is required (or label one of: " + ", ".join(PRESETS) + ")")
+            raise KeyStoreError(
+                "base_url is required (or label one of: " + ", ".join(PRESETS) + ")"
+            )
     elif base_url and lab.kind == "native":
-        raise KeyStoreError(f"{provider} uses its SDK's endpoint; base_url is not supported")
+        raise KeyStoreError(
+            f"{provider} uses its SDK's endpoint; base_url is not supported"
+        )
     if base_url and not base_url.startswith(("http://", "https://")):
         raise KeyStoreError("base_url must start with http:// or https://")
     with _lock:
         entries = _read()
         same = [e for e in entries if e.get("provider") == provider]
         if lab.kind in ("local", "custom"):
-            if any(e.get("label") == label for e in entries if e.get("provider") in ("local", "custom")):
+            if any(
+                e.get("label") == label
+                for e in entries
+                if e.get("provider") in ("local", "custom")
+            ):
                 raise KeyStoreError(f"a server named '{label}' already exists")
         else:
             label = label or str(len(same) + 1)

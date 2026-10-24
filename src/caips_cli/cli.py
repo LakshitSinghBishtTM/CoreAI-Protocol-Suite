@@ -71,7 +71,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--warn-cost", type=float, default=None, dest="warn_cost_usd")
     p.add_argument("--max-requests", type=int, default=None, dest="max_requests")
     p.add_argument("--max-tokens", type=int, default=None, dest="max_tokens")
-    p.add_argument("--window", type=int, default=86400, dest="window_seconds", help="seconds")
+    p.add_argument(
+        "--window", type=int, default=86400, dest="window_seconds", help="seconds"
+    )
     p = sub.add_parser("budget-rm", help="remove a subject's budget override (admin)")
     p.add_argument("subject")
     p = sub.add_parser(
@@ -198,7 +200,13 @@ def _plan(a: argparse.Namespace) -> tuple[str, str, Optional[dict]]:
     if c == "budget-set":
         body = {
             k: getattr(a, k)
-            for k in ("max_cost_usd", "warn_cost_usd", "max_requests", "max_tokens", "window_seconds")
+            for k in (
+                "max_cost_usd",
+                "warn_cost_usd",
+                "max_requests",
+                "max_tokens",
+                "window_seconds",
+            )
         }
         return "PUT", f"/v1/admin/budgets/{q(a.subject)}", body
     if c == "budget-rm":

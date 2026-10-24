@@ -37,7 +37,10 @@ def test_nothing_loads_without_allow_list(fake_eps):
 
 
 def test_env_allow_list_and_owner_tag(fake_eps, monkeypatch):
-    fake_eps[plugins.TOOL_GROUP] = [EP("p", lambda: [tool("x")]), EP("other", lambda: [tool("y")])]
+    fake_eps[plugins.TOOL_GROUP] = [
+        EP("p", lambda: [tool("x")]),
+        EP("other", lambda: [tool("y")]),
+    ]
     monkeypatch.setenv("CAIPS_PLUGINS", "p")
     reg = ToolRegistry()
     assert plugins.register_tool_plugins(reg) == ["x"]
@@ -67,9 +70,15 @@ def test_provider_plugin_registered_but_builtins_protected(fake_eps):
     class NoEnv(BaseProvider):
         name = "noenv"
 
-    fake_eps[plugins.PROVIDER_GROUP] = [EP("plug", P), EP("openai", P), EP("noenv", NoEnv)]
+    fake_eps[plugins.PROVIDER_GROUP] = [
+        EP("plug", P),
+        EP("openai", P),
+        EP("noenv", NoEnv),
+    ]
     pmap = {"openai": (object, "OPENAI_API_KEY")}
-    assert plugins.register_provider_plugins(pmap, ["plug", "openai", "noenv"]) == ["plug"]
+    assert plugins.register_provider_plugins(pmap, ["plug", "openai", "noenv"]) == [
+        "plug"
+    ]
     assert pmap["plug"] == (P, "PLUG_KEY") and pmap["openai"][0] is object
 
 

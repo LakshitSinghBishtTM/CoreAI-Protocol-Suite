@@ -30,7 +30,9 @@ def _calls(raw) -> list[tuple[str, str]]:
     return out
 
 
-async def replay_run(runner, rid: str, *, model: Optional[str] = None, route=None) -> dict:
+async def replay_run(
+    runner, rid: str, *, model: Optional[str] = None, route=None
+) -> dict:
     """Re-ask ``model`` (or the agent's own) at each recorded assistant turn."""
     run = runner.store.get(rid)
     if run is None:

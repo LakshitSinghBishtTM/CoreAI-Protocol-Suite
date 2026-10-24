@@ -4,7 +4,6 @@ SQLAlchemy ORM models.
 """
 
 import uuid
-from utils.clock import utcnow as _utcnow
 from datetime import datetime
 from typing import Optional
 
@@ -20,6 +19,8 @@ from sqlalchemy import (
     Text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+
+from utils.clock import utcnow as _utcnow
 
 
 class Base(DeclarativeBase):

@@ -20,7 +20,7 @@ def env(tmp_path, monkeypatch):
     db.close()
     (tmp_path / "config").mkdir()
     (tmp_path / "config" / "routing.yml").write_text("a: 1\n")
-    (tmp_path / "config" / "secrets.json").write_text("{\"k\":\"SECRET\"}")
+    (tmp_path / "config" / "secrets.json").write_text('{"k":"SECRET"}')
     (tmp_path / "config" / "server.key").write_text("KEY")
     return tmp_path
 
@@ -32,7 +32,9 @@ def test_roundtrip_excludes_secrets_and_keeps_data(env):
     assert not any("secret" in n or n.endswith(".key") for n in names)
     out = env / "restored"
     backup.restore("b.tar.gz", str(out))
-    got = sqlite3.connect(out / "db" / "0-runs.db").execute("select x from t").fetchall()
+    got = (
+        sqlite3.connect(out / "db" / "0-runs.db").execute("select x from t").fetchall()
+    )
     assert got == [(42,)]
 
 

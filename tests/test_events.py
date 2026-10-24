@@ -17,7 +17,11 @@ def test_webhook_signed_and_filtered():
 
     async def go():
         bus = EventBus()
-        bus.subscribe(WebhookSink("http://x/h", "s3", ["run.finished"], transport=httpx.MockTransport(h)))
+        bus.subscribe(
+            WebhookSink(
+                "http://x/h", "s3", ["run.finished"], transport=httpx.MockTransport(h)
+            )
+        )
         bus.emit("budget.warning", subject="k")
         bus.emit("run.finished", run_id="r1")
         await asyncio.gather(*bus.tasks)
@@ -61,7 +65,12 @@ def test_env_config(monkeypatch):
 def test_budget_alerts_fire_once_per_window():
     got = []
     m = BudgetManager(default=BudgetLimits(max_cost_usd=10, warn_cost_usd=5))
-    watch_budgets(m, lambda t, **kw: got.append((t.split(".")[1], kw["subject"], kw["used_usd"], kw["cap_usd"])))
+    watch_budgets(
+        m,
+        lambda t, **kw: got.append(
+            (t.split(".")[1], kw["subject"], kw["used_usd"], kw["cap_usd"])
+        ),
+    )
     m.record("k", cost_usd=4)
     assert got == []
     m.record("k", cost_usd=1.5)
@@ -76,7 +85,11 @@ def test_breaker_reports_open_and_close_with_fake_clock():
     t = [0.0]
     got = []
     b = CircuitBreaker(
-        "p", failure_threshold=2, reset_timeout=10, clock=lambda: t[0], on_change=lambda *a: got.append(a)
+        "p",
+        failure_threshold=2,
+        reset_timeout=10,
+        clock=lambda: t[0],
+        on_change=lambda *a: got.append(a),
     )
     b.record_failure()
     b.record_failure()
@@ -106,19 +119,27 @@ def test_run_finished_event(tmp_path):
     bus.subscribe(events.append)
     try:
         runner = HarnessRunner(
-            route, ToolRegistry(), RunStore(), {"a": AgentDef.from_dict({"name": "a", "system_prompt": "x"})}
+            route,
+            ToolRegistry(),
+            RunStore(),
+            {"a": AgentDef.from_dict({"name": "a", "system_prompt": "x"})},
         )
         aio.run(runner.run("a", "hi", owner="alice"))
     finally:
         bus.clear()
     fin = [e for e in events if e["type"] == "run.finished"]
-    assert len(fin) == 1 and fin[0]["status"] == "completed" and fin[0]["owner"] == "alice"
+    assert (
+        len(fin) == 1 and fin[0]["status"] == "completed" and fin[0]["owner"] == "alice"
+    )
 
 
 def test_budget_alerts_rearm_after_window_reset():
     t = [0.0]
     got = []
-    m = BudgetManager(default=BudgetLimits(max_cost_usd=10, warn_cost_usd=5, window_seconds=100), clock=lambda: t[0])
+    m = BudgetManager(
+        default=BudgetLimits(max_cost_usd=10, warn_cost_usd=5, window_seconds=100),
+        clock=lambda: t[0],
+    )
     watch_budgets(m, lambda ty, **kw: got.append(ty))
     m.record("k", cost_usd=6)
     t[0] = 150  # new window
@@ -146,18 +167,31 @@ def test_slack_default_alerts_only_and_no_secrets():
     got = []
     sink = SlackSink(
         "http://slack/h",
-        transport=httpx.MockTransport(lambda r: got.append(json.loads(r.content)) or httpx.Response(200)),
+        transport=httpx.MockTransport(
+            lambda r: got.append(json.loads(r.content)) or httpx.Response(200)
+        ),
     )
     _run_sinks(
         sink,
         events=[
-            ("run.finished", {"run_id": "r", "status": "completed", "reason": "completed"}),
-            ("run.finished", {"run_id": "r2", "status": "failed", "reason": "max_steps"}),
+            (
+                "run.finished",
+                {"run_id": "r", "status": "completed", "reason": "completed"},
+            ),
+            (
+                "run.finished",
+                {"run_id": "r2", "status": "failed", "reason": "max_steps"},
+            ),
             ("budget.exceeded", {"subject": "key1", "used_usd": 10.5, "cap_usd": 10}),
         ],
     )
     texts = [g["text"] for g in got]
-    assert len(texts) == 2 and "r2" in texts[0] and "key1" in texts[1] and "$10.5" in texts[1]
+    assert (
+        len(texts) == 2
+        and "r2" in texts[0]
+        and "key1" in texts[1]
+        and "$10.5" in texts[1]
+    )
 
 
 def test_slack_explicit_events_override_default():
@@ -165,9 +199,17 @@ def test_slack_explicit_events_override_default():
 
     got = []
     sink = SlackSink(
-        "http://s", ["run.finished"], transport=httpx.MockTransport(lambda r: got.append(1) or httpx.Response(200))
+        "http://s",
+        ["run.finished"],
+        transport=httpx.MockTransport(lambda r: got.append(1) or httpx.Response(200)),
     )
-    _run_sinks(sink, events=[("run.finished", {"status": "completed"}), ("provider.outage", {"provider": "x"})])
+    _run_sinks(
+        sink,
+        events=[
+            ("run.finished", {"status": "completed"}),
+            ("provider.outage", {"provider": "x"}),
+        ],
+    )
     assert len(got) == 1
 
 
@@ -195,8 +237,21 @@ def test_email_sink_sends_alert_via_starttls_and_login():
         def send_message(self, msg):
             log.append(("send", msg["To"], msg["Subject"]))
 
-    sink = EmailSink("mail.x", "caips@x", ["a@x", "b@x"], user="u", password="p", smtp_factory=FakeSMTP)
-    _run_sinks(sink, events=[("provider.outage", {"provider": "openai"}), ("run.finished", {"status": "completed"})])
+    sink = EmailSink(
+        "mail.x",
+        "caips@x",
+        ["a@x", "b@x"],
+        user="u",
+        password="p",
+        smtp_factory=FakeSMTP,
+    )
+    _run_sinks(
+        sink,
+        events=[
+            ("provider.outage", {"provider": "openai"}),
+            ("run.finished", {"status": "completed"}),
+        ],
+    )
     assert log == [
         ("connect", "mail.x", 587),
         "tls",
@@ -209,7 +264,9 @@ def test_failing_slack_does_not_break_other_sinks():
     from utils.events import SlackSink
 
     got = []
-    bad = SlackSink("http://s", transport=httpx.MockTransport(lambda r: httpx.Response(500)))
+    bad = SlackSink(
+        "http://s", transport=httpx.MockTransport(lambda r: httpx.Response(500))
+    )
     _run_sinks(bad, got.append, events=[("provider.outage", {"provider": "p"})])
     assert len(got) == 1
 

@@ -92,8 +92,16 @@ async def list_keys(ctx: AuthContext = Depends(admin)):
     env = {n: v for n, (_, v) in PROVIDER_MAP.items()} | EXTRA_ENV
     for prov, var in env.items():
         if os.getenv(var, "").strip():
-            rows.append({"id": f"env:{prov}", "provider": prov, "label": "env",
-                         "key": "…", "source": "environment", "loaded": prov in live})
+            rows.append(
+                {
+                    "id": f"env:{prov}",
+                    "provider": prov,
+                    "label": "env",
+                    "key": "…",
+                    "source": "environment",
+                    "loaded": prov in live,
+                }
+            )
     for e in stored:
         name = e["label"] if e["provider"] in ("local", "custom") else e["provider"]
         rows.append({**e, "source": "store", "loaded": name in live and e["readable"]})
@@ -103,19 +111,27 @@ async def list_keys(ctx: AuthContext = Depends(admin)):
 @router.post("/v1/keys", status_code=201)
 async def add_key(body: KeyBody, ctx: AuthContext = Depends(admin)):
     try:
-        entry = keystore.add(body.provider, body.api_key, body.label, body.base_url, body.model)
+        entry = keystore.add(
+            body.provider, body.api_key, body.label, body.base_url, body.model
+        )
     except keystore.KeyStoreError as e:
         raise HTTPException(400, str(e))
     problems = await reload_providers()
     name = entry["label"] if body.provider in ("local", "custom") else body.provider
-    return {**entry, "loaded": name in _live() and name not in problems,
-            "problem": problems.get(name) or problems.get(f"{body.provider}/{entry['label']}")}
+    return {
+        **entry,
+        "loaded": name in _live() and name not in problems,
+        "problem": problems.get(name)
+        or problems.get(f"{body.provider}/{entry['label']}"),
+    }
 
 
 @router.delete("/v1/keys/{entry_id}")
 async def delete_key(entry_id: str, ctx: AuthContext = Depends(admin)):
     if entry_id.startswith("env:"):
-        raise HTTPException(400, "environment keys are set outside the gateway; unset the variable")
+        raise HTTPException(
+            400, "environment keys are set outside the gateway; unset the variable"
+        )
     if not keystore.remove(entry_id):
         raise HTTPException(404, "no such key")
     await reload_providers()

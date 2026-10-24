@@ -251,8 +251,7 @@ async def test_agent_flagged_uncertainty_pauses_for_human(approve, expect):
     out = await r.run("a", "go")
     assert out["status"] == "waiting_approval"
     assert any(
-        t["function"]["name"] == "request_human_review"
-        for t in route.requests[0].tools
+        t["function"]["name"] == "request_human_review" for t in route.requests[0].tools
     )
     out = await r.resume(out["id"], approve=approve)
     assert out["status"] == "completed"
@@ -323,7 +322,6 @@ async def test_subagent_nesting_is_capped():
 
 
 async def test_interval_trigger_fires_without_overlap_and_is_rate_capped():
-    import asyncio
 
     from harness import TriggerManager
 
@@ -354,10 +352,18 @@ async def test_event_trigger_matches_fields_and_substitutes_task():
     route = Script(resp("looked"))
     r, store = make(route)
     tm = TriggerManager(r)
-    tm.on_event("outage", "provider.outage", "a", "Investigate $provider now", match={"provider": "openai"})
+    tm.on_event(
+        "outage",
+        "provider.outage",
+        "a",
+        "Investigate $provider now",
+        match={"provider": "openai"},
+    )
     tm.on_bus_event({"type": "provider.outage", "provider": "grok"})  # no match
     assert tm.triggers["outage"]._task is None
     tm.on_bus_event({"type": "provider.outage", "provider": "openai"})
     await tm.triggers["outage"]._task
-    task = [m for m in store.messages(tm.triggers["outage"].last_run) if m.role == "user"][0]
+    task = [
+        m for m in store.messages(tm.triggers["outage"].last_run) if m.role == "user"
+    ][0]
     assert task.content == "Investigate openai now"

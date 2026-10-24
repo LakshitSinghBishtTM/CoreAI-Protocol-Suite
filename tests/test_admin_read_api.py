@@ -54,7 +54,9 @@ def test_budget_set_and_remove_are_audited_and_validated(server):
     body = {"max_requests": 3, "window_seconds": 60}
     assert c.put("/v1/admin/budgets/bob", json=body).status_code in (401, 403)
     assert (
-        c.put("/v1/admin/budgets/bob", json=body, headers=token("completions:read")).status_code
+        c.put(
+            "/v1/admin/budgets/bob", json=body, headers=token("completions:read")
+        ).status_code
         == 403
     )
     r = c.put("/v1/admin/budgets/bob", json=body, headers=token("admin"))
@@ -67,6 +69,12 @@ def test_budget_set_and_remove_are_audited_and_validated(server):
     assert bad.status_code == 422 and mgr.limits_for("bob").max_requests == 3
     r = c.delete("/v1/admin/budgets/bob", headers=token("admin"))
     assert r.json()["removed"] is True and mgr.limits_for("bob").max_requests == 10
-    assert c.delete("/v1/admin/budgets/bob", headers=token("admin")).json()["removed"] is False
-    actions = [e["action"] for e in c.get("/v1/admin/audit", headers=token("admin")).json()["events"]]
+    assert (
+        c.delete("/v1/admin/budgets/bob", headers=token("admin")).json()["removed"]
+        is False
+    )
+    actions = [
+        e["action"]
+        for e in c.get("/v1/admin/audit", headers=token("admin")).json()["events"]
+    ]
     assert "budget.set" in actions and "budget.remove" in actions

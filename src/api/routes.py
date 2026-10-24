@@ -927,7 +927,9 @@ async def remove_budget(
     if manager is None:
         raise HTTPException(status_code=409, detail="budgets are not enabled")
     removed = manager.remove_limits(subject)
-    get_audit().record("budget.remove", ctx.subject, subject, outcome="ok" if removed else "noop")
+    get_audit().record(
+        "budget.remove", ctx.subject, subject, outcome="ok" if removed else "noop"
+    )
     return {"subject": subject, "removed": removed}
 
 

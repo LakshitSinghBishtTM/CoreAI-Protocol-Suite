@@ -15,8 +15,14 @@ from providers.pool import KeyPoolProvider
 def store(monkeypatch, tmp_path):
     monkeypatch.setenv("SECRET_KEY", "keys-test-secret")
     monkeypatch.setenv("CAIPS_KEYSTORE", str(tmp_path / "keys.json"))
-    for v in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GEMINI_API_KEY", "GROK_API_KEY",
-              "DEEPSEEK_API_KEY", "QWEN_API_KEY"):
+    for v in (
+        "OPENAI_API_KEY",
+        "ANTHROPIC_API_KEY",
+        "GEMINI_API_KEY",
+        "GROK_API_KEY",
+        "DEEPSEEK_API_KEY",
+        "QWEN_API_KEY",
+    ):
         monkeypatch.delenv(v, raising=False)
     return tmp_path / "keys.json"
 
@@ -92,8 +98,15 @@ class _Fake:
         self.calls += 1
         if self.fail:
             raise self.fail
-        return CompletionResponse(content="ok", model="m", provider="x", input_tokens=1,
-                                  output_tokens=1, cost_usd=0, latency_ms=1)
+        return CompletionResponse(
+            content="ok",
+            model="m",
+            provider="x",
+            input_tokens=1,
+            output_tokens=1,
+            cost_usd=0,
+            latency_ms=1,
+        )
 
 
 def _req():
@@ -129,7 +142,9 @@ def api(monkeypatch):
     monkeypatch.setitem(server.app_state, "router", Router({}))
     app = FastAPI()
     app.include_router(router)
-    h = lambda s: {"Authorization": "Bearer " + create_access_token("u", s)}  # noqa: E731
+    h = lambda s: {
+        "Authorization": "Bearer " + create_access_token("u", s)
+    }  # noqa: E731
     return TestClient(app), h, server.app_state["router"]
 
 
@@ -138,19 +153,36 @@ def test_api_add_list_delete_applies_live(api):
     assert c.get("/v1/keys", headers=h(["completions:read"])).status_code == 403
     cat = c.get("/v1/keys/catalog", headers=h(["admin"])).json()["data"]
     assert {"openai", "deepseek", "qwen", "local", "custom"} <= {x["id"] for x in cat}
-    r = c.post("/v1/keys", headers=h(["admin"]), json={"provider": "openai", "api_key": "sk-aaaaaaaa1111"})
-    assert r.status_code == 201 and r.json()["loaded"] and "sk-aaaaaaaa1111" not in r.text
+    r = c.post(
+        "/v1/keys",
+        headers=h(["admin"]),
+        json={"provider": "openai", "api_key": "sk-aaaaaaaa1111"},
+    )
+    assert (
+        r.status_code == 201 and r.json()["loaded"] and "sk-aaaaaaaa1111" not in r.text
+    )
     assert "openai" in rt.providers and "openai" in rt.breakers
-    r2 = c.post("/v1/keys", headers=h(["admin"]), json={"provider": "openai", "api_key": "sk-bbbbbbbb2222", "label": "b"})
+    r2 = c.post(
+        "/v1/keys",
+        headers=h(["admin"]),
+        json={"provider": "openai", "api_key": "sk-bbbbbbbb2222", "label": "b"},
+    )
     assert len(rt.providers["openai"].members) == 2
     rows = c.get("/v1/keys", headers=h(["admin"])).json()["data"]
     assert len(rows) == 2 and all("sk-" not in str(x) for x in rows)
-    assert c.delete(f"/v1/keys/{r2.json()['id']}", headers=h(["admin"])).status_code == 200
+    assert (
+        c.delete(f"/v1/keys/{r2.json()['id']}", headers=h(["admin"])).status_code == 200
+    )
     assert not hasattr(rt.providers["openai"], "members")
-    assert c.delete(f"/v1/keys/{r.json()['id']}", headers=h(["admin"])).status_code == 200
+    assert (
+        c.delete(f"/v1/keys/{r.json()['id']}", headers=h(["admin"])).status_code == 200
+    )
     assert "openai" not in rt.providers and "openai" not in rt.breakers
     assert c.delete("/v1/keys/env:openai", headers=h(["admin"])).status_code == 400
-    assert c.post("/v1/keys", headers=h(["admin"]), json={"provider": "x"}).status_code == 400
+    assert (
+        c.post("/v1/keys", headers=h(["admin"]), json={"provider": "x"}).status_code
+        == 400
+    )
 
 
 def test_server_starts_with_no_providers(monkeypatch, tmp_path):
@@ -177,7 +209,16 @@ def test_cli_keys_add_reads_secret_from_stdin_not_argv(monkeypatch):
 
     monkeypatch.setattr("sys.stdin", io.StringIO("sk-fromstdin1234\n"))
     out = io.StringIO()
-    rc = main(["keys", "add", "qwen", "--label", "team"], transport=httpx.MockTransport(handler), out=out)
+    rc = main(
+        ["keys", "add", "qwen", "--label", "team"],
+        transport=httpx.MockTransport(handler),
+        out=out,
+    )
     assert rc == 0
-    assert seen["body"] == {"provider": "qwen", "api_key": "sk-fromstdin1234", "label": "team",
-                            "base_url": "", "model": ""}
+    assert seen["body"] == {
+        "provider": "qwen",
+        "api_key": "sk-fromstdin1234",
+        "label": "team",
+        "base_url": "",
+        "model": "",
+    }

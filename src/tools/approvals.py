@@ -8,8 +8,8 @@ In-memory, bounded and expiring, so it cannot grow without limit.
 import json
 import math
 import time
-from copy import deepcopy
 import uuid
+from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Callable, Optional
 

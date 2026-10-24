@@ -31,7 +31,9 @@ STEPS = [
 
 async def test_fixed_order_and_untrusted_output_in_prompt():
     route = Route()
-    out = await run_workflow(parse_steps(STEPS), reg(), route, input="cats", allowed=["fetch"])
+    out = await run_workflow(
+        parse_steps(STEPS), reg(), route, input="cats", allowed=["fetch"]
+    )
     assert out["status"] == "completed" and out["result"] == "summary"
     assert [s["id"] for s in out["steps"]] == ["get", "sum"]
     assert "data for cats" in route.prompts[0]
@@ -58,7 +60,15 @@ async def test_cost_limit_stops_before_next_step():
     assert out["status"] == "cost_limit" and out["failed_step"] == "b"
 
 
-@pytest.mark.parametrize("bad", [[], [{"id": "a"}], [{"id": "a", "prompt": "x"}, {"id": "a", "prompt": "y"}], [{"id": "input", "prompt": "x"}]])
+@pytest.mark.parametrize(
+    "bad",
+    [
+        [],
+        [{"id": "a"}],
+        [{"id": "a", "prompt": "x"}, {"id": "a", "prompt": "y"}],
+        [{"id": "input", "prompt": "x"}],
+    ],
+)
 def test_bad_definitions_rejected(bad):
     with pytest.raises(ValueError):
         parse_steps(bad)

@@ -1,12 +1,13 @@
 import uuid
 from collections import OrderedDict
 from dataclasses import asdict, dataclass, field
-from utils.clock import utcnow as _utcnow
 from datetime import datetime
 from enum import Enum
 from typing import Any, Optional
 
 from loguru import logger
+
+from utils.clock import utcnow as _utcnow
 
 
 class TaskStatus(str, Enum):

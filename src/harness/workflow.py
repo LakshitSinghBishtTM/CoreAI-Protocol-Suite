@@ -13,7 +13,6 @@ limits and approvals all apply; a step that needs approval stops the workflow
 with ``status="needs_approval"`` and a later call can name it in ``approved``.
 """
 
-import json
 import string
 from dataclasses import dataclass, field
 from typing import Optional

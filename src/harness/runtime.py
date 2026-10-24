@@ -26,12 +26,28 @@ def build_triggers(cfg: dict, runner: HarnessRunner):
     tm, problems = TriggerManager(runner), []
     for name, d in (cfg.get("triggers") or {}).items():
         try:
-            extra = set(d) - {"every_s", "cron", "webhook_secret_env", "event", "agent", "task", "owner", "match", "max_per_hour"}
+            extra = set(d) - {
+                "every_s",
+                "cron",
+                "webhook_secret_env",
+                "event",
+                "agent",
+                "task",
+                "owner",
+                "match",
+                "max_per_hour",
+            }
             if extra:
                 raise ValueError(f"unknown fields {sorted(extra)}")
-            kinds = [k for k in ("every_s", "cron", "webhook_secret_env", "event") if d.get(k)]
+            kinds = [
+                k
+                for k in ("every_s", "cron", "webhook_secret_env", "event")
+                if d.get(k)
+            ]
             if len(kinds) != 1:
-                raise ValueError("set exactly one of every_s, cron, webhook_secret_env or event")
+                raise ValueError(
+                    "set exactly one of every_s, cron, webhook_secret_env or event"
+                )
             common = dict(agent=d["agent"], task=d["task"], owner=d.get("owner", "local"),
                           max_per_hour=int(d.get("max_per_hour", 6)))  # fmt: skip
             if d.get("every_s"):

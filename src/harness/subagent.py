@@ -13,7 +13,9 @@ import contextvars
 from tools.registry import Permission, Tool
 
 MAX_DEPTH = 2
-_depth: contextvars.ContextVar[int] = contextvars.ContextVar("subagent_depth", default=0)
+_depth: contextvars.ContextVar[int] = contextvars.ContextVar(
+    "subagent_depth", default=0
+)
 
 
 def subagent_tool(
@@ -40,12 +42,15 @@ def subagent_tool(
         if status == "completed":
             return out.get("result") or ""
         if status == "waiting_approval":
-            return f"Sub-agent paused for human approval (run {out['id']}); not completed."
+            return (
+                f"Sub-agent paused for human approval (run {out['id']}); not completed."
+            )
         return f"Sub-agent stopped: {status} ({out.get('stop_reason') or 'no reason'}); run {out['id']}."
 
     return Tool(
         name,
-        description or f"Delegate a task to the '{agent_name}' agent and get its answer.",
+        description
+        or f"Delegate a task to the '{agent_name}' agent and get its answer.",
         {
             "type": "object",
             "properties": {"task": {"type": "string"}},

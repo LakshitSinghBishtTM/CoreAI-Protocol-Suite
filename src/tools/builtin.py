@@ -15,9 +15,9 @@ from pathlib import Path
 from typing import Iterable, Optional
 from urllib.parse import urlparse
 
+import httpx
 from httpcore._backends.auto import AutoBackend
 from httpcore._backends.base import AsyncNetworkBackend
-import httpx
 
 from .registry import Permission, Tool, ToolError, ToolRegistry
 

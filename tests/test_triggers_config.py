@@ -14,7 +14,12 @@ CFG = {
     "agents": {"rep": {"system_prompt": "s"}},
     "triggers": {
         "nightly": {"every_s": 60, "agent": "rep", "task": "go"},
-        "outage": {"event": "provider.outage", "agent": "rep", "task": "$provider", "match": {"provider": "x"}},
+        "outage": {
+            "event": "provider.outage",
+            "agent": "rep",
+            "task": "$provider",
+            "match": {"provider": "x"},
+        },
     },
 }
 

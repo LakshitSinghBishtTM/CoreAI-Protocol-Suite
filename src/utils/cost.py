@@ -4,11 +4,11 @@ Cost calculation, budget tracking, and spend reporting across providers.
 """
 
 from dataclasses import dataclass, field
-from utils.clock import utcnow as _utcnow
 from datetime import datetime
 from typing import Optional
 
 from coreai.pricing import get_pricing
+from utils.clock import utcnow as _utcnow
 
 # Legacy view of the shared price table (config/pricing.yml): USD per single
 # token, by provider and model. Prefer coreai.pricing.get_pricing().

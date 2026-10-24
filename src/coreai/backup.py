@@ -148,7 +148,9 @@ def restore(archive: str, to: str, force: bool = False) -> list[str]:
     target, written = Path(to), []
     clashes = [r for r in manifest["files"] if (target / r).exists()]
     if clashes and not force:
-        raise BackupError(f"would overwrite {len(clashes)} file(s), e.g. {clashes[0]}; use --force")
+        raise BackupError(
+            f"would overwrite {len(clashes)} file(s), e.g. {clashes[0]}; use --force"
+        )
     with tarfile.open(archive, "r:gz") as tar:
         for rel in manifest["files"]:
             dst = target / rel
@@ -175,11 +177,15 @@ def main(argv=None) -> int:
     try:
         if a.cmd == "create":
             m = create(a.out, a.db, a.config, a.models)
-            print(f"wrote {a.out}: {len(m['files'])} file(s), {len(m['models_not_included'])} model(s) listed, not copied")
+            print(
+                f"wrote {a.out}: {len(m['files'])} file(s), {len(m['models_not_included'])} model(s) listed, not copied"
+            )
         elif a.cmd == "verify":
             print(f"ok: {len(verify(a.archive)['files'])} file(s)")
         else:
-            print(f"restored {len(restore(a.archive, a.to, a.force))} file(s) to {a.to}")
+            print(
+                f"restored {len(restore(a.archive, a.to, a.force))} file(s) to {a.to}"
+            )
         return 0
     except (BackupError, OSError, tarfile.TarError, sqlite3.Error) as exc:
         print(f"error: {exc}", file=sys.stderr)

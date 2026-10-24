@@ -58,7 +58,9 @@ class Cron:
         d += timedelta(minutes=1)
         for _ in range(366 * 24 * 60 * 5):  # five years of minutes is plenty
             if d.month not in self.month:
-                d = (d.replace(day=1, hour=0, minute=0) + timedelta(days=32)).replace(day=1)
+                d = (d.replace(day=1, hour=0, minute=0) + timedelta(days=32)).replace(
+                    day=1
+                )
             elif not self._day_ok(d):
                 d = d.replace(hour=0, minute=0) + timedelta(days=1)
             elif d.hour not in self.hour:

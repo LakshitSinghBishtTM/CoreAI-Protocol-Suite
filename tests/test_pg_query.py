@@ -13,7 +13,9 @@ pytest.importorskip("asyncpg")
 @pytest.fixture(scope="module")
 def dsn():
     server = pgserver.get_server(tempfile.mkdtemp())
-    server.psql("create table t(id int, name text); insert into t select g, 'n'||g from generate_series(1,300) g;")
+    server.psql(
+        "create table t(id int, name text); insert into t select g, 'n'||g from generate_series(1,300) g;"
+    )
     yield server.get_uri()
     server.cleanup()
 
@@ -30,17 +32,29 @@ def test_select_and_row_cap(dsn):
 
 
 def test_empty_result_keeps_columns(dsn):
-    assert run(PostgresReader({"m": dsn}).query("m", "select id from t where id < 0")) == "id"
+    assert (
+        run(PostgresReader({"m": dsn}).query("m", "select id from t where id < 0"))
+        == "id"
+    )
 
 
 @pytest.mark.parametrize(
     "sql",
-    ["delete from t", "select 1; drop table t", "with d as (delete from t returning id) select * from d"],
+    [
+        "delete from t",
+        "select 1; drop table t",
+        "with d as (delete from t returning id) select * from d",
+    ],
 )
 def test_writes_rejected(dsn, sql):
     with pytest.raises(ToolError):
         run(PostgresReader({"m": dsn}).query("m", sql))
-    assert run(PostgresReader({"m": dsn}).query("m", "select count(*) c from t")).splitlines()[1] == "300"
+    assert (
+        run(
+            PostgresReader({"m": dsn}).query("m", "select count(*) c from t")
+        ).splitlines()[1]
+        == "300"
+    )
 
 
 def test_statement_timeout(dsn):

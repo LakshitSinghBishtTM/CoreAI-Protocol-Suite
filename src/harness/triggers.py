@@ -83,9 +83,12 @@ class TriggerManager:
             Trigger(name, agent, task, owner, webhook_secret=secret, max_per_hour=max_per_hour)
         )  # fmt: skip
 
-    def fire_webhook(self, name: str, body: bytes, timestamp: str, signature: str) -> bool:
+    def fire_webhook(
+        self, name: str, body: bytes, timestamp: str, signature: str
+    ) -> bool:
         """Verify and fire. Raises PermissionError on a bad or stale signature,
-        KeyError for an unknown or non-webhook trigger. False means skipped (cap/overlap)."""
+        KeyError for an unknown or non-webhook trigger. False means skipped (cap/overlap).
+        """
         t = self.triggers.get(name)
         if t is None or not t.webhook_secret:
             raise KeyError(name)
@@ -104,7 +107,9 @@ class TriggerManager:
             data = {}
         return self._fire(t, data if isinstance(data, dict) else {})
 
-    def on_event(self, name, event, agent, task, owner="local", match=None, max_per_hour=6):
+    def on_event(
+        self, name, event, agent, task, owner="local", match=None, max_per_hour=6
+    ):
         return self._add(
             Trigger(name, agent, task, owner, event=event,
                     match=dict(match or {}), max_per_hour=max_per_hour)
@@ -127,7 +132,11 @@ class TriggerManager:
             t.skipped += 1
             return False
         task = string.Template(t.task).safe_substitute(
-            {k: _plain(v) for k, v in (event or {}).items() if not isinstance(v, (dict, list))}
+            {
+                k: _plain(v)
+                for k, v in (event or {}).items()
+                if not isinstance(v, (dict, list))
+            }
         )
         t.fired.append(now)
         t._task = asyncio.get_running_loop().create_task(self._go(t, task))

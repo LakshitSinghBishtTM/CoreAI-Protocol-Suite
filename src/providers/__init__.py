@@ -10,9 +10,6 @@ from loguru import logger
 # Explicit submodule imports so patch("providers.openai.OpenAIProvider") works
 from . import anthropic, deepseek, gemini, grok, openai
 from .anthropic import AnthropicProvider
-from .catalog import BY_ID, CATALOG, EXTRA_ENV
-from .compat import CompatProvider
-from .pool import KeyPoolProvider
 from .base import (
     BaseProvider,
     CompletionRequest,
@@ -20,10 +17,13 @@ from .base import (
     Message,
     StreamUsage,
 )
+from .catalog import BY_ID, CATALOG, EXTRA_ENV
+from .compat import CompatProvider
 from .deepseek import DeepSeekProvider
 from .gemini import GeminiProvider
 from .grok import GrokProvider
 from .openai import OpenAIProvider
+from .pool import KeyPoolProvider
 
 __all__ = [
     "BaseProvider",
@@ -162,7 +162,11 @@ def _load_store(result: "ProviderLoadResult") -> None:
                     result.failed[f"{lab_id}/{e['label']}"] = str(exc)
             if not members:
                 continue
-            p = members[0] if len(members) == 1 else KeyPoolProvider(lab_id, members, labels)
+            p = (
+                members[0]
+                if len(members) == 1
+                else KeyPoolProvider(lab_id, members, labels)
+            )
             p.managed = True
             result.providers[lab_id] = p
             result.skipped.pop(lab_id, None)
@@ -177,9 +181,16 @@ def _load_store(result: "ProviderLoadResult") -> None:
                     if lab.kind == "local":
                         from .local import LocalProvider
 
-                        p = LocalProvider(name, e["base_url"], e.get("api_key", ""), default_model=e.get("model", ""))
+                        p = LocalProvider(
+                            name,
+                            e["base_url"],
+                            e.get("api_key", ""),
+                            default_model=e.get("model", ""),
+                        )
                     else:
-                        p = CompatProvider(e["api_key"], name, e["base_url"], e.get("model", ""))
+                        p = CompatProvider(
+                            e["api_key"], name, e["base_url"], e.get("model", "")
+                        )
                 except Exception as exc:
                     result.failed[name] = str(exc)
                     continue

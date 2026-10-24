@@ -14,8 +14,8 @@ from typing import AsyncGenerator, Callable
 
 from loguru import logger
 
-
 from .base import BaseProvider, CompletionRequest, CompletionResponse
+
 
 def _key_errors() -> set:
     from coreai.errors import ErrorKind  # lazy: avoids import cycle

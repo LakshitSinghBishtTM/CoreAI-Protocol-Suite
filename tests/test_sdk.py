@@ -16,7 +16,9 @@ def test_auth_header_and_chat():
         seen["path"] = req.url.path
         return httpx.Response(200, json={"choices": []})
 
-    assert _client(h).chat("fast", [{"role": "user", "content": "hi"}]) == {"choices": []}
+    assert _client(h).chat("fast", [{"role": "user", "content": "hi"}]) == {
+        "choices": []
+    }
     assert seen == {"auth": "Bearer k", "path": "/v1/chat/completions"}
 
 
@@ -40,7 +42,11 @@ def test_wait_run_timeout():
 
 
 def test_call_tool_surfaces_jsonrpc_error():
-    c = _client(lambda r: httpx.Response(200, json={"jsonrpc": "2.0", "id": 1, "error": {"code": -1}}))
+    c = _client(
+        lambda r: httpx.Response(
+            200, json={"jsonrpc": "2.0", "id": 1, "error": {"code": -1}}
+        )
+    )
     with pytest.raises(CaipsError):
         c.call_tool("x")
 

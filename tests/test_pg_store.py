@@ -26,7 +26,9 @@ def store(dsn):
 
 
 def test_create_get_checkpoint_roundtrip(store):
-    rid = store.create("a", "alice", [Message(role="user", content="hi")], deadline=123.5)
+    rid = store.create(
+        "a", "alice", [Message(role="user", content="hi")], deadline=123.5
+    )
     run = store.get(rid)
     assert run["status"] == "running" and run["deadline"] == 123.5
     store.checkpoint(
@@ -44,7 +46,9 @@ def test_create_get_checkpoint_roundtrip(store):
 def test_checkpoint_rolls_back_on_error(store):
     rid = store.create("a", "o", [Message(role="user", content="x")], None)
     with pytest.raises(Exception):
-        store.checkpoint(rid, [Message(role="user", content="changed")], no_such_column=1)
+        store.checkpoint(
+            rid, [Message(role="user", content="changed")], no_such_column=1
+        )
     assert store.messages(rid)[0].content == "x"
 
 

@@ -36,7 +36,9 @@ def client(monkeypatch):
     async def route(req):
         return CompletionResponse("because math", "m", "p", 1, 1, 0.0, 1.0)
 
-    rt = build_runtime({"db": ":memory:", "agents": {}, "workflows": WF}, route, tools.registry)
+    rt = build_runtime(
+        {"db": ":memory:", "agents": {}, "workflows": WF}, route, tools.registry
+    )
     monkeypatch.setitem(server.app_state, "harness", rt)
     monkeypatch.setitem(server.app_state, "tools", tools)
     app = FastAPI()
@@ -74,11 +76,23 @@ def test_approval_needs_admin_and_valid_step(client):
     admin = as_("admin", RUN + ["admin"])
     r = c.post("/v1/workflows/danger/run", json={}, headers=admin).json()
     assert r["status"] == "needs_approval"
-    r = c.post("/v1/workflows/danger/run", json={"approved": ["w"]}, headers=admin).json()
+    r = c.post(
+        "/v1/workflows/danger/run", json={"approved": ["w"]}, headers=admin
+    ).json()
     assert r["status"] == "completed"
-    assert c.post("/v1/workflows/danger/run", json={"approved": ["zz"]}, headers=admin).status_code == 422
+    assert (
+        c.post(
+            "/v1/workflows/danger/run", json={"approved": ["zz"]}, headers=admin
+        ).status_code
+        == 422
+    )
     user = as_("u1", RUN)
-    assert c.post("/v1/workflows/daily/run", json={"approved": ["calc"]}, headers=user).status_code == 403
+    assert (
+        c.post(
+            "/v1/workflows/daily/run", json={"approved": ["calc"]}, headers=user
+        ).status_code
+        == 403
+    )
 
 
 def test_bad_workflow_config_reports_problems():
