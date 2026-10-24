@@ -103,6 +103,8 @@ def format_event(event: dict) -> tuple[str, str]:
         subject = (
             f"Budget {t.split('.')[1]}: {event.get('subject')} at "
             f"${event.get('used_usd')} of ${event.get('cap_usd')}"
+            f"Budget {t.split('.')[1]}: {event.get('subject')} "
+            f"at ${event.get('used_usd')} of ${event.get('cap_usd')}"
         )
     elif t.startswith("provider."):
         subject = f"Provider {event.get('provider')}: {t.split('.')[1]}"

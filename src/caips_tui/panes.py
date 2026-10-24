@@ -184,6 +184,176 @@ class ModelsPane(TablePane):
         return False
 
 
+class RoutingPane(TablePane):
+    TITLE = "Routing"
+    HELP = (
+        "Routing policies from config/routing.yml plus runtime edits (admin). Set "
+        "applies the fields as one policy and Delete removes one, both in memory "
+        "until restart: edit the file to keep a change. Copy loads a row into the "
+        "fields; Explain dry-runs a request and shows the ranking (nothing is sent)."
+    )
+    PATH = "/v1/admin/policies"
+    ID_KEY = "name"
+    COLUMNS = [
+        ("Policy", "name"),
+        ("Strategy", "strategy"),
+        ("Cost w", "cost_w"),
+        ("Latency w", "latency_w"),
+        ("Ceiling ms", "latency_ceiling_ms"),
+        ("Hedge ms", "hedge_after_ms"),
+        ("Chain", "chain"),
+        ("Provider", "provider"),
+        ("Runtime", "runtime"),
+    ]
+    FIELDS = [
+        Field("name", "policy name (Set)"),
+        Field(
+            "strategy",
+            "cost_aware|balanced|cheapest|fastest|round_robin|fallback|explicit",
+        ),
+        Field("weights", "cost,latency, e.g. 0.7,0.3"),
+        Field("latency_ceiling_ms", "latency ceiling ms"),
+        Field("hedge_after_ms", "hedge after ms"),
+        Field("fallback_chain", "chain: openai,anthropic"),
+        Field("provider", "pinned provider (explicit)"),
+        Field("model", "model"),
+        Field("fallback_model", "failover model"),
+        Field("allow", "allow list: a,b"),
+        Field("deny", "deny list: a,b"),
+        Field("prompt", "prompt for Explain"),
+    ]
+    ACTIONS = [
+        Action("set", "Set"),
+        Action("copy", "Copy", needs_row=True),
+        Action("explain", "Explain"),
+        Action(
+            "delete",
+            "Delete",
+            needs_row=True,
+            confirm="Remove policy '{name}' until restart?",
+            variant="error",
+        ),
+    ]
+
+    def unwrap(self, data: Any) -> list[dict]:
+        if not isinstance(data, dict):
+            return []
+        edited = set((data.get("runtime_edits") or {}).get("edited") or [])
+        rows = []
+        for r in data.get("policies") or []:
+            r = dict(r)
+            weights = r.pop("weights", None) or {}
+            r["cost_w"] = weights.get("cost")
+            r["latency_w"] = weights.get("latency")
+            r["chain"] = ",".join(r.get("fallback_chain") or [])
+            r["runtime"] = "edited" if r.get("name") in edited else ""
+            rows.append(r)
+        return rows
+
+    def status_line(self, rows: list[dict]) -> str:
+        edited = sum(1 for r in rows if r.get("runtime"))
+        note = f", {edited} runtime edit(s)" if edited else ""
+        return f"{len(rows)} policy(ies){note}"
+
+    def _body_from_fields(self) -> Optional[dict]:
+        """The policy body the Set fields describe, or None (and said) if invalid."""
+        body: dict[str, Any] = {}
+        if self.val("strategy"):
+            body["strategy"] = self.val("strategy")
+        raw_w = self.val("weights")
+        if raw_w:
+            parts = [p for p in raw_w.replace(" ", "").split(",") if p]
+            try:
+                if len(parts) != 2:
+                    raise ValueError
+                body["weights"] = {"cost": float(parts[0]), "latency": float(parts[1])}
+            except ValueError:
+                self.say("weights: two numbers, e.g. 0.7,0.3", error=True)
+                return None
+        for fid in ("latency_ceiling_ms", "hedge_after_ms"):
+            raw = self.val(fid)
+            if raw:
+                try:
+                    body[fid] = float(raw)
+                except ValueError:
+                    self.say(f"{fid}: needs a number", error=True)
+                    return None
+        for fid in ("fallback_chain", "allow", "deny"):
+            raw = self.val(fid)
+            if raw:
+                body[fid] = [v.strip() for v in raw.split(",") if v.strip()]
+        for fid in ("provider", "model", "fallback_model"):
+            if self.val(fid):
+                body[fid] = self.val(fid)
+        return body
+
+    async def act_set(self, row: Optional[dict]) -> bool:
+        name = self.val("name")
+        if not name:
+            self.say("Give a policy name first.", error=True)
+            return False
+        body = self._body_from_fields()
+        if body is None:
+            return False
+        ok, data = await self.api("PUT", f"/v1/admin/policies/{q(name)}", json=body)
+        if not ok:
+            problems = data.get("problems") if isinstance(data, dict) else None
+            if problems:
+                self.render_detail(problems)
+                self.say(
+                    f"rejected: {len(problems)} problem(s), see detail", error=True
+                )
+            return False
+        self.say(f"policy '{name}' set (in memory until restart)")
+        return True
+
+    async def act_copy(self, row: dict) -> bool:
+        """Load a row into the fields so it can be edited and Set again."""
+
+        def fmt(v: Any) -> str:
+            return "" if v is None else str(v)
+
+        def num(v: Any) -> str:
+            return fmt(round(v, 4)) if isinstance(v, float) else fmt(v)
+
+        self.set_val("name", fmt(row.get("name")))
+        self.set_val("strategy", fmt(row.get("strategy")))
+        w = row.get("weights") or {}
+        self.set_val(
+            "weights", f"{num(w.get('cost'))},{num(w.get('latency'))}" if w else ""
+        )
+        self.set_val("latency_ceiling_ms", num(row.get("latency_ceiling_ms")))
+        self.set_val("hedge_after_ms", num(row.get("hedge_after_ms")))
+        self.set_val("fallback_chain", ",".join(row.get("fallback_chain") or []))
+        self.set_val("provider", fmt(row.get("provider")))
+        self.set_val("model", fmt(row.get("model")))
+        self.set_val("fallback_model", fmt(row.get("fallback_model")))
+        self.set_val("allow", ",".join(row.get("allow") or []))
+        self.set_val("deny", ",".join(row.get("deny") or []))
+        self.say(f"'{row.get('name')}' loaded into the fields; edit, then Set")
+        return False
+
+    async def act_explain(self, row: Optional[dict]) -> bool:
+        """``POST /v1/routing/explain``: where a request would go, and why."""
+        policy = (row or {}).get("name") or self.val("name")
+        body: dict[str, Any] = {
+            "messages": [{"role": "user", "content": self.val("prompt") or "Hello"}]
+        }
+        if policy:
+            body["policy"] = policy
+        ok, data = await self.api("POST", "/v1/routing/explain", json=body)
+        if ok:
+            self.render_detail(data)
+            self.say(f"explain for policy '{policy or 'default'}' (no request sent)")
+        return False
+
+    async def act_delete(self, row: dict) -> bool:
+        ok, _ = await self.api("DELETE", f"/v1/admin/policies/{q(row['name'])}")
+        if ok:
+            self.say(f"policy '{row['name']}' removed (until restart)")
+        return bool(ok)
+
+
 class UsagePane(TablePane):
     TITLE = "Usage"
     HELP = "Requests, tokens and cost over time (in-memory ledger; resets on restart). Admins see every subject."
@@ -229,6 +399,114 @@ class UsagePane(TablePane):
             )
             self.say(f"wrote {path}")
         return False
+
+
+class BudgetsPane(TablePane):
+    TITLE = "Budgets"
+    HELP = (
+        "Spend caps per key subject (admin). The table shows one subject's window: "
+        "type a subject (or leave blank for yourself) and press Enter. Set applies "
+        "the fields at runtime (until restart, like `caips budget-set`); Remove "
+        "drops the override so the default applies again."
+    )
+    PATH = "/v1/admin/budgets"
+    ID_KEY = "subject"
+    COLUMNS = [
+        ("Subject", "subject"),
+        ("Spent $", "spent_usd"),
+        ("Max $", "max_cost_usd"),
+        ("Requests", "requests"),
+        ("Max req", "max_requests"),
+        ("Tokens", "tokens"),
+        ("Max tok", "max_tokens"),
+        ("Resets s", "resets_in_s"),
+        ("Warn", "warning"),
+    ]
+    FIELDS = [
+        Field("subject", "key subject (blank: yourself)"),
+        Field("max_cost_usd", "max spend USD"),
+        Field("warn_cost_usd", "warn at USD"),
+        Field("max_requests", "max requests"),
+        Field("max_tokens", "max tokens"),
+        Field("window_seconds", "window seconds", "86400"),
+    ]
+    ACTIONS = [
+        Action("set", "Set"),
+        Action(
+            "rm",
+            "Remove",
+            needs_row=True,
+            confirm="Remove the budget override for '{subject}'?",
+            variant="error",
+        ),
+    ]
+
+    def params(self) -> dict:
+        return {"subject": self.val("subject")}
+
+    def unwrap(self, data: Any) -> list[dict]:
+        if not isinstance(data, dict) or not data.get("enabled"):
+            return []
+        st = data.get("status")
+        if not st:
+            return [{"subject": data.get("subject"), "warning": "no limits"}]
+        used, lim = st.get("used") or {}, st.get("limits") or {}
+        return [
+            {
+                "subject": data.get("subject"),
+                "spent_usd": used.get("cost_usd"),
+                "max_cost_usd": lim.get("cost_usd"),
+                "requests": used.get("requests"),
+                "max_requests": lim.get("requests"),
+                "tokens": used.get("tokens"),
+                "max_tokens": lim.get("tokens"),
+                "resets_in_s": st.get("resets_in_seconds"),
+                "warning": "yes" if st.get("warning") else "",
+            }
+        ]
+
+    async def act_set(self, row: Optional[dict]) -> bool:
+        subject = self.val("subject")
+        if not subject:
+            self.say(
+                "Give a subject first (blank means yourself; type it out).", error=True
+            )
+            return False
+        body: dict[str, Any] = {}
+        for fid in ("max_cost_usd", "warn_cost_usd"):
+            raw = self.val(fid)
+            if raw:
+                try:
+                    body[fid] = float(raw)
+                except ValueError:
+                    self.say(f"{fid}: needs a number", error=True)
+                    return False
+        for fid in ("max_requests", "max_tokens"):
+            raw = self.val(fid)
+            if raw:
+                try:
+                    body[fid] = int(raw)
+                except ValueError:
+                    self.say(f"{fid}: needs an integer", error=True)
+                    return False
+        if not body:
+            self.say("Give at least one limit (max or warn).", error=True)
+            return False
+        try:
+            body["window_seconds"] = int(self.val("window_seconds") or 86400)
+        except ValueError:
+            self.say("window_seconds: needs an integer", error=True)
+            return False
+        ok, data = await self.api("PUT", f"/v1/admin/budgets/{q(subject)}", json=body)
+        if ok:
+            self.say(f"budget for '{subject}' set (in memory until restart)")
+        return bool(ok)
+
+    async def act_rm(self, row: dict) -> bool:
+        ok, _ = await self.api("DELETE", f"/v1/admin/budgets/{q(row['subject'])}")
+        if ok:
+            self.say(f"override for '{row['subject']}' removed (default applies)")
+        return bool(ok)
 
 
 class StatusPane(Pane):

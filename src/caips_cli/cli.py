@@ -63,6 +63,32 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("providers", help="configured providers and their health")
     sub.add_parser("usage", help="usage summary")
     sub.add_parser("policies", help="active routing policies (admin)")
+    p = sub.add_parser(
+        "policy-set",
+        help="set one routing policy at runtime (admin; in memory until restart)",
+    )
+    p.add_argument("name")
+    p.add_argument(
+        "--strategy",
+        default=None,
+        help="cost_aware|balanced|cheapest|fastest|latency_first|round_robin|fallback|explicit",
+    )
+    p.add_argument("--weights", default=None, help="cost,latency weights, e.g. 0.7,0.3")
+    p.add_argument("--ceiling", default=None, help="latency_ceiling_ms")
+    p.add_argument("--hedge", default=None, help="hedge_after_ms")
+    p.add_argument("--chain", default=None, help="fallback chain, comma separated")
+    p.add_argument("--provider", default=None, help="pinned provider (explicit)")
+    p.add_argument("--model", default=None)
+    p.add_argument("--fallback-model", default=None, dest="fallback_model")
+    p.add_argument("--allow", default=None, help="provider allow list, comma separated")
+    p.add_argument("--deny", default=None, help="provider deny list, comma separated")
+    p.add_argument(
+        "--file",
+        default=None,
+        help="read the policy body from a YAML/JSON file; flags above override it",
+    )
+    p = sub.add_parser("policy-rm", help="remove one routing policy at runtime (admin)")
+    p.add_argument("name")
     p = sub.add_parser("budgets", help="budget limits and usage (admin)")
     p.add_argument("--subject", default=None, help="key subject (default: yourself)")
     p = sub.add_parser("budget-set", help="set a subject's budget limits (admin)")
@@ -124,6 +150,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("name")
     p.add_argument("input", nargs="?", default="")
     p.add_argument("--approve", action="append", default=[], help="step id (admin)")
+    p = wf.add_parser("runs", help="past runs of one workflow, newest first")
+    p.add_argument("name")
+    p.add_argument("--limit", type=int, default=50)
+    p = wf.add_parser("run-detail", help="one stored workflow run")
+    p.add_argument("name")
+    p.add_argument("run_id")
 
     ap_ = sub.add_parser("approvals", help="tool-call approvals").add_subparsers(
         dest="sub", required=True
@@ -191,6 +223,51 @@ def _plan(a: argparse.Namespace) -> tuple[str, str, Optional[dict]]:
         return "GET", simple[c], None
     if c == "policies":
         return "GET", "/v1/admin/policies", None
+    if c == "policy-set":
+        body: dict[str, Any] = {}
+        if a.file:
+            import yaml
+
+            try:
+                with open(a.file) as fh:
+                    data = yaml.safe_load(fh)
+            except (OSError, yaml.YAMLError) as e:
+                raise CliError(f"cannot read {a.file}: {e}")
+            if not isinstance(data, dict):
+                raise CliError(f"{a.file}: must be a YAML/JSON mapping")
+            body = data
+        if a.strategy:
+            body["strategy"] = a.strategy
+        if a.weights:
+            parts = [w for w in a.weights.replace(" ", "").split(",") if w]
+            if len(parts) != 2:
+                raise CliError("--weights needs two numbers, e.g. 0.7,0.3")
+            try:
+                body["weights"] = {"cost": float(parts[0]), "latency": float(parts[1])}
+            except ValueError:
+                raise CliError("--weights needs two numbers, e.g. 0.7,0.3")
+        for flag, key in (
+            ("ceiling", "latency_ceiling_ms"),
+            ("hedge", "hedge_after_ms"),
+        ):
+            raw = getattr(a, flag)
+            if raw:
+                try:
+                    body[key] = float(raw)
+                except ValueError:
+                    raise CliError(f"--{flag} needs a number")
+        for flag in ("chain", "allow", "deny"):
+            raw = getattr(a, flag)
+            if raw:
+                body[flag if flag != "chain" else "fallback_chain"] = [
+                    v.strip() for v in raw.split(",") if v.strip()
+                ]
+        for key in ("provider", "model", "fallback_model"):
+            if getattr(a, key):
+                body[key] = getattr(a, key)
+        return "PUT", f"/v1/admin/policies/{q(a.name)}", body
+    if c == "policy-rm":
+        return "DELETE", f"/v1/admin/policies/{q(a.name)}", None
     if c == "budgets":
         return (
             "GET",
@@ -277,6 +354,10 @@ def _plan(a: argparse.Namespace) -> tuple[str, str, Optional[dict]]:
     if c == "workflows":
         if s == "list":
             return "GET", "/v1/workflows", None
+        if s == "runs":
+            return "GET", f"/v1/workflows/{q(a.name)}/runs?limit={int(a.limit)}", None
+        if s == "run-detail":
+            return "GET", f"/v1/workflows/{q(a.name)}/runs/{q(a.run_id)}", None
         return (
             "POST",
             f"/v1/workflows/{q(a.name)}/run",

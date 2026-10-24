@@ -11,8 +11,10 @@ Only the ``policies`` section is read here; other sections of the file
 
 from __future__ import annotations
 
+import copy
 import logging
 import os
+import re
 import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
@@ -266,12 +268,21 @@ def load_policies(path: str, known_providers: Iterable[str] | None = None) -> Po
     return parse_policies(data, known_providers)
 
 
+# Names accepted by the runtime edit API (the file may use any YAML key).
+RUNTIME_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
+
+
 class PolicyStore:
     """Holds the active PolicySet and reloads it when the file changes.
 
     ``current()`` is cheap: it stats the file at most once per
     ``check_interval`` seconds. A file that fails validation is logged and the
     previous policies stay active.
+
+    Runtime edits (``set_policy`` / ``remove_policy``) layer on top of the
+    file: an edited name overrides the file's policy with the same name, a
+    removed name is hidden, and both survive later file reloads. They live in
+    memory only and are gone after a restart, like budget overrides.
     """
 
     def __init__(
@@ -292,7 +303,11 @@ class PolicyStore:
         # Optional callback(outcome, details) for audit; never raises into reload.
         self.on_event: Callable[[str, dict], None] | None = None
         self._set = PolicySet()
+        self._edits: dict[str, dict[str, Any]] = {}  # name -> raw body (validated)
+        self._removed: set[str] = set()  # file policy names hidden at runtime
+        self._effective = PolicySet()
         self._load(initial=True)
+        self._merge()
         self._next_check = self._clock() + self._interval
 
     def current(self) -> PolicySet:
@@ -300,7 +315,7 @@ class PolicyStore:
         if now >= self._next_check:
             self._next_check = now + self._interval
             self._load()
-        return self._set
+        return self._effective
 
     def _load(self, initial: bool = False) -> None:
         try:
@@ -325,7 +340,55 @@ class PolicyStore:
         self.last_error = None
         self.reloads += 1
         logger.info("Loaded routing policies: %s", ", ".join(self._set.names()))
-        self._notify("ok", {"path": self.path, "policies": self._set.names()})
+        self._merge()
+        self._notify("ok", {"path": self.path, "policies": self._effective.names()})
+
+    # -- runtime edits --------------------------------------------------
+    def _merge(self) -> None:
+        merged = dict(self._set.policies)
+        for name in self._removed:
+            merged.pop(name, None)
+        if self._edits:
+            # Bodies were validated on write, so this cannot raise; a bug in
+            # parse_policies would surface in tests, not at request time.
+            merged.update(parse_policies({"policies": self._edits}).policies)
+        self._effective = PolicySet(merged)
+
+    def set_policy(self, name: str, body: Any) -> Policy:
+        """Validate *body* as one policy and apply it from now on.
+
+        Raises PolicyError with every problem (unknown keys, bad strategy,
+        ...). The edit overrides a file policy of the same name and survives
+        later file reloads; it is in memory until restart.
+        """
+        if not isinstance(name, str) or not RUNTIME_NAME.match(name):
+            raise PolicyError(
+                [f"policy name {name!r}: letters, digits, dot, dash, underscore only"]
+            )
+        if not isinstance(body, dict):
+            raise PolicyError(["policy body must be a mapping"])
+        parse_policies({"policies": {name: body}}, self._known)  # raises on problems
+        self._edits[name] = copy.deepcopy(body)
+        self._removed.discard(name)
+        self._merge()
+        logger.info("Routing policy %r set at runtime (until restart)", name)
+        return self._effective.policies[name]
+
+    def remove_policy(self, name: str) -> bool:
+        """Drop a policy (runtime edit, file policy, or both). False if it is
+        not active now (already removed at runtime, or never existed)."""
+        existed = name in self._effective.policies or name in self._edits
+        self._edits.pop(name, None)
+        if name in self._set.policies:
+            self._removed.add(name)
+        self._merge()
+        if existed:
+            logger.info("Routing policy %r removed at runtime (until restart)", name)
+        return existed
+
+    def runtime_names(self) -> dict[str, list[str]]:
+        """Which policies were changed at runtime (not by the file)."""
+        return {"edited": sorted(self._edits), "removed": sorted(self._removed)}
 
     def _notify(self, outcome: str, details: dict) -> None:
         if self.on_event is None:

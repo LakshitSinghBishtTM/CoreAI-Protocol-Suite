@@ -11,8 +11,13 @@ caips local pull TheBloke/some-model-GGUF:Q4_K_M    # admin
 caips runs start calc "What is 17 * 23?"
 caips approvals list
 caips explain "hello" --model fast          # dry run: routing decision, nothing sent
-caips policies                              # admin, read-only
+caips policies                              # admin: active policies + runtime edits
+caips policy-set cheap --strategy cheapest --weights 0.9,0.1 --deny grok
+caips policy-set fast --file my-policy.yml  # body from a YAML/JSON file; flags override
+caips policy-rm fast                        # remove until restart
 caips budgets --subject user:bob            # admin: limits and current usage
+caips budget-set user:bob --max-cost 5 --window 3600
+caips budget-rm user:bob
 caips audit --limit 20 --action policy      # admin
 caips finetune estimate data.jsonl --base-model gpt-4o-mini
 caips finetune submit data.jsonl --base-model gpt-4o-mini --max-cost 5
@@ -38,7 +43,13 @@ caips keys rm KEY_ID
 
 These need an `admin` token. The key is never accepted as a flag. See the README for how several keys per provider behave.
 
-Not yet covered: budgets, routing policies, and a table output mode.
+`policy-set` and `policy-rm` change routing at runtime (in memory until restart, audited
+as `policy.set` / `policy.remove`); the file stays the source of truth across restarts.
+`policy-set` flags: `--strategy`, `--weights COST,LATENCY`, `--ceiling`, `--hedge`,
+`--chain a,b`, `--provider`, `--model`, `--fallback-model`, `--allow a,b`, `--deny a,b`,
+`--file` (a whole policy body). See [routing.md](routing.md).
+
+Not yet covered: a table output mode.
 
 ## Streaming
 

@@ -56,6 +56,32 @@ ranked providers with the score parts, exclusions (circuit open, denied,
 above the latency ceiling) and the fallback order, without calling any
 provider.
 
+## Editing policies at runtime
+
+Policies can be changed while the gateway runs, without editing the file
+(`admin` scope). Like budget overrides, edits live in memory and are gone
+after a restart: the file stays the source of truth across restarts.
+
+- `PUT /v1/admin/policies/{name}` with the same fields as the file applies one
+  policy now. The body is validated with the same rules and every problem is
+  returned at once (`422`, `{"problems": [...]}`); an invalid edit never
+  touches the active policies.
+- `DELETE /v1/admin/policies/{name}` removes one policy until restart
+  (`404` if it is not active).
+- `GET /v1/admin/policies` lists the active set and marks which names were
+  changed at runtime (`runtime_edits.edited` / `.removed`).
+
+A runtime edit overrides a file policy of the same name and survives later
+file reloads (including bad ones). Every change is audited (`policy.set`,
+`policy.remove`) and visible in the TUI's Routing section, which also offers
+a dry-run Explain against the selected policy.
+
+```bash
+caips policy-set cheap --strategy cheapest --weights 0.9,0.1 --deny grok
+caips policy-set fast --file my-policy.yml     # whole body from YAML/JSON
+caips policy-rm fast
+```
+
 ## Related
 
 - Budgets (what a key may spend): `docs/budgets.md`

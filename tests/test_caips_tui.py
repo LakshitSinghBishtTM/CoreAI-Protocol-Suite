@@ -172,7 +172,7 @@ async def test_app_boots_with_every_section_and_switches():
     )
     async with app.run_test(size=SIZE) as pilot:
         await settle(app, pilot)
-        assert len(SECTIONS) == 18
+        assert len(SECTIONS) == 20
         for sid, _, _ in SECTIONS:
             assert app.pane(sid) is not None
         assert "online" in str(app.query_one("#conn", Static).render())
@@ -1380,3 +1380,153 @@ async def test_command_palette_lists_every_section_and_jumps():
         await app.goto("usage")
         await settle(app, pilot)
         assert app.section == "usage"
+
+
+# ------------------------------------------------- routing and budgets panes
+POLICIES = {
+    "loaded": True,
+    "runtime_edits": {"edited": [], "removed": []},
+    "policies": [
+        {
+            "name": "default",
+            "strategy": "balanced",
+            "weights": {"cost": 0.7, "latency": 0.3},
+            "latency_ceiling_ms": None,
+            "hedge_after_ms": 2500,
+            "fallback_chain": ["openai", "anthropic"],
+            "provider": None,
+            "model": None,
+            "fallback_model": None,
+            "allow": None,
+            "deny": ["grok"],
+        }
+    ],
+}
+
+
+async def test_routing_pane_lists_sets_copies_and_deletes():
+    app, srv = make(
+        {
+            ("GET", "/v1/admin/policies"): (200, POLICIES),
+            ("PUT", "/v1/admin/policies/cheap"): (
+                200,
+                {"name": "cheap", "policy": {}, "runtime": True},
+            ),
+            ("DELETE", "/v1/admin/policies/default"): (200, {"removed": True}),
+            ("POST", "/v1/routing/explain"): (200, {"order": ["openai"]}),
+        }
+    )
+    async with app.run_test(size=SIZE):
+        pane = app.pane("routing")
+        await pane.activate()
+        table = pane.query_one(DataTable)
+        assert table.row_count == 1
+        row = POLICIES["policies"][0]
+        assert pane.rows["default"]["runtime"] == ""  # not runtime-edited
+
+        # Copy loads the selected row into the fields.
+        await pane.perform("copy", row)
+        assert pane.val("name") == "default"
+        assert pane.val("strategy") == "balanced"
+        assert pane.val("weights") == "0.7,0.3"
+        assert pane.val("deny") == "grok"
+        assert pane.val("fallback_chain") == "openai,anthropic"
+        assert pane.val("hedge_after_ms") == "2500"
+
+        # Set PUTs the fields as one policy body.
+        pane.set_val("name", "cheap")
+        pane.set_val("strategy", "cheapest")
+        pane.set_val("weights", "0.9, 0.1")
+        await pane.perform("set")
+        put = srv.calls("PUT", "/v1/admin/policies/cheap")[0]
+        assert put[3] == {
+            "strategy": "cheapest",
+            "weights": {"cost": 0.9, "latency": 0.1},
+            "hedge_after_ms": 2500.0,
+            "fallback_chain": ["openai", "anthropic"],
+            "deny": ["grok"],
+        }
+
+        # Explain posts the selected policy and nothing is sent to a provider.
+        await pane.perform("explain")
+        explain = srv.calls("POST", "/v1/routing/explain")[0]
+        assert explain[3]["policy"] == "default"
+        assert explain[3]["messages"][0]["content"] == "Hello"
+
+        await pane.perform("delete", {"name": "default"})
+        assert srv.calls("DELETE", "/v1/admin/policies/default")
+
+
+async def test_routing_pane_flags_bad_input_and_shows_problems():
+    app, srv = make(
+        {
+            ("GET", "/v1/admin/policies"): (200, POLICIES),
+            (
+                "PUT",
+                "/v1/admin/policies/bad",
+            ): (422, {"detail": {"problems": ["p.strategy: nope"]}}),
+        }
+    )
+    async with app.run_test(size=SIZE):
+        pane = app.pane("routing")
+        await pane.activate()
+        pane.set_val("name", "bad")
+        pane.set_val("weights", "only-one")
+        await pane.perform("set")
+        assert not srv.calls("PUT", "/v1/admin/policies/bad")  # rejected locally
+        pane.set_val("weights", "0.5,0.5")
+        pane.set_val("strategy", "nope")
+        await pane.perform("set")
+        assert srv.calls("PUT", "/v1/admin/policies/bad")  # server rejects this one
+        assert "1 problem" in str(pane.query_one(".status", Static).render())
+
+
+async def test_budgets_pane_sets_and_removes():
+    window = {
+        "enabled": True,
+        "subject": "bob",
+        "status": {
+            "window_seconds": 86400,
+            "resets_in_seconds": 100.0,
+            "used": {"cost_usd": 1.5, "requests": 2, "tokens": 30},
+            "limits": {"cost_usd": 5.0, "requests": 10, "tokens": None},
+            "warning": False,
+        },
+        "stats": {"tracked_subjects": 1, "rejections": 0},
+    }
+    app, srv = make(
+        {
+            ("GET", "/v1/admin/budgets"): (200, window),
+            ("PUT", "/v1/admin/budgets/bob"): (200, {"subject": "bob"}),
+            ("DELETE", "/v1/admin/budgets/bob"): (200, {"removed": True}),
+        }
+    )
+    async with app.run_test(size=SIZE):
+        pane = app.pane("budgets")
+        pane.set_val("subject", "bob")
+        await pane.activate()
+        table = pane.query_one(DataTable)
+        assert table.row_count == 1
+        assert pane.rows["bob"]["max_cost_usd"] == 5.0
+
+        pane.set_val("max_cost_usd", "5")
+        pane.set_val("warn_cost_usd", "4")
+        pane.set_val("max_requests", "100")
+        pane.set_val("window_seconds", "3600")
+        await pane.perform("set")
+        put = srv.calls("PUT", "/v1/admin/budgets/bob")[0]
+        assert put[3] == {
+            "max_cost_usd": 5.0,
+            "warn_cost_usd": 4.0,
+            "max_requests": 100,
+            "window_seconds": 3600,
+        }
+
+        # No limits given: refused locally, nothing sent.
+        for f in ("max_cost_usd", "warn_cost_usd", "max_requests"):
+            pane.set_val(f, "")
+        await pane.perform("set")
+        assert len(srv.calls("PUT", "/v1/admin/budgets/bob")) == 1
+
+        await pane.perform("rm", {"subject": "bob"})
+        assert srv.calls("DELETE", "/v1/admin/budgets/bob")

@@ -4,7 +4,7 @@ import json
 from types import SimpleNamespace
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -246,7 +246,8 @@ async def run_workflow_endpoint(
     rt=Depends(get_harness),
 ):
     """Runs synchronously. Tools must be granted to the caller, as for agent runs.
-    Model calls go through the gateway with the caller's budget."""
+    Model calls go through the gateway with the caller's budget. The result is
+    recorded in this workflow's history (`GET /v1/workflows/{name}/runs`)."""
     from api.server import app_state
     from harness import run_workflow
 
@@ -275,11 +276,47 @@ async def run_workflow_endpoint(
         req.metadata = {**(req.metadata or {}), "owner": ctx.subject}
         return await rt.runner.route(req)
 
-    return await run_workflow(
+    out = await run_workflow(
         wf["steps"], rt.runner.registry, route, input=body.input,
         allowed=sorted(needed), caller=ctx.subject, approved=set(body.approved),
         max_cost_usd=wf["max_cost_usd"],
     )  # fmt: skip
+    out["run_id"] = rt.runner.store.record_workflow(name, ctx.subject, body.input, out)
+    return out
+
+
+@router.get(
+    "/v1/workflows/{name}/runs", summary="Past runs of one workflow, newest first"
+)
+async def list_workflow_runs(
+    name: str,
+    limit: int = Query(50, ge=1, le=500),
+    ctx: AuthContext = Depends(require_scope("runs:read")),
+    rt=Depends(get_harness),
+):
+    if name not in rt.workflows:
+        raise HTTPException(status_code=404, detail="Unknown workflow.")
+    rows = rt.runner.store.list_workflow_runs(name, limit)
+    if "admin" not in ctx.scopes:  # callers see their own runs only
+        rows = [r for r in rows if r.get("caller") == ctx.subject]
+    return {"object": "list", "data": rows}
+
+
+@router.get("/v1/workflows/{name}/runs/{run_id}", summary="One stored workflow run")
+async def get_workflow_run(
+    name: str,
+    run_id: str,
+    ctx: AuthContext = Depends(require_scope("runs:read")),
+    rt=Depends(get_harness),
+):
+    if name not in rt.workflows:
+        raise HTTPException(status_code=404, detail="Unknown workflow.")
+    run = rt.runner.store.get_workflow_run(run_id)
+    if run is None or run.get("workflow") != name:
+        raise HTTPException(status_code=404, detail="Run not found.")
+    if run.get("caller") != ctx.subject and "admin" not in ctx.scopes:
+        raise HTTPException(status_code=404, detail="Run not found.")
+    return run
 
 
 @router.post(

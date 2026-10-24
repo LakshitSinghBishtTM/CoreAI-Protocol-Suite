@@ -61,3 +61,11 @@ workflow with `status="needs_approval"`, and a later call names it in `approved=
 `runs:read` / `runs:write`). Tools used must be granted to the caller; naming steps in
 `approved` needs the `admin` scope. Runs are synchronous and model calls use the caller's
 gateway budget. CLI: `caips workflows list`, `caips workflows run NAME INPUT [--approve ID]`.
+
+Every run — completed, failed, `needs_approval` or cost-capped — is recorded in the run
+store (same database as agent runs) and the response carries its `run_id`. History:
+`GET /v1/workflows/{name}/runs` (summary rows, newest first) and
+`GET /v1/workflows/{name}/runs/{run_id}` (steps with outputs). Callers see their own runs
+only; an admin sees all. Storage is bounded: the newest 200 runs per workflow are kept,
+older than 90 days is pruned, and input and result are truncated to 10 kB. CLI:
+`caips workflows runs NAME [--limit N]`, `caips workflows run-detail NAME RUN_ID`.

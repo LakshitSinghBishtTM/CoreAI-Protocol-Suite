@@ -838,7 +838,7 @@ async def trigger_shutdown(
 
 @router.get(
     "/admin/policies",
-    summary="Active routing policies (read-only)",
+    summary="Active routing policies (file plus runtime edits)",
     tags=["admin"],
 )
 async def list_policies(ctx: AuthContext = Depends(require_scope("admin"))):
@@ -852,8 +852,72 @@ async def list_policies(ctx: AuthContext = Depends(require_scope("admin"))):
         "loaded": True,
         "last_error": store.last_error,
         "reloads": store.reloads,
+        "runtime_edits": store.runtime_names(),
         "policies": [current.policies[n].to_dict() for n in current.names()],
     }
+
+
+@router.put(
+    "/admin/policies/{name}",
+    summary="Set one routing policy at runtime (in memory until restart)",
+    tags=["admin"],
+    description=(
+        "The body uses the same fields as `config/routing.yml` (strategy, weights, "
+        "fallback_chain, allow, deny, ...) and is validated with the same rules: "
+        "an invalid body is rejected with 422 and the active policies are untouched. "
+        "The edit overrides a file policy of the same name, survives file reloads, "
+        "and is lost on restart: write it to the file to keep it."
+    ),
+)
+async def set_policy(
+    name: str = Path(..., max_length=64),
+    body: dict = Body(...),
+    ctx: AuthContext = Depends(require_scope("admin")),
+):
+    from api.server import get_audit
+    from api.server import get_router as _get_router
+
+    store = _get_router().policies
+    if store is None:
+        raise HTTPException(
+            status_code=409,
+            detail="no routing policy file is configured (COREAI_ROUTING_POLICY_FILE)",
+        )
+    from coreai.policy import PolicyError
+
+    try:
+        policy = store.set_policy(name, body)
+    except PolicyError as exc:
+        raise HTTPException(status_code=422, detail={"problems": exc.problems})
+    get_audit().record("policy.set", ctx.subject, name, details=body)
+    return {"name": name, "policy": policy.to_dict(), "runtime": True}
+
+
+@router.delete(
+    "/admin/policies/{name}",
+    summary="Remove one routing policy at runtime (in memory until restart)",
+    tags=["admin"],
+)
+async def remove_policy(
+    name: str = Path(..., max_length=64),
+    ctx: AuthContext = Depends(require_scope("admin")),
+):
+    from api.server import get_audit
+    from api.server import get_router as _get_router
+
+    store = _get_router().policies
+    if store is None:
+        raise HTTPException(
+            status_code=409,
+            detail="no routing policy file is configured (COREAI_ROUTING_POLICY_FILE)",
+        )
+    removed = store.remove_policy(name)
+    get_audit().record(
+        "policy.remove", ctx.subject, name, outcome="ok" if removed else "noop"
+    )
+    if not removed:
+        raise HTTPException(status_code=404, detail=f"No policy named {name!r}.")
+    return {"name": name, "removed": True}
 
 
 @router.get(

@@ -34,9 +34,11 @@ This is the *gateway* token. Provider keys (OpenAI, Claude, DeepSeek, ...) are s
 | --- | --- | --- |
 | Chat | `/v1/chat/completions`, `/v1/completions[/stream]`, `/v1/messages`, `/v1/routing/explain`, `/v1/feedback` | Pick the dialect in the dropdown. Model, provider, policy, temperature, max tokens, system prompt; `stream` and `server tools` (`run_tools`) toggles. Slash commands: `/help /clear /retry /explain /good /bad /save /system /model /provider /policy /mode /stream`. A failed or stopped turn is dropped from history, so `/retry` is safe. |
 | Providers | `/v1/providers` | Circuit state, health, p50 latency; refreshes every 5 s. |
+| Routing | `/v1/admin/policies`, `/v1/routing/explain` | List policies (runtime-edited ones are marked). **Copy** loads a row into the fields, **Set** applies them as one policy at runtime, **Delete** removes one until restart (both `admin`, in memory only — edit `config/routing.yml` to keep a change; a `422` lists every problem in the detail view). **Explain** dry-runs a request under the selected policy: ranking, scores and exclusions, nothing sent. |
 | Keys | `/v1/keys`, `/v1/keys/catalog` | Add provider API keys without restarting the gateway (`admin`). Type a provider id (**Catalog** lists US labs, Chinese labs, `local` and `custom`), fill in the hidden key field and press **Add key**. Add more than one key per provider if you have them. `local` and `custom` take a name (label), base URL and model. The key field is cleared after sending, and the table shows only the last 4 characters. Environment-set keys appear read-only. |
 | Models | `/v1/models/details`, `/v1/models` | Filter by provider, modality, minimum context. |
 | Usage | `/v1/usage`, `/v1/usage/report` | Bucket and group-by; export CSV. |
+| Budgets | `/v1/admin/budgets…` | One subject's window (limits, spent, resets in) in the table. **Set** applies the fields at runtime and **Remove** drops the override (`admin`, like `caips budget-set` / `budget-rm`). |
 | Status | `/readyz`, `/health`, `/v1/stats`, `/v1/admin/shutdown`, `/metrics` | Stats and kill-switch status need `admin`. |
 | Runs | `/v1/runs…` | Start, status, events, live **Follow** (SSE), pause, resume, approve/deny, cancel, kill all. |
 | Approvals | `/v1/tools/approvals` | Approve or deny pending tool calls (`admin`). |
@@ -55,6 +57,6 @@ Sections that need a scope you lack show the server's error in the status line. 
 
 ## Limits
 
-- No budget management and no routing-policy editor: the API has no endpoints for them yet.
+- Routing and budget edits from the TUI are runtime overrides: they reset on restart (write `config/routing.yml` or `config/budgets.yml` to persist).
 - Chat shows plain text (no Markdown rendering) and does not send images or client-side tool definitions.
 - Verified against a fake gateway in `tests/test_caips_tui.py`, not against a live provider.

@@ -16,6 +16,9 @@ from typing import Optional
 from providers.base import Message
 
 ACTIVE = ("running", "paused", "waiting_approval")
+# Workflow history is bounded: newest N per workflow, and nothing older than the TTL.
+WORKFLOW_KEEP = 200
+WORKFLOW_TTL = 90 * 86400
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS runs(
   id TEXT PRIMARY KEY, agent TEXT, owner TEXT, status TEXT, stop_reason TEXT,
@@ -25,6 +28,10 @@ CREATE TABLE IF NOT EXISTS runs(
 CREATE INDEX IF NOT EXISTS runs_owner ON runs(owner, status);
 CREATE TABLE IF NOT EXISTS events(
   run_id TEXT, seq INTEGER, ts DOUBLE PRECISION, type TEXT, data TEXT, PRIMARY KEY(run_id, seq));
+CREATE TABLE IF NOT EXISTS workflow_runs(
+  id TEXT PRIMARY KEY, workflow TEXT, caller TEXT, status TEXT, failed_step TEXT,
+  input TEXT, steps TEXT, result TEXT, cost_usd DOUBLE PRECISION DEFAULT 0, created DOUBLE PRECISION);
+CREATE INDEX IF NOT EXISTS workflow_runs_wf ON workflow_runs(workflow, created);
 """
 
 
@@ -189,6 +196,66 @@ class RunStore:
             {"seq": r["seq"], "ts": r["ts"], "type": r["type"], **json.loads(r["data"])}
             for r in rows
         ]
+
+    # -- workflow history -------------------------------------------------
+    def record_workflow(
+        self, workflow: str, caller: str, input_text: str, out: dict
+    ) -> str:
+        """Store one finished workflow run and return its id.
+
+        *out* is the dict ``run_workflow`` returned. Input and result are
+        truncated (10 kB); step outputs were already capped by the runner.
+        Bounded: the newest WORKFLOW_KEEP runs per workflow are kept and rows
+        older than WORKFLOW_TTL are pruned on every insert.
+        """
+        rid, now = uuid.uuid4().hex[:16], time.time()
+        with self._tx():
+            self._x(
+                "INSERT INTO workflow_runs VALUES(?,?,?,?,?,?,?,?,?,?)",
+                (
+                    rid,
+                    workflow,
+                    caller,
+                    out.get("status"),
+                    out.get("failed_step"),
+                    (input_text or "")[:10_000],
+                    json.dumps(out.get("steps") or []),
+                    (out.get("result") or "")[:10_000],
+                    out.get("cost_usd") or 0.0,
+                    now,
+                ),
+            )
+            self._x(
+                "DELETE FROM workflow_runs WHERE created < ?", (now - WORKFLOW_TTL,)
+            )
+            self._x(
+                "DELETE FROM workflow_runs WHERE workflow=? AND id NOT IN ("
+                "SELECT id FROM workflow_runs WHERE workflow=? "
+                "ORDER BY created DESC LIMIT ?)",
+                (workflow, workflow, WORKFLOW_KEEP),
+            )
+        return rid
+
+    def list_workflow_runs(
+        self, workflow: Optional[str] = None, limit: int = 50
+    ) -> list[dict]:
+        """Newest first; the summary columns only (no steps or input)."""
+        sql = "SELECT id,workflow,caller,status,failed_step,cost_usd,created FROM workflow_runs"
+        args: list = []
+        if workflow:
+            sql += " WHERE workflow=?"
+            args.append(workflow)
+        sql += " ORDER BY created DESC LIMIT ?"
+        args.append(max(1, min(int(limit), 500)))
+        return [dict(r) for r in self._q(sql, args).fetchall()]
+
+    def get_workflow_run(self, rid: str) -> Optional[dict]:
+        r = self._q("SELECT * FROM workflow_runs WHERE id=?", (rid,)).fetchone()
+        if not r:
+            return None
+        d = dict(r)
+        d["steps"] = json.loads(d.get("steps") or "[]")
+        return d
 
 
 def diff_traces(a: list[dict], b: list[dict]) -> list[str]:

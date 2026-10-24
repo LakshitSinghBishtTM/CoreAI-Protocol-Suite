@@ -22,7 +22,7 @@ It is **alpha software**. The gateway core works and is unit tested. Several oth
 
 **Gateway**
 - **Providers:** OpenAI, Anthropic, Gemini, Grok and DeepSeek behind one interface, plus local OpenAI-compatible servers (LM Studio, Ollama, `llama-server`, vLLM) and a managed GGUF runtime (`localrt`). See [docs/providers.md](docs/providers.md) and [docs/local-models.md](docs/local-models.md).
-- **Routing:** `cheapest`, `fastest`, `balanced` (weighted cost and latency), `round_robin` and `fallback`, plus named policies in `config/routing.yml` and `POST /v1/routing/explain` to preview a decision. See [docs/routing.md](docs/routing.md).
+- **Routing:** `cheapest`, `fastest`, `balanced` (weighted cost and latency), `round_robin` and `fallback`, plus named policies in `config/routing.yml`, `POST /v1/routing/explain` to preview a decision, and runtime policy edits (`PUT/DELETE /v1/admin/policies/{name}`: validated with the file's rules, audited, in memory until restart). See [docs/routing.md](docs/routing.md).
 - **Failover:** if a provider fails with overload (429, 503, 529), a 5xx, a timeout or a connection error, the request moves to the next-best provider. Requests that pin a provider or a specific model do not fail over. Streams fail over only before the first chunk is sent.
 - **Circuit breakers, timeouts, deadlines and retries:** a failing provider is skipped for a cooldown, then probed with one request; each attempt has a timeout and one deadline covers all retries and failovers; retries use exponential backoff with jitter, honor `Retry-After`, and never retry bad requests or auth errors.
 - **Response caching:** in-memory (LRU, size-limited) or Redis.
@@ -147,9 +147,12 @@ All routes except the health probes need authentication. The scope a route needs
 | `GET /v1/usage`, `/v1/usage/report` | Usage and cost over time, as JSON or CSV |
 | `POST /v1/tasks`, `GET` and `DELETE /v1/tasks/{id}` | Background tasks `[tasks:read, tasks:write]` |
 | `/v1/runs` (start, list, status, events, stream, cancel, pause, resume) | Agent harness runs; opt-in |
+| `GET /v1/workflows`, `POST /v1/workflows/{name}/run`, `GET /v1/workflows/{name}/runs[/{id}]` | Fixed-step workflows, with recorded run history; opt-in |
 | `GET /v1/tools`, `POST /mcp`, `/v1/tools/approvals` | Tools, MCP endpoint, tool-call approvals; opt-in |
 | `/v1/local/models` | List, pull, remove and unload local GGUF models |
 | `/v1/keys`, `/v1/keys/catalog` | Add, list and remove provider API keys at runtime (`admin`; secrets are never returned) |
+| `GET/PUT/DELETE /v1/admin/policies/{name}` | List routing policies and edit them at runtime (validated, audited, in memory until restart) `[admin]` |
+| `GET/PUT/DELETE /v1/admin/budgets/{subject}` | Budget limits and current usage; runtime overrides `[admin]` |
 | `/v1/memory`, `/v1/rag/{collection}`, `/v1/feedback` | Memory, retrieval and feedback stores |
 | `POST /v1/agents`, `GET /v1/agents`, `DELETE /v1/agents/{id}` | Legacy experimental agents `[agents:read, agents:write]` |
 | `GET /v1/stats`, `GET /v1/admin/audit`, `POST /v1/admin/shutdown` | Statistics, audit log, shutdown `[admin]` |

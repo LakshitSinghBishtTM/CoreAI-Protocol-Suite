@@ -143,8 +143,8 @@ def api(monkeypatch):
     app = FastAPI()
     app.include_router(router)
 
-    def h(s):
-        return {"Authorization": "Bearer " + create_access_token("u", s)}
+    def h(scopes):
+        return {"Authorization": "Bearer " + create_access_token("u", scopes)}
 
     return TestClient(app), h, server.app_state["router"]
 

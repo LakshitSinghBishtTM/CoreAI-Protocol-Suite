@@ -4,6 +4,18 @@
 
 The previous `1.0.0` label did not match the project's state; versions now start at 0.1.0 (alpha).
 
+### Added (runtime routing-policy edits)
+- `PUT /v1/admin/policies/{name}` and `DELETE /v1/admin/policies/{name}` (admin): change one routing policy while the gateway runs. The body uses the same fields as `config/routing.yml` and is validated with the same rules; every problem is returned at once and an invalid edit never touches the active policies. Edits override file policies of the same name, survive file reloads, are marked in `GET /v1/admin/policies` (`runtime_edits`) and reset on restart. Audited as `policy.set` / `policy.remove`.
+- `caips policy-set NAME [--strategy --weights --ceiling --hedge --chain --provider --model --fallback-model --allow --deny | --file]` and `caips policy-rm NAME`.
+- TUI **Routing** section: policy table with runtime edits marked, Copy-to-fields, Set, Delete and a dry-run Explain against the selected policy.
+
+### Added (workflow run history)
+- Every workflow run (completed, failed, `needs_approval` or cost-capped) is recorded in the harness run store and the run response carries `run_id`. `GET /v1/workflows/{name}/runs` lists summary rows; `GET /v1/workflows/{name}/runs/{run_id}` returns the steps. Callers see their own runs; admins see all. Bounded: newest 200 per workflow, 90-day pruning, input and result truncated to 10 kB.
+- `caips workflows runs NAME [--limit N]` and `caips workflows run-detail NAME RUN_ID`.
+
+### Added (TUI budgets)
+- **Budgets** section: one subject's budget window (limits, spent, resets in), with runtime Set and Remove against `PUT` / `DELETE /v1/admin/budgets/{subject}`.
+
 ### Changed (TUI)
 - Dark and light themes (`caips-dark`, `caips-light`), toggled with Ctrl+T.
 - Command palette (Ctrl+P): jump to any section or run refresh, set token, toggle theme, help.
