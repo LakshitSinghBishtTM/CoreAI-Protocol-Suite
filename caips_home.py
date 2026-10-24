@@ -1,6 +1,6 @@
 """CaiPS TUI - home-first layout with a harness-style chat.
 
-Run:  python caips_tui.py        (or: textual serve caips_tui.py --port 6969)
+Run:  python caips_home.py        (or: textual serve caips_home.py --port 6969)
 Env:  CAIPS_URL      gateway base URL   (default http://localhost:8743)
       CAIPS_API_KEY  bearer token       (optional; can also be set with ctrl+k)
 """
