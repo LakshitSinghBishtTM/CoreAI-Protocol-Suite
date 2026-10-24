@@ -209,3 +209,69 @@ async def resume_run(
         rid, decision=body.approve if run["status"] == "waiting_approval" else None
     )
     return rt.runner.status(rid)
+
+
+class RunWorkflow(BaseModel):
+    input: str = Field(default="", max_length=50_000)
+    approved: list[str] = Field(default_factory=list, description="step ids a human approved")
+
+
+@router.get("/v1/workflows", summary="Configured fixed-step workflows")
+async def list_workflows(
+    ctx: AuthContext = Depends(require_scope("runs:read")), rt=Depends(get_harness)
+):
+    return {
+        "object": "list",
+        "data": [
+            {
+                "name": n,
+                "steps": [{"id": s.id, "kind": s.kind, "tool": s.tool or None} for s in w["steps"]],
+                "max_cost_usd": w["max_cost_usd"],
+            }
+            for n, w in sorted(rt.workflows.items())
+        ],
+    }
+
+
+@router.post("/v1/workflows/{name}/run", summary="Run a fixed-step workflow")
+async def run_workflow_endpoint(
+    name: str,
+    body: RunWorkflow,
+    ctx: AuthContext = Depends(require_scope("runs:write")),
+    rt=Depends(get_harness),
+):
+    """Runs synchronously. Tools must be granted to the caller, as for agent runs.
+    Model calls go through the gateway with the caller's budget."""
+    from api.server import app_state
+    from harness import run_workflow
+
+    wf = rt.workflows.get(name)
+    if wf is None:
+        raise HTTPException(status_code=404, detail="Unknown workflow.")
+    tools_rt = app_state.get("tools")
+    granted = (
+        {t.name for t in tools_rt.registry.visible(tools_rt.allowed_for(ctx.subject))}
+        if tools_rt
+        else set()
+    )
+    needed = {s.tool for s in wf["steps"] if s.kind == "tool"}
+    missing = sorted(needed - granted)
+    if missing:
+        raise HTTPException(
+            status_code=403, detail=f"Tools not granted to caller: {missing}"
+        )
+    unknown = sorted(set(body.approved) - {s.id for s in wf["steps"]})
+    if unknown:
+        raise HTTPException(status_code=422, detail=f"Unknown step ids: {unknown}")
+    if body.approved and "admin" not in ctx.scopes:
+        raise HTTPException(status_code=403, detail="Only an admin can approve steps.")
+
+    async def route(req):
+        req.metadata = {**(req.metadata or {}), "owner": ctx.subject}
+        return await rt.runner.route(req)
+
+    return await run_workflow(
+        wf["steps"], rt.runner.registry, route, input=body.input,
+        allowed=sorted(needed), caller=ctx.subject, approved=set(body.approved),
+        max_cost_usd=wf["max_cost_usd"],
+    )  # fmt: skip

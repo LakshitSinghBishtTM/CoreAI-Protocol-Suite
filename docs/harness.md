@@ -52,5 +52,9 @@ steps in a fixed order; no model chooses the next step. `${input}` and `${step_i
 substituted. Tool output reaches a model prompt only as labeled untrusted data. Tool steps
 obey allow lists, schemas, rate limits and approvals; a step needing approval stops the
 workflow with `status="needs_approval"`, and a later call names it in `approved={"step_id"}`.
-`max_cost_usd` stops before the next step once spent. There is no config file or API for
-workflows yet.
+`max_cost_usd` stops before the next step once spent. Define them under `workflows:` in
+`agents.yml` (`steps`, optional `max_cost_usd`). Endpoints: `GET /v1/workflows`,
+`POST /v1/workflows/{name}/run` with `{"input": "...", "approved": ["step_id"]}` (scopes
+`runs:read` / `runs:write`). Tools used must be granted to the caller; naming steps in
+`approved` needs the `admin` scope. Runs are synchronous and model calls use the caller's
+gateway budget. CLI: `caips workflows list`, `caips workflows run NAME INPUT [--approve ID]`.

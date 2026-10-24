@@ -56,6 +56,13 @@ def run(argv, srv=None, monkeypatch=None):
                 "policy": "cheap",
             },
         ),
+        (["workflows", "list"], "GET", "/v1/workflows", None),
+        (
+            ["workflows", "run", "daily", "hello", "--approve", "s2"],
+            "POST",
+            "/v1/workflows/daily/run",
+            {"input": "hello", "approved": ["s2"]},
+        ),
         (["policies"], "GET", "/v1/admin/policies", None),
         (["budgets"], "GET", "/v1/admin/budgets", None),
         (

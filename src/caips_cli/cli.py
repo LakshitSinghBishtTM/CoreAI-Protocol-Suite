@@ -105,6 +105,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--owner", default=None, help="only this owner; default is everything"
     )
 
+    wf = sub.add_parser("workflows", help="fixed-step workflows").add_subparsers(
+        dest="sub", required=True
+    )
+    wf.add_parser("list")
+    p = wf.add_parser("run")
+    p.add_argument("name")
+    p.add_argument("input", nargs="?", default="")
+    p.add_argument("--approve", action="append", default=[], help="step id (admin)")
+
     ap_ = sub.add_parser("approvals", help="tool-call approvals").add_subparsers(
         dest="sub", required=True
     )
@@ -239,6 +248,14 @@ def _plan(a: argparse.Namespace) -> tuple[str, str, Optional[dict]]:
             ("GET" if s in ("status", "events") else "POST"),
             f"/v1/runs/{rid}" + ("" if s == "status" else f"/{s}"),
             None,
+        )
+    if c == "workflows":
+        if s == "list":
+            return "GET", "/v1/workflows", None
+        return (
+            "POST",
+            f"/v1/workflows/{q(a.name)}/run",
+            {"input": a.input, "approved": a.approve},
         )
     if c == "approvals":
         if s == "list":

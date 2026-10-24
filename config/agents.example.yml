@@ -26,3 +26,13 @@ agents:
 #     match: {provider: openai}
 #     agent: reporter
 #     task: "Provider $provider is down; check status and summarize impact."
+
+# Fixed-step workflows: the order is set here, no model chooses what runs next.
+# Run with POST /v1/workflows/{name}/run or `caips workflows run NAME INPUT`.
+# Tools used must be granted to the caller. ${input} and ${step_id} are templates.
+# workflows:
+#   explain-math:
+#     max_cost_usd: 0.05
+#     steps:
+#       - {id: calc, tool: calculator, args: {expression: "${input}"}}
+#       - {id: say, prompt: "Explain this result in one sentence: ${calc}"}

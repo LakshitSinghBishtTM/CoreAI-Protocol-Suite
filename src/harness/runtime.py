@@ -44,9 +44,32 @@ def build_triggers(cfg: dict, runner: HarnessRunner):
     return tm
 
 
+def build_workflows(cfg: dict) -> dict:
+    """``workflows:`` block of agents.yml. Raises ValueError listing problems."""
+    from .workflow import parse_steps
+
+    out, problems = {}, []
+    for name, d in (cfg.get("workflows") or {}).items():
+        try:
+            extra = set(d) - {"steps", "max_cost_usd"}
+            if extra:
+                raise ValueError(f"unknown fields {sorted(extra)}")
+            cost = d.get("max_cost_usd")
+            out[name] = {
+                "steps": parse_steps(d.get("steps")),
+                "max_cost_usd": float(cost) if cost is not None else None,
+            }
+        except (ValueError, TypeError, AttributeError) as exc:
+            problems.append(f"workflow {name!r}: {exc}")
+    if problems:
+        raise ValueError("; ".join(problems))
+    return out
+
+
 class HarnessRuntime:
-    def __init__(self, runner: HarnessRunner, triggers=None):
+    def __init__(self, runner: HarnessRunner, triggers=None, workflows=None):
         self.runner = runner
+        self.workflows: dict = workflows or {}  # name -> {"steps", "max_cost_usd"}
         self.tasks: dict[str, asyncio.Task] = {}
         self.triggers = triggers  # optional TriggerManager
         self._trigger_loop: Optional[asyncio.Task] = None
@@ -90,7 +113,7 @@ def build_runtime(cfg: dict, route, registry, memory=None) -> HarnessRuntime:
     }
     store = RunStore(cfg.get("db", "data/runs.db"))
     runner = HarnessRunner(route, registry, store, agents, memory=memory)
-    return HarnessRuntime(runner, build_triggers(cfg, runner))
+    return HarnessRuntime(runner, build_triggers(cfg, runner), build_workflows(cfg))
 
 
 def load_harness_runtime(
