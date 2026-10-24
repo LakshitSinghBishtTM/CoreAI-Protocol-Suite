@@ -7,7 +7,7 @@ from unittest.mock import patch
 import pytest
 
 from providers.base import CompletionRequest, CompletionResponse, Message
-from tests.helpers import make_provider, make_router, make_stream_provider
+from tests.helpers import as_httpx, make_provider, make_router, make_stream_provider
 from tests.test_openai_compat import make_client  # noqa: F401  (fixture)
 
 PNG = base64.b64encode(b"\x89PNG fake").decode()
@@ -367,8 +367,14 @@ def test_official_anthropic_sdk_works_with_only_a_base_url_change(
     anthropic = pytest.importorskip("anthropic")
     c = make_client(make_router({"a": make_stream_provider("a", chunks=("Hel", "lo"))}))
     token = c.headers["Authorization"].split()[1]
-    sdk = anthropic.Anthropic(
-        base_url="http://testserver", auth_token=token, http_client=c, max_retries=0
+    sdk = as_httpx(
+        c,
+        lambda hc: anthropic.Anthropic(
+            base_url="http://testserver",
+            auth_token=token,
+            http_client=hc,
+            max_retries=0,
+        ),
     )
     msg = sdk.messages.create(model="a-model", max_tokens=20, messages=MSG["messages"])
     assert msg.content[0].text and msg.stop_reason == "end_turn"

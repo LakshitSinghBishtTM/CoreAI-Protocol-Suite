@@ -6,7 +6,7 @@ import json
 import pytest
 from openai import OpenAI
 
-from tests.helpers import make_provider, make_router, make_stream_provider
+from tests.helpers import as_httpx, make_provider, make_router, make_stream_provider
 from tests.test_openai_compat import make_client  # noqa: F401  (fixture)
 from tests.test_tool_calling import CALL, TOOL, tool_response
 
@@ -16,11 +16,14 @@ def sdk(make_client):  # noqa: F811
     def build(router):
         http = make_client(router)
         token = http.headers["Authorization"].split(" ", 1)[1]
-        return OpenAI(
-            base_url="http://testserver/v1",
-            api_key=token,
-            http_client=http,
-            max_retries=0,
+        return as_httpx(
+            http,
+            lambda hc: OpenAI(
+                base_url="http://testserver/v1",
+                api_key=token,
+                http_client=hc,
+                max_retries=0,
+            ),
         )
 
     return build

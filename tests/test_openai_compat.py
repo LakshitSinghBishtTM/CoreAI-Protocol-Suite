@@ -7,7 +7,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from tests.helpers import StatusError, make_provider, make_router, make_stream_provider
+from tests.helpers import StatusError, as_httpx, make_provider, make_router, make_stream_provider
 
 BODY = {"model": "a-model", "messages": [{"role": "user", "content": "hi"}]}
 
@@ -205,8 +205,14 @@ def test_official_openai_sdk_works_with_only_a_base_url_change(make_client):
     router = make_router({"a": make_stream_provider("a", chunks=("Hel", "lo"))})
     c = make_client(router)
     token = c.headers["Authorization"].split()[1]
-    sdk = openai.OpenAI(
-        base_url="http://testserver/v1", api_key=token, http_client=c, max_retries=0
+    sdk = as_httpx(
+        c,
+        lambda hc: openai.OpenAI(
+            base_url="http://testserver/v1",
+            api_key=token,
+            http_client=hc,
+            max_retries=0,
+        ),
     )
     comp = sdk.chat.completions.create(model="a-model", messages=BODY["messages"])
     assert comp.choices[0].message.content

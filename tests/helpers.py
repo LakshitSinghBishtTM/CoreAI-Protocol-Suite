@@ -131,3 +131,42 @@ def make_stream_provider(
 
 async def collect(agen):
     return [chunk async for chunk in agen]
+
+
+def as_httpx(tc, build=None, lib="httpx"):
+    """Real ``httpx.Client`` (or ``httpx2.Client``) forwarding to a Starlette ``TestClient``.
+
+    Newer openai/anthropic SDKs require a real client instance, not a TestClient,
+    and some releases want ``httpx2`` instead of ``httpx``. Pass ``build``, a
+    callable taking the client, to get ``build(client)`` with whichever
+    library the SDK accepts; without ``build`` the ``lib`` client is returned.
+    """
+    import importlib
+
+    def make(name):
+        mod = importlib.import_module(name)
+
+        class _Forward(mod.BaseTransport):
+            def handle_request(self, request):
+                r = tc.request(
+                    request.method,
+                    str(request.url),
+                    headers=dict(request.headers),
+                    content=request.read(),
+                )
+                drop = ("content-encoding", "content-length", "transfer-encoding")
+                hdrs = [(k, v) for k, v in r.headers.items() if k.lower() not in drop]
+                return mod.Response(r.status_code, headers=hdrs, content=r.content)
+
+        return mod.Client(
+            transport=_Forward(), base_url=str(tc.base_url), timeout=tc.timeout
+        )
+
+    if build is None:
+        return make(lib)
+    try:
+        return build(make("httpx"))
+    except TypeError as exc:
+        if "httpx2" not in str(exc):
+            raise
+        return build(make("httpx2"))
