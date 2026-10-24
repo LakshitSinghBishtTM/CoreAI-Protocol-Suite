@@ -13,10 +13,43 @@ from .runner import HarnessRunner
 from .store import RunStore
 
 
+def _bus():
+    from utils.events import bus
+
+    return bus
+
+
+def build_triggers(cfg: dict, runner: HarnessRunner):
+    """``triggers:`` block of agents.yml. Raises ValueError listing problems."""
+    from .triggers import TriggerManager
+
+    tm, problems = TriggerManager(runner), []
+    for name, d in (cfg.get("triggers") or {}).items():
+        try:
+            extra = set(d) - {"every_s", "event", "agent", "task", "owner", "match", "max_per_hour"}
+            if extra:
+                raise ValueError(f"unknown fields {sorted(extra)}")
+            if bool(d.get("every_s")) == bool(d.get("event")):
+                raise ValueError("set exactly one of every_s or event")
+            common = dict(agent=d["agent"], task=d["task"], owner=d.get("owner", "local"),
+                          max_per_hour=int(d.get("max_per_hour", 6)))  # fmt: skip
+            if d.get("every_s"):
+                tm.every(name, float(d["every_s"]), **common)
+            else:
+                tm.on_event(name, d["event"], match=d.get("match"), **common)
+        except (KeyError, ValueError, TypeError) as exc:
+            problems.append(f"trigger {name!r}: {exc}")
+    if problems:
+        raise ValueError("; ".join(problems))
+    return tm
+
+
 class HarnessRuntime:
-    def __init__(self, runner: HarnessRunner):
+    def __init__(self, runner: HarnessRunner, triggers=None):
         self.runner = runner
         self.tasks: dict[str, asyncio.Task] = {}
+        self.triggers = triggers  # optional TriggerManager
+        self._trigger_loop: Optional[asyncio.Task] = None
 
     def spawn(self, rid: str, decision: Optional[bool] = None) -> None:
         """Run in the background; one task per run."""
@@ -31,10 +64,20 @@ class HarnessRuntime:
         ids = self.runner.store.interrupted()
         for rid in ids:
             self.spawn(rid)
+        if self.triggers is not None and self.triggers.triggers:
+            from utils.events import bus
+
+            bus.subscribe(self.triggers.on_bus_event)
+            self._trigger_loop = asyncio.create_task(self.triggers.run())
         return len(ids)
 
     async def stop(self) -> None:
         """Cancel live runs; each checkpoints as resumable before exiting."""
+        if self._trigger_loop is not None:
+            self._trigger_loop.cancel()
+            await asyncio.gather(self._trigger_loop, return_exceptions=True)
+            if self.triggers.on_bus_event in _bus().sinks:
+                _bus().sinks.remove(self.triggers.on_bus_event)
         for t in list(self.tasks.values()):
             t.cancel()
         await asyncio.gather(*self.tasks.values(), return_exceptions=True)
@@ -46,7 +89,8 @@ def build_runtime(cfg: dict, route, registry, memory=None) -> HarnessRuntime:
         for n, d in (cfg.get("agents") or {}).items()
     }
     store = RunStore(cfg.get("db", "data/runs.db"))
-    return HarnessRuntime(HarnessRunner(route, registry, store, agents, memory=memory))
+    runner = HarnessRunner(route, registry, store, agents, memory=memory)
+    return HarnessRuntime(runner, build_triggers(cfg, runner))
 
 
 def load_harness_runtime(

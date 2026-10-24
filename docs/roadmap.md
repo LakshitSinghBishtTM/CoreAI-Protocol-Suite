@@ -198,7 +198,7 @@ Rebuild `agents/` as a small, inspectable harness on top of the gateway and tool
 **Later patterns, only after the loop is solid**
 
 - Sub-agents that run as tool calls with their own budgets. *Status: done (`harness.subagent_tool`: child is a normal run with its own limits and trace, nesting capped at 2, child approvals are left to humans).*
-- Scheduled and event-triggered runs (cron, webhooks). *Status: interval and event-bus triggers done (`harness.TriggerManager`: no overlap, per-hour cap; not wired into the server or config yet; no cron expressions or inbound webhooks)*.
+- Scheduled and event-triggered runs (cron, webhooks). *Status: interval and event-bus triggers done (`harness.TriggerManager`: no overlap, per-hour cap; wired through a `triggers:` block in `config/agents.yml`, started and stopped with the harness runtime; no cron expressions or inbound webhooks)*.
 - Reusable workflows with fixed steps for tasks that shouldn't be left to a model's judgment.
 
 **Exit criteria:** a defined agent completes a multi-step task using tools, survives a mid-run restart through a checkpoint, respects its budget, and its trace shows every step.

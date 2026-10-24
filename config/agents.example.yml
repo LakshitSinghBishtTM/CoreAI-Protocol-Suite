@@ -12,3 +12,17 @@ agents:
     deadline_s: 120
     # approval_tools: [shell]       # always ask a human first
     # local: true                   # small local model: tighter limits
+
+# Unattended runs. Each trigger starts a normal run of one of the agents above,
+# with that agent's limits. Set exactly one of every_s or event.
+# triggers:
+#   nightly-report:
+#     every_s: 86400
+#     agent: reporter
+#     task: "Summarize yesterday's usage."
+#     max_per_hour: 1
+#   outage-triage:
+#     event: provider.outage          # also budget.exceeded, run.finished ...
+#     match: {provider: openai}
+#     agent: reporter
+#     task: "Provider $provider is down; check status and summarize impact."
