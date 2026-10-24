@@ -17,8 +17,9 @@ from typing import Dict, List, Optional
 
 from fastapi import Depends, Header, HTTPException, Security, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from jose import ExpiredSignatureError, JWTError, jwt
 from pydantic import BaseModel
+
+from jose import ExpiredSignatureError, JWTError, jwt
 
 logger = logging.getLogger(__name__)
 

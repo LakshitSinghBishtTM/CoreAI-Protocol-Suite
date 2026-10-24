@@ -34,7 +34,7 @@ def _clean(value: Any, depth: int = 0, budget: list[int] | None = None) -> Any:
     if isinstance(value, dict):
         if depth >= 3:
             return "[nested data truncated]"
-        out = {}
+        out: dict[str, Any] = {}
         for index, (key, item) in enumerate(value.items()):
             if index >= _MAX_CONTAINER_ITEMS or budget[0] <= 0:
                 out["_truncated"] = True
@@ -50,10 +50,12 @@ def _clean(value: Any, depth: int = 0, budget: list[int] | None = None) -> Any:
     if isinstance(value, (list, tuple)):
         if depth >= 3:
             return "[nested data truncated]"
-        out = [_clean(v, depth + 1, budget) for v in value[:_MAX_CONTAINER_ITEMS]]
+        items: list[Any] = [
+            _clean(v, depth + 1, budget) for v in value[:_MAX_CONTAINER_ITEMS]
+        ]
         if len(value) > _MAX_CONTAINER_ITEMS and budget[0] > 0:
-            out.append("[truncated]")
-        return out
+            items.append("[truncated]")
+        return items
     if isinstance(value, bool) or value is None:
         return value
     if isinstance(value, int):

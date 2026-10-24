@@ -9,6 +9,7 @@ from datetime import timedelta
 from unittest.mock import MagicMock
 
 import pytest
+
 from jose import jwt
 
 # ---------------------------------------------------------------------------
