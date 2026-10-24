@@ -19,6 +19,36 @@ def manager(clock=None, **limits):
     return BudgetManager(BudgetLimits(**limits), clock=clock or FakeClock(0.0))
 
 
+@pytest.mark.parametrize(
+    "limits",
+    [
+        {"window_seconds": 0},
+        {"window_seconds": 1.5},
+        {"max_cost_usd": -1},
+        {"max_cost_usd": float("nan")},
+        {"warn_cost_usd": float("inf")},
+        {"max_requests": -1},
+        {"max_tokens": 1.5},
+        {"max_cost_usd": 1, "warn_cost_usd": 2},
+    ],
+)
+def test_direct_budget_limits_reject_invalid_values(limits):
+    with pytest.raises(ValueError):
+        BudgetLimits(**limits)
+
+
+def test_direct_budget_limits_keep_zero_as_a_valid_hard_cap():
+    m = manager(max_requests=0)
+    with pytest.raises(BudgetExceeded):
+        m.check("u")
+
+
+@pytest.mark.parametrize("max_subjects", [0, -1, 1.5, True])
+def test_budget_manager_requires_positive_subject_capacity(max_subjects):
+    with pytest.raises(ValueError, match="max_subjects must be a positive integer"):
+        BudgetManager(max_subjects=max_subjects)
+
+
 def test_no_limits_means_no_checks():
     m = BudgetManager(clock=FakeClock())
     m.check("u")

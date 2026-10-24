@@ -69,8 +69,31 @@ class PythonSandbox:
                 stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
                 preexec_fn=self._limits(),
             )  # fmt: skip
+
+            async def read_output():
+                out = bytearray()
+                truncated = False
+                while True:
+                    chunk = await proc.stdout.read(4096)
+                    if not chunk:
+                        break
+                    remaining = MAX_OUTPUT - len(out)
+                    out.extend(chunk[:remaining])
+                    if len(chunk) > remaining:
+                        truncated = True
+                        break
+                if truncated:
+                    try:
+                        os.killpg(proc.pid, 9)
+                    except ProcessLookupError:
+                        pass
+                await proc.wait()
+                return bytes(out), truncated
+
             try:
-                out, _ = await asyncio.wait_for(proc.communicate(), self.timeout_s)
+                out, truncated = await asyncio.wait_for(
+                    read_output(), timeout=self.timeout_s
+                )
             except asyncio.TimeoutError:
                 try:
                     os.killpg(proc.pid, 9)
@@ -79,7 +102,7 @@ class PythonSandbox:
                 await proc.wait()
                 raise ToolError("timeout", f"Code exceeded {self.timeout_s:g}s.")
         text = out[:MAX_OUTPUT].decode("utf-8", "replace")
-        if len(out) > MAX_OUTPUT:
+        if truncated:
             text += "\n[output truncated]"
         return f"exit_code={proc.returncode}\n{text}"
 

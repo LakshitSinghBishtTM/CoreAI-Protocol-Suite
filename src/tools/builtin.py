@@ -15,6 +15,8 @@ from pathlib import Path
 from typing import Iterable, Optional
 from urllib.parse import urlparse
 
+from httpcore._backends.auto import AutoBackend
+from httpcore._backends.base import AsyncNetworkBackend
 import httpx
 
 from .registry import Permission, Tool, ToolError, ToolRegistry
@@ -105,16 +107,65 @@ class Workspace:
         return f"wrote {len(content)} chars to {path}"
 
 
-def _is_public(host: str) -> bool:
+def _public_addresses(host: str) -> list[str]:
     try:
         infos = socket.getaddrinfo(host, None)
     except OSError:
-        return False
-    for info in infos:
-        ip = ipaddress.ip_address(info[4][0])
-        if not ip.is_global:
-            return False
-    return True
+        return []
+    addresses = sorted({info[4][0] for info in infos})
+    try:
+        if not addresses or any(
+            not ipaddress.ip_address(address).is_global for address in addresses
+        ):
+            return []
+    except ValueError:
+        return []
+    return addresses
+
+
+def _ascii_host(host: str) -> str:
+    return host.encode("idna").decode("ascii").lower()
+
+
+class _PinnedNetworkBackend(AsyncNetworkBackend):
+    """Connect only to the public IPs resolved and checked for this request."""
+
+    def __init__(self, addresses: dict[str, list[str]]):
+        self.addresses = addresses
+        self._backend = AutoBackend()
+
+    async def connect_tcp(
+        self,
+        host,
+        port,
+        timeout=None,
+        local_address=None,
+        socket_options=None,
+    ):
+        pinned = self.addresses.get(host)
+        if not pinned:
+            raise OSError("Connection host was not resolved and allow-checked.")
+        last_error = None
+        for address in pinned:
+            try:
+                return await self._backend.connect_tcp(
+                    address,
+                    port,
+                    timeout=timeout,
+                    local_address=local_address,
+                    socket_options=socket_options,
+                )
+            except Exception as exc:
+                last_error = exc
+        if last_error is not None:
+            raise last_error
+        raise OSError("No pinned address was available.")
+
+    async def connect_unix_socket(self, path, timeout=None, socket_options=None):
+        raise OSError("Unix sockets are not allowed for HTTP fetches.")
+
+    async def sleep(self, seconds):
+        await self._backend.sleep(seconds)
 
 
 class HttpFetcher:
@@ -122,34 +173,62 @@ class HttpFetcher:
         self,
         allowed_domains: Iterable[str],
         transport: Optional[httpx.AsyncBaseTransport] = None,
-        resolver=_is_public,
+        resolver=_public_addresses,
         max_bytes: int = 200_000,
     ):
-        self.allowed = {d.lower().lstrip(".") for d in allowed_domains}
+        self.allowed = {_ascii_host(d.lower().lstrip(".")) for d in allowed_domains}
         self.transport = transport
         self.resolver = resolver
         self.max_bytes = max_bytes
 
-    def _check(self, url: str) -> None:
+    def _check(self, url: str) -> tuple[str, list[str]]:
         u = urlparse(url)
-        host = (u.hostname or "").lower()
+        try:
+            host = _ascii_host(u.hostname or "")
+        except UnicodeError:
+            raise ToolError("invalid_arguments", "Invalid hostname.") from None
         if u.scheme not in ("http", "https") or not host:
             raise ToolError("invalid_arguments", "Only http(s) URLs are allowed.")
         if not any(host == d or host.endswith("." + d) for d in self.allowed):
             raise ToolError("not_allowed", f"Domain '{host}' is not allow-listed.")
-        if not self.resolver(host):
+        addresses = self.resolver(host)
+        try:
+            is_public = bool(addresses) and all(
+                ipaddress.ip_address(address).is_global for address in addresses
+            )
+        except ValueError:
+            is_public = False
+        if not is_public:
             raise ToolError("not_allowed", f"Host '{host}' is not a public address.")
+        return host, addresses
 
     async def fetch(self, url: str) -> str:
-        self._check(url)
+        host, addresses = self._check(url)
+        transport = self.transport
+        if transport is None:
+            transport = httpx.AsyncHTTPTransport(trust_env=False)
+            # HTTPX does not currently expose httpcore's network_backend
+            # setting. Pin the backend on its pool so DNS is not repeated at
+            # connect time after the allow-list check.
+            transport._pool._network_backend = _PinnedNetworkBackend({host: addresses})
         async with httpx.AsyncClient(
-            transport=self.transport, timeout=10, follow_redirects=False
+            transport=transport, timeout=10, follow_redirects=False, trust_env=False
         ) as http:
-            r = await http.get(url)
-        if 300 <= r.status_code < 400:  # a redirect could leave the allow list
-            raise ToolError("not_allowed", "Redirects are not followed.")
-        r.raise_for_status()
-        return r.text[: self.max_bytes]
+            async with http.stream("GET", url) as r:
+                if 300 <= r.status_code < 400:  # a redirect could leave the allow list
+                    raise ToolError("not_allowed", "Redirects are not followed.")
+                r.raise_for_status()
+                parts = []
+                length = 0
+                async for chunk in r.aiter_text(chunk_size=8192):
+                    remaining = self.max_bytes - length
+                    if remaining <= 0:
+                        break
+                    parts.append(chunk[:remaining])
+                    length += min(len(chunk), remaining)
+                    if len(chunk) > remaining or length >= self.max_bytes:
+                        break
+                return "".join(parts)
 
 
 def register_builtins(

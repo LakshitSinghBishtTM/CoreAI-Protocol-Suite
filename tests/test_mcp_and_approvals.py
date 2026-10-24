@@ -101,7 +101,7 @@ def test_approval_store_rules():
     t = {"now": 0.0}
     st = ApprovalStore(ttl_s=10, max_items=2, clock=lambda: t["now"])
     a = st.request("k", "wipe", {"x": 1})
-    assert st.request("k", "wipe", {"x": 1}) is a  # same call reuses the pending one
+    assert st.request("k", "wipe", {"x": 1}).id == a.id  # same call reuses it
     assert not st.consume("k", "wipe", {"x": 1})  # not approved yet
     st.decide(a.id, False, "root")
     with pytest.raises(ValueError):
@@ -113,6 +113,48 @@ def test_approval_store_rules():
     assert st.consume("k", "wipe", {"x": 2}) and not st.consume("k", "wipe", {"x": 2})
     t["now"] = 100.0
     assert st.get(a.id) is None  # expired
+
+
+def test_approval_arguments_are_snapshotted_on_storage_and_public_view():
+    args = {"nested": {"value": 1}}
+    st = ApprovalStore()
+    approval = st.request("caller", "wipe", args)
+    args["nested"]["value"] = 2
+    assert approval.arguments == {"nested": {"value": 1}}
+    approval.arguments["nested"]["value"] = 3
+    public = approval.public()
+    public["arguments"]["nested"]["value"] = 4
+    assert approval.arguments == {"nested": {"value": 3}}
+    st.decide(approval.id, True, "admin")
+    assert st.consume("caller", "wipe", {"nested": {"value": 1}})
+
+
+def test_approval_store_reclaims_terminal_slots_when_full():
+    st = ApprovalStore(max_items=2)
+    denied = st.request("a", "wipe", {"id": 1})
+    st.decide(denied.id, False, "admin")
+    used = st.request("b", "wipe", {"id": 2})
+    st.decide(used.id, True, "admin")
+    assert st.consume("b", "wipe", {"id": 2})
+    fresh = st.request("c", "wipe", {"id": 3})
+    assert fresh.status == "pending"
+    assert len(st._items) == 2
+
+
+@pytest.mark.parametrize(
+    "ttl",
+    [0, -1, float("inf"), float("nan"), True, 10**10000],
+    ids=["zero", "negative", "infinite", "nan", "bool", "oversized-int"],
+)
+def test_approval_store_rejects_invalid_ttl(ttl):
+    with pytest.raises(ValueError, match="ttl_s"):
+        ApprovalStore(ttl_s=ttl)
+
+
+@pytest.mark.parametrize("capacity", [0, -1, 1.5, True])
+def test_approval_store_rejects_invalid_capacity(capacity):
+    with pytest.raises(ValueError, match="max_items"):
+        ApprovalStore(max_items=capacity)
 
 
 def test_config_defaults_and_validation():

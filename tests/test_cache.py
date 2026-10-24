@@ -4,8 +4,6 @@ tests/test_cache.py
 Unit tests for coreai.cache — ResponseCache, MemoryCache, RedisCache.
 """
 
-from datetime import datetime, timedelta
-
 import pytest
 
 from coreai.cache import MemoryCache, RedisCache, ResponseCache
@@ -34,22 +32,41 @@ class TestMemoryCache:
 
     @pytest.mark.asyncio
     async def test_expired_entry_returns_none(self, cache):
-        # Manually plant an already-expired entry
-        cache.store["key:expired"] = (
-            {"data": "old"},
-            datetime.now() - timedelta(seconds=1),
-        )
+        now = {"value": 10.0}
+        cache = MemoryCache(clock=lambda: now["value"])
+        cache.store["key:expired"] = ({"data": "old"}, 9.0)
         result = await cache.get("key:expired")
         assert result is None
 
     @pytest.mark.asyncio
     async def test_expired_entry_is_evicted(self, cache):
-        cache.store["key:expired"] = (
-            {"data": "old"},
-            datetime.now() - timedelta(seconds=1),
-        )
+        cache = MemoryCache(clock=lambda: 10.0)
+        cache.store["key:expired"] = ({"data": "old"}, 9.0)
         await cache.get("key:expired")
         assert "key:expired" not in cache.store
+
+    @pytest.mark.asyncio
+    async def test_memory_cache_snapshots_values_on_set_and_get(self, cache):
+        value = {"nested": [1]}
+        await cache.set("key:snapshot", value)
+        value["nested"].append(2)
+        first = await cache.get("key:snapshot")
+        assert first == {"nested": [1]}
+        first["nested"].append(3)
+        assert await cache.get("key:snapshot") == {"nested": [1]}
+
+    @pytest.mark.asyncio
+    async def test_zero_ttl_deletes_instead_of_retaining_an_entry(self, cache):
+        await cache.set("key:zero", {"value": 1})
+        await cache.set("key:zero", {"value": 2}, ttl_seconds=0)
+        assert await cache.get("key:zero") is None
+        assert "key:zero" not in cache.store
+
+    @pytest.mark.parametrize("ttl", [-1, 1.5, True])
+    @pytest.mark.asyncio
+    async def test_invalid_ttl_is_rejected(self, cache, ttl):
+        with pytest.raises(ValueError, match="ttl_seconds"):
+            await cache.set("key:invalid", {}, ttl_seconds=ttl)
 
     @pytest.mark.asyncio
     async def test_delete_removes_key(self, cache):
@@ -105,6 +122,13 @@ class TestRedisCacheFallback:
         assert result == {"x": 99}
 
     @pytest.mark.asyncio
+    async def test_invalid_ttl_is_rejected_before_backend_errors_are_swallowed(
+        self, cache
+    ):
+        with pytest.raises(ValueError, match="ttl_seconds"):
+            await cache.set("key:invalid", {}, ttl_seconds=-1)
+
+    @pytest.mark.asyncio
     async def test_delete_delegates_to_fallback(self, cache):
         await cache.fallback.set("key:fb3", {"y": 1})
         await cache.delete("key:fb3")
@@ -115,6 +139,23 @@ class TestRedisCacheFallback:
         await cache.fallback.set("key:fb4", {"z": 0})
         await cache.clear()
         assert len(cache.fallback.store) == 0
+
+
+@pytest.mark.asyncio
+async def test_redis_zero_ttl_deletes_and_invalid_ttl_is_rejected():
+    class FakeRedis:
+        def __init__(self):
+            self.deleted = []
+
+        async def delete(self, key):
+            self.deleted.append(key)
+
+    cache = RedisCache.__new__(RedisCache)
+    cache.redis = FakeRedis()
+    await cache.set("key:zero", {}, ttl_seconds=0)
+    assert cache.redis.deleted == ["key:zero"]
+    with pytest.raises(ValueError, match="ttl_seconds"):
+        await cache.set("key:invalid", {}, ttl_seconds=-1)
 
 
 # ---------------------------------------------------------------------------

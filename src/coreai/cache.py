@@ -1,11 +1,21 @@
 import hashlib
 import json
+import time
+from copy import deepcopy
 from abc import ABC, abstractmethod
 from collections import OrderedDict
-from datetime import datetime, timedelta
-from typing import Optional
+from typing import Callable, Optional
 
 from loguru import logger
+
+
+def _validate_ttl(ttl_seconds: int) -> None:
+    if (
+        isinstance(ttl_seconds, bool)
+        or not isinstance(ttl_seconds, int)
+        or ttl_seconds < 0
+    ):
+        raise ValueError("ttl_seconds must be a non-negative integer")
 
 
 class CacheBackend(ABC):
@@ -36,26 +46,37 @@ class MemoryCache(CacheBackend):
     when the same key was read again.)
     """
 
-    def __init__(self, max_entries: int = 1000):
-        if max_entries < 1:
-            raise ValueError("max_entries must be at least 1")
+    def __init__(
+        self, max_entries: int = 1000, clock: Callable[[], float] = time.monotonic
+    ):
+        if (
+            isinstance(max_entries, bool)
+            or not isinstance(max_entries, int)
+            or max_entries < 1
+        ):
+            raise ValueError("max_entries must be a positive integer")
         self.max_entries = max_entries
-        self.store: OrderedDict[str, tuple[dict, datetime]] = OrderedDict()
+        self.clock = clock
+        self.store: OrderedDict[str, tuple[dict, float]] = OrderedDict()
         self.evictions = 0
 
     async def get(self, key: str) -> Optional[dict]:
         if key not in self.store:
             return None
         value, expiry = self.store[key]
-        if datetime.now() > expiry:
+        if self.clock() >= expiry:
             del self.store[key]
             return None
         self.store.move_to_end(key)
-        return value
+        return deepcopy(value)
 
     async def set(self, key: str, value: dict, ttl_seconds: int = 3600):
-        expiry = datetime.now() + timedelta(seconds=ttl_seconds)
-        self.store[key] = (value, expiry)
+        _validate_ttl(ttl_seconds)
+        if ttl_seconds == 0:
+            self.store.pop(key, None)
+            return
+        expiry = self.clock() + ttl_seconds
+        self.store[key] = (deepcopy(value), expiry)
         self.store.move_to_end(key)
         if len(self.store) > self.max_entries:
             self.purge_expired()
@@ -65,8 +86,8 @@ class MemoryCache(CacheBackend):
 
     def purge_expired(self) -> int:
         """Drop every expired entry; returns how many were removed."""
-        now = datetime.now()
-        expired = [k for k, (_, exp) in self.store.items() if now > exp]
+        now = self.clock()
+        expired = [k for k, (_, exp) in self.store.items() if now >= exp]
         for k in expired:
             del self.store[k]
         return len(expired)
@@ -104,10 +125,14 @@ class RedisCache(CacheBackend):
             return None
 
     async def set(self, key: str, value: dict, ttl_seconds: int = 3600):
+        _validate_ttl(ttl_seconds)
         if not self.redis:
             await self.fallback.set(key, value, ttl_seconds)
             return
         try:
+            if ttl_seconds == 0:
+                await self.redis.delete(key)
+                return
             await self.redis.setex(key, ttl_seconds, json.dumps(value))
         except Exception as e:
             logger.error(f"Redis set failed: {e}")

@@ -16,6 +16,16 @@ class RateLimitConfig:
     tokens_per_minute: int = 90000  # input + output tokens
     concurrent_requests: int = 10
 
+    def __post_init__(self):
+        for name in (
+            "requests_per_minute",
+            "tokens_per_minute",
+            "concurrent_requests",
+        ):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+                raise ValueError(f"{name} must be a positive integer")
+
 
 class TokenBucket:
     """Token bucket for rate limiting"""

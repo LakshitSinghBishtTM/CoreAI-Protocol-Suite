@@ -3,10 +3,12 @@
 import json
 import shutil
 
+import httpx
 import pytest
 
 from guardrails.filters import FilterPolicy, apply
 from localrt import cli, hardware
+from tools.builtin import HttpFetcher
 from tools.registry import ToolError
 from tools.sandbox import PythonSandbox
 
@@ -55,6 +57,47 @@ async def test_sandbox_env_is_empty_and_memory_capped():
     assert "exit_code=0" not in out and "MemoryError" in out
 
 
+async def test_sandbox_caps_output_while_reading(monkeypatch):
+    monkeypatch.setattr("tools.sandbox.MAX_OUTPUT", 1024)
+    out = await PythonSandbox(timeout_s=5, allow_network=True).run(
+        "import sys; sys.stdout.write('x' * 10_000_000)"
+    )
+    assert out.endswith("\n[output truncated]")
+    assert out.split("\n", 1)[1].count("x") == 1024
+
+
+async def test_sandbox_timeout_still_applies_after_child_closes_output():
+    code = "import os; os.close(1); os.close(2); exec('while True: pass')"
+    with pytest.raises(ToolError, match="exceeded"):
+        await PythonSandbox(timeout_s=0.2, allow_network=True).run(code)
+
+
+async def test_http_fetcher_stops_reading_at_the_response_limit():
+    class Chunks(httpx.AsyncByteStream):
+        def __init__(self):
+            self.reads = 0
+            self.closed = False
+
+        async def __aiter__(self):
+            for chunk in (b"a" * 8192, b"b" * 8192, b"c" * 8192):
+                self.reads += 1
+                yield chunk
+
+        async def aclose(self):
+            self.closed = True
+
+    stream = Chunks()
+    transport = httpx.MockTransport(lambda request: httpx.Response(200, stream=stream))
+    fetcher = HttpFetcher(
+        ["example.com"],
+        transport=transport,
+        resolver=lambda host: ["93.184.216.34"],
+        max_bytes=10,
+    )
+    assert await fetcher.fetch("https://example.com/large") == "a" * 10
+    assert stream.reads == 1 and stream.closed
+
+
 async def test_sandbox_refuses_without_network_isolation():
     sb = PythonSandbox()
     sb._unshare = None
@@ -65,7 +108,12 @@ async def test_sandbox_refuses_without_network_isolation():
 @needs_unshare
 async def test_sandbox_has_no_network_when_isolation_works():
     sb = PythonSandbox(timeout_s=5)
-    probe = "import socket\ntry:\n    socket.create_connection(('1.1.1.1',80),2);print('NET')\nexcept OSError:print('NONET')"
+    probe = (
+        "import socket\n"
+        "try:\n"
+        "    socket.create_connection(('1.1.1.1',80),2);print('NET')\n"
+        "except OSError:print('NONET')"
+    )
     try:
         out = await sb.run(probe)
     except ToolError:

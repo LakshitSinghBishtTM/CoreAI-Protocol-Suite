@@ -20,7 +20,7 @@ import math
 import time
 from collections import OrderedDict
 from collections.abc import Callable
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from typing import Any
 
 WINDOWS = {"minute": 60, "hour": 3600, "day": 86400, "week": 604800}
@@ -48,6 +48,35 @@ class BudgetLimits:
     max_tokens: int | None = None
     window_seconds: int = 86400
 
+    def __post_init__(self):
+        for name in ("max_cost_usd", "warn_cost_usd"):
+            value = getattr(self, name)
+            if value is not None and (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or not math.isfinite(value)
+                or value < 0
+            ):
+                raise ValueError(f"{name} must be a finite number >= 0 or None")
+        for name in ("max_requests", "max_tokens"):
+            value = getattr(self, name)
+            if value is not None and (
+                isinstance(value, bool) or not isinstance(value, int) or value < 0
+            ):
+                raise ValueError(f"{name} must be an integer >= 0 or None")
+        if (
+            isinstance(self.window_seconds, bool)
+            or not isinstance(self.window_seconds, int)
+            or self.window_seconds < 1
+        ):
+            raise ValueError("window_seconds must be a positive integer")
+        if (
+            self.warn_cost_usd is not None
+            and self.max_cost_usd is not None
+            and self.warn_cost_usd > self.max_cost_usd
+        ):
+            raise ValueError("warn_cost_usd must not exceed max_cost_usd")
+
 
 @dataclass
 class _Usage:
@@ -67,6 +96,12 @@ class BudgetManager:
         clock: Callable[[], float] = time.time,
         max_subjects: int = 10_000,
     ):
+        if (
+            isinstance(max_subjects, bool)
+            or not isinstance(max_subjects, int)
+            or max_subjects < 1
+        ):
+            raise ValueError("max_subjects must be a positive integer")
         self.default = default
         self.subjects = dict(subjects or {})
         # Shared caps per model, across all subjects (see check_model).
@@ -222,7 +257,7 @@ def _parse(raw: Any, where: str, base: BudgetLimits, errors: list[str]) -> Budge
         return base
     for key in raw.keys() - _FIELDS:
         errors.append(f"{where}: unknown field '{key}'")
-    out = base
+    updates = {}
     for key in ("max_cost_usd", "warn_cost_usd"):
         if key in raw:
             v = raw[key]
@@ -234,31 +269,37 @@ def _parse(raw: Any, where: str, base: BudgetLimits, errors: list[str]) -> Budge
             ):
                 errors.append(f"{where}.{key}: must be a finite number >= 0")
             else:
-                out = replace(out, **{key: float(v)})
+                updates[key] = float(v)
     for key in ("max_requests", "max_tokens"):
         if key in raw:
             v = raw[key]
             if isinstance(v, bool) or not isinstance(v, int) or v < 0:
                 errors.append(f"{where}.{key}: must be an integer >= 0")
             else:
-                out = replace(out, **{key: v})
+                updates[key] = v
     if "window" in raw:
         w = raw["window"]
         if isinstance(w, str) and w in WINDOWS:
-            out = replace(out, window_seconds=WINDOWS[w])
+            updates["window_seconds"] = WINDOWS[w]
         elif isinstance(w, int) and not isinstance(w, bool) and w > 0:
-            out = replace(out, window_seconds=w)
+            updates["window_seconds"] = w
         else:
             errors.append(
                 f"{where}.window: use one of {sorted(WINDOWS)} or seconds > 0"
             )
+    resolved = {name: getattr(base, name) for name in _FIELDS - {"window"}}
+    resolved["window_seconds"] = base.window_seconds
+    resolved.update(updates)
     if (
-        out.warn_cost_usd is not None
-        and out.max_cost_usd is not None
-        and out.warn_cost_usd > out.max_cost_usd
+        resolved["warn_cost_usd"] is not None
+        and resolved["max_cost_usd"] is not None
+        and resolved["warn_cost_usd"] > resolved["max_cost_usd"]
     ):
         errors.append(f"{where}: warn_cost_usd is above max_cost_usd")
-    return out
+        # Keep this temporary object valid; the accumulated config errors are
+        # raised by load_budgets after every section has been checked.
+        resolved["warn_cost_usd"] = None
+    return BudgetLimits(**resolved)
 
 
 def load_budgets(path: str, **kwargs: Any) -> BudgetManager:

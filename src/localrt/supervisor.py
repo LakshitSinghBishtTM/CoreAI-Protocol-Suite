@@ -8,6 +8,7 @@ to 127.0.0.1 only. ``clock`` and ``spawn`` are injectable for tests.
 import os
 import socket
 import subprocess
+import threading
 import time
 from dataclasses import dataclass, field
 from typing import Any, Callable
@@ -23,8 +24,63 @@ def _popen(cmd: list[str], log_path: str | None = None) -> Any:
     os.makedirs(os.path.dirname(log_path), exist_ok=True)
     if os.path.exists(log_path) and os.path.getsize(log_path) > MAX_LOG_BYTES:
         os.replace(log_path, log_path + ".1")  # one rotation keeps disk bounded
-    with open(log_path, "ab") as log:
-        return subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT)
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        bufsize=0,
+    )
+    thread = threading.Thread(
+        target=_capture_log, args=(proc.stdout, log_path), daemon=True
+    )
+    thread.start()
+    return _LoggedProcess(proc, thread)
+
+
+def _capture_log(stream, log_path: str) -> None:
+    """Drain child output while keeping the active log and one backup bounded."""
+    size = os.path.getsize(log_path) if os.path.exists(log_path) else 0
+    log = open(log_path, "ab")
+    try:
+        while True:
+            chunk = stream.read(8192)
+            if not chunk:
+                break
+            if size + len(chunk) > MAX_LOG_BYTES:
+                log.close()
+                if os.path.exists(log_path):
+                    os.replace(log_path, log_path + ".1")
+                log = open(log_path, "wb")
+                size = 0
+            if len(chunk) > MAX_LOG_BYTES:
+                chunk = chunk[-MAX_LOG_BYTES:]
+            log.write(chunk)
+            size += len(chunk)
+    finally:
+        log.close()
+        stream.close()
+
+
+class _LoggedProcess:
+    """Proxy Popen and join its log drainer after the child exits."""
+
+    def __init__(self, process, log_thread: threading.Thread):
+        self._process = process
+        self._log_thread = log_thread
+
+    def __getattr__(self, name):
+        return getattr(self._process, name)
+
+    def poll(self):
+        result = self._process.poll()
+        if result is not None:
+            self._log_thread.join()
+        return result
+
+    def wait(self, timeout=None):
+        result = self._process.wait(timeout=timeout)
+        self._log_thread.join()
+        return result
 
 
 def tail_log(log_path: str, lines: int = 50) -> str:

@@ -69,9 +69,20 @@ def test_retry_after_ms_header_wins():
     assert classify(exc).retry_after == 1.5
 
 
-def test_retry_after_http_date_is_ignored_not_crashing():
-    exc = StatusError(503, headers={"retry-after": "Wed, 21 Oct 2026 07:28:00 GMT"})
-    assert classify(exc).retry_after is None
+def test_retry_after_http_date_is_converted_to_a_delay():
+    from datetime import datetime, timedelta, timezone
+    from email.utils import format_datetime
+
+    retry_at = datetime.now(timezone.utc) + timedelta(seconds=30)
+    exc = StatusError(
+        503, headers={"retry-after": format_datetime(retry_at, usegmt=True)}
+    )
+    assert 0 <= classify(exc).retry_after <= 30
+
+
+def test_expired_retry_after_http_date_means_retry_immediately():
+    exc = StatusError(503, headers={"retry-after": "Wed, 21 Oct 2015 07:28:00 GMT"})
+    assert classify(exc).retry_after == 0.0
 
 
 def test_status_on_exception_wins_over_message_text():

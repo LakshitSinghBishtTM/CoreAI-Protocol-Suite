@@ -4,8 +4,8 @@ More built-in tools, all opt-in through config and all restrictive:
 
 - ``web_search``: queries one configured JSON search endpoint (for example a
   SearXNG instance). The endpoint is admin config, not model input.
-- ``db_query``: read-only SQL against configured SQLite files. Only a single
-  SELECT is accepted, the file is opened read-only, rows and size are capped.
+- ``db_query``: read-only SQL against configured SQLite files or Postgres DSNs.
+  Only a single SELECT is accepted, and rows and formatted output are capped.
 - ``shell_run``: runs a program from an explicit allow list. No shell is
   involved (so no pipes, globbing or substitution), the environment is empty
   apart from PATH, and the call is DESTRUCTIVE so it needs human approval.
@@ -24,6 +24,7 @@ from .registry import Permission, Tool, ToolError, ToolRegistry
 
 MAX_ROWS = 200
 MAX_CELL_CHARS = 500
+MAX_RESULT_CHARS = 20_000
 
 
 class WebSearch:
@@ -108,13 +109,7 @@ class SqliteReader:
             raise ToolError("tool_failed", f"SQL error: {exc}") from exc
         finally:
             conn.close()
-        more = len(rows) > MAX_ROWS
-        rows = rows[:MAX_ROWS]
-        out = ["\t".join(cols)]
-        out += ["\t".join(str(c)[:MAX_CELL_CHARS] for c in row) for row in rows]
-        if more:
-            out.append(f"[more than {MAX_ROWS} rows; add LIMIT]")
-        return "\n".join(out)
+        return _format_rows(cols, rows)
 
 
 def _single_select(sql: str) -> str:
@@ -128,11 +123,49 @@ def _single_select(sql: str) -> str:
 
 def _format_rows(cols: list[str], rows: list) -> str:
     more = len(rows) > MAX_ROWS
-    out = ["\t".join(cols)]
-    out += ["\t".join(str(c)[:MAX_CELL_CHARS] for c in row) for row in rows[:MAX_ROWS]]
-    if more:
-        out.append(f"[more than {MAX_ROWS} rows; add LIMIT]")
-    return "\n".join(out)
+    out: list[str] = []
+    used = 0
+    truncated = False
+    marker = "[output truncated]"
+    data_limit = MAX_RESULT_CHARS - len(marker) - 1
+
+    def append_row(values) -> bool:
+        nonlocal used, truncated
+        prefix = "\n" if out else ""
+        available = data_limit - used - len(prefix)
+        if available <= 0:
+            truncated = True
+            return False
+        parts = []
+        row_used = 0
+        for index, value in enumerate(values):
+            separator = "\t" if index else ""
+            if row_used + len(separator) >= available:
+                truncated = True
+                break
+            parts.append(separator)
+            row_used += len(separator)
+            cell = str(value)
+            cell_limit = min(MAX_CELL_CHARS, available - row_used)
+            parts.append(cell[:cell_limit])
+            row_used += min(len(cell), cell_limit)
+            if len(cell) > cell_limit:
+                truncated = True
+                break
+        out.append(prefix + "".join(parts))
+        used += len(prefix) + row_used
+        return not truncated
+
+    append_row(cols)
+    if not truncated:
+        for row in rows[:MAX_ROWS]:
+            if not append_row(row):
+                break
+    if more and not truncated:
+        append_row([f"[more than {MAX_ROWS} rows; add LIMIT]"])
+    if truncated:
+        out.append(("\n" if out else "") + marker)
+    return "".join(out)
 
 
 class PostgresReader:

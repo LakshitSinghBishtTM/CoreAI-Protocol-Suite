@@ -12,6 +12,23 @@ from tests.helpers import make_provider, make_router
 DAY = 86400
 
 
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"retention_seconds": 0},
+        {"retention_seconds": -1},
+        {"retention_seconds": 1.5},
+        {"max_rows": 0},
+        {"max_rows": -1},
+        {"max_rows": 1.5},
+        {"max_rows": True},
+    ],
+)
+def test_usage_ledger_rejects_invalid_capacity(kwargs):
+    with pytest.raises(ValueError):
+        UsageLedger(**kwargs)
+
+
 class Clock:
     def __init__(self, t=0.0):
         self.t = t
@@ -62,6 +79,17 @@ def test_retention_and_row_cap_bound_memory():
         led.record(f"s{i}", cost_usd=1)
     assert len(led._rows) <= 3
     assert all(k[0] >= c.t - 2 * 3600 for k in led._rows)
+
+
+def test_retention_prunes_late_rows_after_clock_moves_backwards():
+    c = Clock(1000 * 3600)
+    led = UsageLedger(retention_seconds=720 * 3600, clock=c)
+    led.record("current")
+    c.t = 1 * 3600
+    led.record("late")
+    c.t = 1001 * 3600
+    led.record("current")
+    assert all(hour >= 281 * 3600 for hour, *_ in led._rows)
 
 
 def test_csv_header_and_formula_injection_guard():

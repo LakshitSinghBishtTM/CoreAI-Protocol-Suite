@@ -13,6 +13,8 @@ Classification order:
 """
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from enum import Enum
 from typing import Optional
 
@@ -144,8 +146,16 @@ def _retry_after_of(exc: BaseException) -> Optional[float]:
             return max(0.0, float(ms) / 1000.0)
         seconds = headers.get("retry-after")
         if seconds is not None:
-            return max(0.0, float(seconds))  # HTTP-date form is ignored
-    except (TypeError, ValueError, AttributeError):
+            try:
+                return max(0.0, float(seconds))
+            except (TypeError, ValueError):
+                # RFC 9110 also permits an HTTP date. Treat a naive parsed
+                # date as UTC and convert it to the delay from now.
+                retry_at = parsedate_to_datetime(seconds)
+                if retry_at.tzinfo is None:
+                    retry_at = retry_at.replace(tzinfo=timezone.utc)
+                return max(0.0, (retry_at - datetime.now(timezone.utc)).total_seconds())
+    except (TypeError, ValueError, AttributeError, OverflowError):
         return None
     return None
 

@@ -74,13 +74,17 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             retry_after is 0.0 when allowed.
         """
         now = time.time()
-        # setdefault (not `self._windows[client_key]`) so this stays correct
-        # even when _windows was constructed as a plain dict rather than the
-        # defaultdict(deque) __init__ normally sets up (e.g. tests that build
-        # the middleware via __new__ and assign `_windows = {}` directly).
         cutoff = now - 60.0
         self._sweep(now, cutoff)
-        window = self._windows.setdefault(client_key, deque())
+        window = self._windows.get(client_key)
+        if window is None:
+            if len(self._windows) >= self.MAX_CLIENTS:
+                # Never grow the identity table past its bound. The periodic
+                # sweep above removes expired clients; when all entries are
+                # active, fail closed for new identities until one expires.
+                return False, 60.0
+            window = deque()
+            self._windows[client_key] = window
 
         # Evict timestamps outside the 60-second window
         while window and window[0] <= cutoff:
@@ -99,13 +103,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
     def _sweep(self, now: float, cutoff: float) -> None:
         """Drop clients with no request in the window, so keys that never
-        return don't accumulate. Runs at most once a minute unless the table
-        is oversized."""
+        return don't accumulate. Runs at most once a minute; at capacity, new
+        client identities are refused until a sweep frees a slot."""
         last = getattr(self, "_last_sweep", 0.0)
-        if (
-            now - last < self.SWEEP_INTERVAL_S
-            and len(self._windows) <= self.MAX_CLIENTS
-        ):
+        if now - last < self.SWEEP_INTERVAL_S:
             return
         self._last_sweep = now
         for key in [k for k, w in self._windows.items() if not w or w[-1] <= cutoff]:

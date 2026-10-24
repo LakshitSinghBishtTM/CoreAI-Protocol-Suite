@@ -213,7 +213,9 @@ async def resume_run(
 
 class RunWorkflow(BaseModel):
     input: str = Field(default="", max_length=50_000)
-    approved: list[str] = Field(default_factory=list, description="step ids a human approved")
+    approved: list[str] = Field(
+        default_factory=list, description="step ids a human approved"
+    )
 
 
 @router.get("/v1/workflows", summary="Configured fixed-step workflows")
@@ -225,7 +227,10 @@ async def list_workflows(
         "data": [
             {
                 "name": n,
-                "steps": [{"id": s.id, "kind": s.kind, "tool": s.tool or None} for s in w["steps"]],
+                "steps": [
+                    {"id": s.id, "kind": s.kind, "tool": s.tool or None}
+                    for s in w["steps"]
+                ],
                 "max_cost_usd": w["max_cost_usd"],
             }
             for n, w in sorted(rt.workflows.items())
@@ -277,21 +282,49 @@ async def run_workflow_endpoint(
     )  # fmt: skip
 
 
-@router.post("/v1/triggers/{name}/fire", status_code=202, summary="Signed inbound webhook trigger")
+@router.post(
+    "/v1/triggers/{name}/fire",
+    status_code=202,
+    summary="Signed inbound webhook trigger",
+)
 async def fire_trigger(name: str, request: Request, rt=Depends(get_harness)):
     """No bearer token: the HMAC signature is the credential (same scheme as
     outbound webhooks). Unknown, non-webhook and bad-signature all look alike."""
     tm = rt.triggers
-    body = await request.body()
-    if len(body) > 64_000:
-        raise HTTPException(status_code=413, detail="Body too large.")
+    content_length = request.headers.get("content-length")
     try:
-        started = tm.fire_webhook(
-            name,
-            body,
-            request.headers.get("X-CaiPS-Timestamp", ""),
-            request.headers.get("X-CaiPS-Signature", ""),
-        ) if tm else (_ for _ in ()).throw(KeyError(name))
+        if content_length is not None and int(content_length) > 64_000:
+            raise HTTPException(status_code=413, detail="Body too large.")
+    except ValueError:
+        # Let the ASGI server validate malformed framing headers.
+        pass
+    # Bound memory use while receiving an unauthenticated request. Checking
+    # len(await request.body()) only rejects after Starlette has buffered the
+    # complete body, which lets a signed-trigger endpoint be used for memory
+    # exhaustion with arbitrarily large payloads.
+    body = bytearray()
+    too_large = False
+    async for chunk in request.stream():
+        if too_large or len(body) + len(chunk) > 64_000:
+            # Drain without retaining further data so the ASGI server can
+            # finish the request cleanly before we send the rejection.
+            too_large = True
+        else:
+            body.extend(chunk)
+    if too_large:
+        raise HTTPException(status_code=413, detail="Body too large.")
+    body = bytes(body)
+    try:
+        started = (
+            tm.fire_webhook(
+                name,
+                body,
+                request.headers.get("X-CaiPS-Timestamp", ""),
+                request.headers.get("X-CaiPS-Signature", ""),
+            )
+            if tm
+            else (_ for _ in ()).throw(KeyError(name))
+        )
     except (KeyError, PermissionError):
         raise HTTPException(status_code=401, detail="Invalid trigger or signature.")
     return {"started": started}

@@ -80,17 +80,22 @@ def download(
 
 def hf_files(repo: str, client: httpx.Client | None = None) -> dict[str, dict]:
     """``{filename: {"size":..., "sha256":...}}`` for a Hugging Face repo."""
+    own = client is None
     c = client or httpx.Client(timeout=30)
-    r = c.get(f"{HF}/api/models/{repo}/tree/main")
-    r.raise_for_status()
-    return {
-        e["path"]: {
-            "size": e.get("size", 0),
-            "sha256": (e.get("lfs") or {}).get("oid", ""),
+    try:
+        r = c.get(f"{HF}/api/models/{repo}/tree/main")
+        r.raise_for_status()
+        return {
+            e["path"]: {
+                "size": e.get("size", 0),
+                "sha256": (e.get("lfs") or {}).get("oid", ""),
+            }
+            for e in r.json()
+            if e.get("type") == "file"
         }
-        for e in r.json()
-        if e.get("type") == "file"
-    }
+    finally:
+        if own:
+            c.close()
 
 
 def pull(spec: str, models_dir: Path, client: httpx.Client | None = None) -> Path:

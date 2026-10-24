@@ -17,6 +17,23 @@ def limiter(**kw):
     return ProviderLimiter("p", cfg)
 
 
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        (field, value)
+        for field in (
+            "requests_per_minute",
+            "tokens_per_minute",
+            "concurrent_requests",
+        )
+        for value in (0, -1, 1.5, True)
+    ],
+)
+def test_rate_limit_config_requires_positive_integers(field, value):
+    with pytest.raises(ValueError, match="positive integer"):
+        RateLimitConfig(**{field: value})
+
+
 # ------------------------------------------------------------------ TokenBucket
 
 

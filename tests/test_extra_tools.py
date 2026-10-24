@@ -6,7 +6,14 @@ import httpx
 import pytest
 
 from tools import ApprovalRequired, ToolError, ToolRegistry
-from tools.extra import ShellRunner, SqliteReader, WebSearch, register_extras
+from tools.extra import (
+    MAX_RESULT_CHARS,
+    ShellRunner,
+    SqliteReader,
+    WebSearch,
+    _format_rows,
+    register_extras,
+)
 
 
 def search(payload, **kw):
@@ -63,6 +70,20 @@ def test_sql_select_works_and_caps_rows(db):
     out = reader.query("main", "select a, b from t where a < 3 order by a;")
     assert out.splitlines() == ["a\tb", "0\tv0", "1\tv1", "2\tv2"]
     assert "add LIMIT" in reader.query("main", "select * from t")
+
+
+def test_sqlite_query_caps_wide_result_before_returning(db):
+    reader, _ = db
+    query = "SELECT " + ", ".join(f"'{('x' * 500)}' AS c{i}" for i in range(60))
+    out = reader.query("main", query)
+    assert len(out) <= MAX_RESULT_CHARS
+    assert out.endswith("[output truncated]")
+
+
+def test_sql_result_formatting_caps_wide_results():
+    out = _format_rows([f"column_{i}" for i in range(500)], [["x" * 500] * 500])
+    assert len(out) <= MAX_RESULT_CHARS
+    assert out.endswith("[output truncated]")
 
 
 @pytest.mark.parametrize(

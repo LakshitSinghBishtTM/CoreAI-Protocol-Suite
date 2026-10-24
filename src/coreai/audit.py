@@ -11,6 +11,7 @@ Detail values under keys that look like secrets are redacted before storage.
 from __future__ import annotations
 
 import json
+import math
 import os
 import threading
 import time
@@ -20,24 +21,58 @@ from typing import Any
 
 _SECRET_HINTS = ("key", "token", "secret", "password", "authorization", "credential")
 _MAX_VALUE_CHARS = 500
+_MAX_CONTAINER_ITEMS = 50
+_MAX_CLEAN_CHARS = 50_000
+_MAX_EVENT_BYTES = 64_000
 
 
-def _clean(value: Any, depth: int = 0) -> Any:
-    if isinstance(value, dict) and depth < 3:
-        return {
-            str(k): (
-                "[redacted]"
-                if any(h in str(k).lower() for h in _SECRET_HINTS)
-                else _clean(v, depth + 1)
-            )
-            for k, v in value.items()
-        }
-    if isinstance(value, (list, tuple)) and depth < 3:
-        return [_clean(v, depth + 1) for v in value[:50]]
-    if isinstance(value, (int, float, bool)) or value is None:
+def _clean(value: Any, depth: int = 0, budget: list[int] | None = None) -> Any:
+    if budget is None:
+        budget = [_MAX_CLEAN_CHARS]
+    if budget[0] <= 0:
+        return "[truncated]"
+    if isinstance(value, dict):
+        if depth >= 3:
+            return "[nested data truncated]"
+        out = {}
+        for index, (key, item) in enumerate(value.items()):
+            if index >= _MAX_CONTAINER_ITEMS or budget[0] <= 0:
+                out["_truncated"] = True
+                break
+            raw_key = str(key)
+            safe_key = _clip_text(raw_key, budget)
+            if any(h in raw_key.lower() for h in _SECRET_HINTS):
+                out[safe_key] = "[redacted]"
+                budget[0] = max(0, budget[0] - len("[redacted]"))
+            else:
+                out[safe_key] = _clean(item, depth + 1, budget)
+        return out
+    if isinstance(value, (list, tuple)):
+        if depth >= 3:
+            return "[nested data truncated]"
+        out = [_clean(v, depth + 1, budget) for v in value[:_MAX_CONTAINER_ITEMS]]
+        if len(value) > _MAX_CONTAINER_ITEMS and budget[0] > 0:
+            out.append("[truncated]")
+        return out
+    if isinstance(value, bool) or value is None:
         return value
+    if isinstance(value, int):
+        return value if value.bit_length() <= 1024 else "[number truncated]"
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
     text = str(value)
-    return text if len(text) <= _MAX_VALUE_CHARS else text[:_MAX_VALUE_CHARS] + "..."
+    return _clip_text(text, budget)
+
+
+def _clip_text(text: str, budget: list[int]) -> str:
+    size = min(_MAX_VALUE_CHARS, budget[0])
+    if len(text) <= size:
+        clipped = text
+    else:
+        marker = "..." if size >= 3 else ""
+        clipped = text[: size - len(marker)] + marker
+    budget[0] -= len(clipped)
+    return clipped
 
 
 class AuditLog:
@@ -69,12 +104,17 @@ class AuditLog:
             event = {
                 "id": self._seq,
                 "ts": round(self._clock(), 3),
-                "action": action,
-                "actor": actor,
-                "target": target,
-                "outcome": outcome,
+                "action": _clean(action),
+                "actor": _clean(actor),
+                "target": _clean(target),
+                "outcome": _clean(outcome),
                 "details": _clean(details or {}),
             }
+            if (
+                len(json.dumps(event, separators=(",", ":")).encode("utf-8"))
+                > _MAX_EVENT_BYTES
+            ):
+                event["details"] = {"_truncated": "event exceeded size limit"}
             self._events.append(event)
             self._append_to_file(event)
         return event

@@ -10,6 +10,7 @@ Layering: tools depend on nothing above them; the gateway and agents call in.
 
 import asyncio
 import inspect
+import math
 import time
 from collections import deque
 from dataclasses import dataclass, field
@@ -21,6 +22,7 @@ import jsonschema
 from coreai import tracing
 
 MAX_OUTPUT_CHARS = 20_000
+MAX_RATE_LIMIT_KEYS = 10_000
 
 
 class Permission(IntEnum):
@@ -54,6 +56,28 @@ class Tool:
     timeout_s: float = 30.0
     permission: Permission = Permission.READ_ONLY
     rate_per_minute: int = 0  # per caller; 0 = unlimited
+
+    def __post_init__(self) -> None:
+        valid_timeout = (
+            isinstance(self.timeout_s, (int, float))
+            and not isinstance(self.timeout_s, bool)
+            and self.timeout_s > 0
+        )
+        if valid_timeout:
+            try:
+                valid_timeout = math.isfinite(self.timeout_s)
+            except OverflowError:
+                valid_timeout = False
+        if not valid_timeout:
+            raise ValueError("tool timeout_s must be a finite positive number")
+        if (
+            not isinstance(self.rate_per_minute, int)
+            or isinstance(self.rate_per_minute, bool)
+            or self.rate_per_minute < 0
+        ):
+            raise ValueError("tool rate_per_minute must be a non-negative integer")
+        if not isinstance(self.permission, Permission):
+            raise ValueError("tool permission must be a Permission value")
 
     def openai_spec(self) -> dict:
         """The tool in the shape models and the gateway already use."""
@@ -218,7 +242,18 @@ class ToolRegistry:
             return
         now = self.clock()
         key = (caller, tool.name)
-        hits = self._hits.setdefault(key, deque())
+        hits = self._hits.get(key)
+        if hits is None:
+            if len(self._hits) >= MAX_RATE_LIMIT_KEYS:
+                for old_key, old_hits in list(self._hits.items()):
+                    if not old_hits or now - old_hits[-1] >= 60:
+                        del self._hits[old_key]
+                if len(self._hits) >= MAX_RATE_LIMIT_KEYS:
+                    raise ToolError(
+                        "rate_limit_capacity",
+                        "Rate-limit tracking is at capacity; try again shortly.",
+                    )
+            hits = self._hits.setdefault(key, deque())
         while hits and now - hits[0] >= 60:
             hits.popleft()
         if len(hits) >= tool.rate_per_minute:
@@ -227,9 +262,6 @@ class ToolRegistry:
                 f"Tool '{tool.name}' is limited to {tool.rate_per_minute} calls/minute.",
             )
         hits.append(now)
-        if len(self._hits) > 10_000:  # drop idle keys instead of growing forever
-            for k in [k for k, d in self._hits.items() if not d or now - d[-1] >= 60]:
-                del self._hits[k]
 
     def _audit(self, caller, name, arguments, outcome, start) -> None:
         if self.on_call is None:

@@ -65,7 +65,7 @@ def fetcher(handler, **kw):
     return HttpFetcher(
         ["example.com"],
         transport=httpx.MockTransport(handler),
-        resolver=lambda h: True,
+        resolver=lambda h: ["93.184.216.34"],
         **kw,
     )
 
@@ -80,7 +80,7 @@ async def test_fetch_allow_list_and_scheme():
 
 async def test_fetch_blocks_private_hosts_and_redirects():
     f = HttpFetcher(["example.com"], transport=httpx.MockTransport(lambda r: httpx.Response(200)),
-                    resolver=lambda h: False)  # fmt: skip
+                    resolver=lambda h: ["127.0.0.1"])  # fmt: skip
     with pytest.raises(ToolError):
         await f.fetch("https://example.com/")
     g = fetcher(
@@ -93,6 +93,26 @@ async def test_fetch_blocks_private_hosts_and_redirects():
 async def test_fetch_caps_body():
     f = fetcher(lambda r: httpx.Response(200, text="x" * 500), max_bytes=100)
     assert len(await f.fetch("https://example.com/")) == 100
+
+
+async def test_pinned_network_backend_uses_only_resolved_addresses():
+    from tools.builtin import _PinnedNetworkBackend
+
+    class RecordingBackend:
+        def __init__(self):
+            self.hosts = []
+
+        async def connect_tcp(self, host, port, **kwargs):
+            self.hosts.append((host, port))
+            return "stream"
+
+    backend = _PinnedNetworkBackend({"example.com": ["93.184.216.34"]})
+    recording = RecordingBackend()
+    backend._backend = recording
+    assert await backend.connect_tcp("example.com", 443) == "stream"
+    assert recording.hosts == [("93.184.216.34", 443)]
+    with pytest.raises(OSError, match="not resolved"):
+        await backend.connect_tcp("other.example", 443)
 
 
 async def test_registered_only_when_configured(tmp_path):

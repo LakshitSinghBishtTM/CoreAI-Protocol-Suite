@@ -3,7 +3,8 @@ import hashlib
 import httpx
 import pytest
 
-from localrt.download import DownloadError, download, pull, resolve
+from localrt import download as download_module
+from localrt.download import DownloadError, download, hf_files, pull, resolve
 
 DATA = b"x" * 5000
 SHA = hashlib.sha256(DATA).hexdigest()
@@ -55,3 +56,28 @@ def test_bad_hash_deleted(tmp_path, client):
     with pytest.raises(DownloadError, match="SHA-256"):
         download("https://h/f", tmp_path / "m.gguf", sha256="0" * 64, client=client)
     assert not list(tmp_path.iterdir())
+
+
+def test_hf_files_closes_only_clients_it_creates(monkeypatch):
+    class FakeClient:
+        def __init__(self, **kwargs):
+            self.closed = False
+
+        def get(self, url):
+            return httpx.Response(
+                200,
+                json=[{"type": "file", "path": "model.gguf", "size": 1}],
+                request=httpx.Request("GET", url),
+            )
+
+        def close(self):
+            self.closed = True
+
+    owned = FakeClient()
+    monkeypatch.setattr(download_module.httpx, "Client", lambda **kwargs: owned)
+    assert "model.gguf" in hf_files("org/repo")
+    assert owned.closed
+
+    injected = FakeClient()
+    assert "model.gguf" in hf_files("org/repo", injected)
+    assert not injected.closed

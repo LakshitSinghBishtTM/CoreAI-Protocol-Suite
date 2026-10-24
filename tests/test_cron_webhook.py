@@ -17,7 +17,9 @@ def ts(y, mo, d, h=0, mi=0):
 
 
 def test_cron_next_matches():
-    assert Cron("*/15 * * * *").next_after(ts(2026, 1, 1, 10, 7)) == ts(2026, 1, 1, 10, 15)
+    assert Cron("*/15 * * * *").next_after(ts(2026, 1, 1, 10, 7)) == ts(
+        2026, 1, 1, 10, 15
+    )
     assert Cron("0 9 * * *").next_after(ts(2026, 1, 1, 9, 0)) == ts(2026, 1, 2, 9, 0)
     # 2026-01-05 is a Monday; "0 8 * * 1-5" skips the weekend
     assert Cron("0 8 * * 1-5").next_after(ts(2026, 1, 2, 9)) == ts(2026, 1, 5, 8)
@@ -26,7 +28,10 @@ def test_cron_next_matches():
     assert Cron("0 0 * * 7").next_after(ts(2026, 1, 1)) == ts(2026, 1, 4)  # Sunday
 
 
-@pytest.mark.parametrize("bad", ["* * * *", "60 * * * *", "*/0 * * * *", "a * * * *", "* * 32 * *", "5-2 * * * *"])
+@pytest.mark.parametrize(
+    "bad",
+    ["* * * *", "60 * * * *", "*/0 * * * *", "a * * * *", "* * 32 * *", "5-2 * * * *"],
+)
 def test_bad_cron_rejected(bad):
     with pytest.raises(ValueError):
         Cron(bad)
@@ -37,11 +42,17 @@ async def route(req):
 
 
 def sign(secret, t, body):
-    return hmac.new(secret.encode(), f"{t}.".encode() + body, hashlib.sha256).hexdigest()
+    return hmac.new(
+        secret.encode(), f"{t}.".encode() + body, hashlib.sha256
+    ).hexdigest()
 
 
 def make(cfg_triggers, monkeypatch=None):
-    cfg = {"db": ":memory:", "agents": {"rep": {"system_prompt": "s"}}, "triggers": cfg_triggers}
+    cfg = {
+        "db": ":memory:",
+        "agents": {"rep": {"system_prompt": "s"}},
+        "triggers": cfg_triggers,
+    }
     return build_runtime(cfg, route, ToolRegistry())
 
 
@@ -60,7 +71,15 @@ async def test_cron_trigger_fires_on_schedule():
 
 async def test_webhook_signature_window_and_fields(monkeypatch):
     monkeypatch.setenv("HOOK_SECRET", "s3")
-    rt = make({"h": {"webhook_secret_env": "HOOK_SECRET", "agent": "rep", "task": "alert $level"}})
+    rt = make(
+        {
+            "h": {
+                "webhook_secret_env": "HOOK_SECRET",
+                "agent": "rep",
+                "task": "alert $level",
+            }
+        }
+    )
     tm = rt.triggers
     body = json.dumps({"level": "high"}).encode()
     import time
@@ -68,7 +87,11 @@ async def test_webhook_signature_window_and_fields(monkeypatch):
     now = str(int(time.time()))
     assert tm.fire_webhook("h", body, now, sign("s3", now, body)) is True
     await tm.triggers["h"]._task
-    user = [m for m in rt.runner.store.messages(tm.triggers["h"].last_run) if m.role == "user"][0]
+    user = [
+        m
+        for m in rt.runner.store.messages(tm.triggers["h"].last_run)
+        if m.role == "user"
+    ][0]
     assert user.content == "alert high"
     with pytest.raises(PermissionError):
         tm.fire_webhook("h", body, now, "0" * 64)
@@ -108,3 +131,39 @@ def test_fire_endpoint_is_401_for_everything_wrong(monkeypatch):
         r = c.post("/v1/triggers/h/fire", content=b"{}",
                    headers={"X-CaiPS-Timestamp": t, "X-CaiPS-Signature": sign("s3", t, b"{}")})  # fmt: skip
         assert r.status_code == 202 and r.json() == {"started": True}
+
+
+@pytest.mark.asyncio
+async def test_fire_endpoint_rejects_oversized_body_before_auth():
+    from types import SimpleNamespace
+
+    from fastapi import HTTPException
+    from starlette.requests import Request
+
+    from api.runs_api import fire_trigger
+
+    body = b"x" * 64_001
+    messages = iter([{"type": "http.request", "body": body, "more_body": False}])
+
+    async def receive():
+        return next(messages, {"type": "http.disconnect"})
+
+    request = Request(
+        {
+            "type": "http",
+            "asgi": {"version": "3.0", "spec_version": "2.3"},
+            "http_version": "1.1",
+            "method": "POST",
+            "scheme": "http",
+            "path": "/v1/triggers/h/fire",
+            "raw_path": b"/v1/triggers/h/fire",
+            "query_string": b"",
+            "headers": [],
+            "client": ("test", 1),
+            "server": ("test", 80),
+        },
+        receive,
+    )
+    with pytest.raises(HTTPException) as exc:
+        await fire_trigger("h", request, SimpleNamespace(triggers=None))
+    assert exc.value.status_code == 413

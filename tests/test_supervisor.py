@@ -115,6 +115,35 @@ def test_real_log_capture_and_tail(tmp_path):
     assert tail_log(str(tmp_path / "nope.log")) == ""
 
 
+def test_child_logs_rotate_while_the_process_is_running(tmp_path):
+    import sys
+    import time
+
+    from localrt.supervisor import MAX_LOG_BYTES, Supervisor
+
+    sup = Supervisor(log_dir=str(tmp_path))
+    proc = sup.spawn(
+        "large",
+        [
+            sys.executable,
+            "-c",
+            f"import sys, time; sys.stdout.buffer.write(b'x' * {MAX_LOG_BYTES * 3}); sys.stdout.flush(); time.sleep(0.5)",
+        ],
+    )
+    current = tmp_path / "large.log"
+    previous = tmp_path / "large.log.1"
+    deadline = time.monotonic() + 5
+    while not previous.exists() and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert proc.poll() is None
+    assert current.stat().st_size <= MAX_LOG_BYTES
+    assert previous.stat().st_size <= MAX_LOG_BYTES
+    proc.wait(timeout=10)
+    assert current.stat().st_size <= MAX_LOG_BYTES
+    assert previous.stat().st_size <= MAX_LOG_BYTES
+    assert current.stat().st_size + previous.stat().st_size <= MAX_LOG_BYTES * 2
+
+
 def test_give_up_error_includes_log_tail(tmp_path):
     from localrt.supervisor import Supervisor
 

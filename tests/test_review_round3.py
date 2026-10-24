@@ -132,6 +132,29 @@ def test_rate_limit_key_uses_full_api_key_and_idle_clients_are_swept():
     assert "stale" not in mw._windows and "stale2" not in mw._windows
 
 
+def test_rate_limit_client_table_is_bounded_for_active_identities(monkeypatch):
+    import api.middleware as middleware
+
+    monkeypatch.setattr(middleware.RateLimitMiddleware, "MAX_CLIENTS", 2)
+    now = [100.0]
+    monkeypatch.setattr(middleware.time, "time", lambda: now[0])
+    mw = RateLimitMiddleware.__new__(RateLimitMiddleware)
+    mw.rpm = 2
+    mw._windows = {}
+
+    assert mw._check_rate_limit("client-a")[0]
+    assert mw._check_rate_limit("client-b")[0]
+    allowed, retry_after = mw._check_rate_limit("client-c")
+    assert not allowed and retry_after == 60.0
+    assert set(mw._windows) == {"client-a", "client-b"}
+
+    assert mw._check_rate_limit("client-a")[0]
+    assert not mw._check_rate_limit("client-a")[0]  # active identity kept its quota
+    now[0] = 161.0
+    assert mw._check_rate_limit("client-c")[0]  # expired entries free the slots
+    assert set(mw._windows) == {"client-c"}
+
+
 def test_usage_report_rejects_unaligned_bounds():
     led = UsageLedger(clock=lambda: 7200.0)
     led.record("s")

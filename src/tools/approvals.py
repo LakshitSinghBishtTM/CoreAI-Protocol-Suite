@@ -6,7 +6,9 @@ In-memory, bounded and expiring, so it cannot grow without limit.
 """
 
 import json
+import math
 import time
+from copy import deepcopy
 import uuid
 from dataclasses import dataclass, field
 from typing import Callable, Optional
@@ -27,7 +29,7 @@ class Approval:
     def public(self) -> dict:
         return {
             "id": self.id, "caller": self.caller, "tool": self.tool,
-            "arguments": self.arguments, "status": self.status,
+            "arguments": deepcopy(self.arguments), "status": self.status,
             "decided_by": self.decided_by,
         }  # fmt: skip
 
@@ -45,9 +47,29 @@ class ApprovalStore:
     on_request: Optional[Callable[[Approval], None]] = None
     _items: dict = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        valid_ttl = (
+            not isinstance(self.ttl_s, bool)
+            and isinstance(self.ttl_s, (int, float))
+            and self.ttl_s > 0
+        )
+        if valid_ttl:
+            try:
+                valid_ttl = math.isfinite(self.ttl_s)
+            except OverflowError:
+                valid_ttl = False
+        if not valid_ttl:
+            raise ValueError("ttl_s must be a finite positive number")
+        if (
+            isinstance(self.max_items, bool)
+            or not isinstance(self.max_items, int)
+            or self.max_items < 1
+        ):
+            raise ValueError("max_items must be a positive integer")
+
     def _sweep(self) -> None:
         now = self.clock()
-        for k in [k for k, a in self._items.items() if now - a.created > self.ttl_s]:
+        for k in [k for k, a in self._items.items() if now - a.created >= self.ttl_s]:
             del self._items[k]
 
     def request(self, caller: str, tool: str, arguments: dict) -> Approval:
@@ -59,17 +81,25 @@ class ApprovalStore:
                 a.status in (PENDING, APPROVED)
                 and _fingerprint(a.caller, a.tool, a.arguments) == fp
             ):
-                return a
+                return deepcopy(a)
+        if len(self._items) >= self.max_items:
+            for approval_id, old in list(self._items.items()):
+                if old.status in (DENIED, USED):
+                    del self._items[approval_id]
+                    if len(self._items) < self.max_items:
+                        break
         if len(self._items) >= self.max_items:
             raise RuntimeError("too many pending approvals")
-        a = Approval(uuid.uuid4().hex[:16], caller, tool, dict(arguments), self.clock())
+        a = Approval(
+            uuid.uuid4().hex[:16], caller, tool, deepcopy(arguments), self.clock()
+        )
         self._items[a.id] = a
         if self.on_request:
             try:
-                self.on_request(a)
+                self.on_request(deepcopy(a))
             except Exception:
                 pass
-        return a
+        return deepcopy(a)
 
     def get(self, approval_id: str) -> Optional[Approval]:
         self._sweep()

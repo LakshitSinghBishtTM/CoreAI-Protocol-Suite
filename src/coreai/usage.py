@@ -53,6 +53,14 @@ class UsageLedger:
         max_rows: int = 50_000,
         clock: Callable[[], float] = time.time,
     ):
+        if (
+            isinstance(retention_seconds, bool)
+            or not isinstance(retention_seconds, int)
+            or retention_seconds < 1
+        ):
+            raise ValueError("retention_seconds must be a positive integer")
+        if isinstance(max_rows, bool) or not isinstance(max_rows, int) or max_rows < 1:
+            raise ValueError("max_rows must be a positive integer")
         self.retention_seconds = retention_seconds
         self.max_rows = max_rows
         self._clock = clock
@@ -83,7 +91,18 @@ class UsageLedger:
         key = (hour, subject, provider or "", model or "")
         row = self._rows.get(key)
         if row is None:
-            row = self._rows[key] = _Row()
+            row = _Row()
+            # Retention pruning removes from the oldest end. Wall-clock time
+            # can move backwards, so restore hour ordering when a new bucket
+            # arrives earlier than the current newest bucket.
+            if self._rows and hour < next(reversed(self._rows))[0]:
+                self._rows = OrderedDict(
+                    sorted(
+                        [*self._rows.items(), (key, row)], key=lambda item: item[0][0]
+                    )
+                )
+            else:
+                self._rows[key] = row
         row.requests += requests
         row.input_tokens += max(0, input_tokens or 0)
         row.output_tokens += max(0, output_tokens or 0)

@@ -105,6 +105,27 @@ def test_registration_rules():
     assert r.specs(["add"])[0]["function"]["name"] == "add"
 
 
+@pytest.mark.parametrize(
+    "timeout",
+    [0, -1, float("inf"), float("nan"), True, 10**10000],
+    ids=["zero", "negative", "infinite", "nan", "bool", "oversized-int"],
+)
+def test_tool_rejects_invalid_timeouts(timeout):
+    with pytest.raises(ValueError, match="timeout_s"):
+        Tool("invalid", "x", ADD, lambda **kwargs: None, timeout_s=timeout)
+
+
+@pytest.mark.parametrize("rate", [-1, 1.5, True])
+def test_tool_rejects_invalid_rate_limits(rate):
+    with pytest.raises(ValueError, match="rate_per_minute"):
+        Tool("invalid", "x", ADD, lambda **kwargs: None, rate_per_minute=rate)
+
+
+def test_tool_requires_permission_enum():
+    with pytest.raises(ValueError, match="permission"):
+        Tool("invalid", "x", ADD, lambda **kwargs: None, permission=99)
+
+
 async def test_per_tool_rate_limit_is_per_caller_and_slides():
     clock = {"t": 0.0}
     r = ToolRegistry(clock=lambda: clock["t"])
@@ -118,3 +139,27 @@ async def test_per_tool_rate_limit_is_per_caller_and_slides():
     await r.call("add", ok, allowed=["*"], caller="k2")  # other caller unaffected
     clock["t"] = 61.0
     await r.call("add", ok, allowed=["*"], caller="k1")  # window slid
+
+
+async def test_rate_limit_tracking_stays_bounded_without_evicting_active_callers(
+    monkeypatch,
+):
+    monkeypatch.setattr("tools.registry.MAX_RATE_LIMIT_KEYS", 1)
+    clock = {"t": 0.0}
+    r = ToolRegistry(clock=lambda: clock["t"])
+    r.register(Tool("add", "a", ADD, lambda a, b: a + b, rate_per_minute=2))
+    args = {"a": 1, "b": 1}
+    await r.call("add", args, allowed=["*"], caller="k1")
+
+    with pytest.raises(ToolError) as e:
+        await r.call("add", args, allowed=["*"], caller="k2")
+    assert e.value.code == "rate_limit_capacity"
+    await r.call("add", args, allowed=["*"], caller="k1")
+    with pytest.raises(ToolError) as e:
+        await r.call("add", args, allowed=["*"], caller="k1")
+    assert e.value.code == "rate_limited"
+    assert len(r._hits) == 1
+
+    clock["t"] = 61.0
+    await r.call("add", args, allowed=["*"], caller="k2")
+    assert list(r._hits) == [("k2", "add")]

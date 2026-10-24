@@ -110,9 +110,13 @@ async def serve_stdio(server: McpServer, caller: str = "stdio") -> None:
     import asyncio
 
     loop = asyncio.get_running_loop()
+    reader = asyncio.StreamReader()
+    protocol = asyncio.StreamReaderProtocol(reader)
+    transport, _ = await loop.connect_read_pipe(lambda: protocol, sys.stdin)
     while True:
-        line = await loop.run_in_executor(None, sys.stdin.readline)
+        line = await reader.readline()
         if not line:
+            transport.close()
             return
         line = line.strip()
         if not line:

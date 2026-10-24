@@ -54,6 +54,23 @@ def test_secrets_and_long_values_are_redacted_or_cut():
     assert "sk-123" not in json.dumps(log.events())
 
 
+def test_oversized_event_fields_and_details_are_bounded():
+    log = AuditLog()
+    details = {f"field-{i}": "\x00" * 500 for i in range(50)}
+    event = log.record(
+        "action" * 1000,
+        "actor" * 1000,
+        target="target" * 1000,
+        outcome="outcome" * 1000,
+        details=details,
+    )
+    assert len(event["action"]) <= 500
+    assert len(event["actor"]) <= 500
+    assert len(event["target"]) <= 500
+    assert event["details"] == {"_truncated": "event exceeded size limit"}
+    assert len(json.dumps(event).encode("utf-8")) <= 64_000
+
+
 def test_file_output_and_rotation(tmp_path):
     path = tmp_path / "audit.jsonl"
     log = AuditLog(path=str(path), max_bytes=300)

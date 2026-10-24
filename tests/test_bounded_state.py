@@ -1,7 +1,5 @@
 """Long-running servers must not grow without bound."""
 
-from datetime import datetime, timedelta
-
 import pytest
 
 from coreai.cache import MemoryCache, ResponseCache
@@ -31,10 +29,11 @@ async def test_memory_cache_evicts_least_recently_used():
 
 @pytest.mark.asyncio
 async def test_expired_entries_are_dropped_before_live_ones_are_evicted():
-    cache = MemoryCache(max_entries=3)
+    now = {"value": 10.0}
+    cache = MemoryCache(max_entries=3, clock=lambda: now["value"])
     await cache.set("live1", {"k": 1})
     await cache.set("live2", {"k": 2})
-    cache.store["stale"] = ({"k": 0}, datetime.now() - timedelta(seconds=5))
+    cache.store["stale"] = ({"k": 0}, 9.0)
     cache.store.move_to_end("stale", last=False)  # make it the oldest
     await cache.set("new", {"k": 3})  # over limit: purge expired first
     assert "stale" not in cache.store
@@ -44,9 +43,9 @@ async def test_expired_entries_are_dropped_before_live_ones_are_evicted():
 
 @pytest.mark.asyncio
 async def test_purge_expired_reports_how_many():
-    cache = MemoryCache()
+    cache = MemoryCache(clock=lambda: 10.0)
     for i in range(5):
-        cache.store[f"s{i}"] = ({}, datetime.now() - timedelta(seconds=1))
+        cache.store[f"s{i}"] = ({}, 9.0)
     await cache.set("live", {})
     assert cache.purge_expired() == 5 and list(cache.store) == ["live"]
 
