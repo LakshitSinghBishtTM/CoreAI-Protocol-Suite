@@ -185,7 +185,7 @@ Rebuild `agents/` as a small, inspectable harness on top of the gateway and tool
 
 **Control**
 
-- Human-in-the-loop approvals for destructive tools and for steps the agent flags as uncertain. *Status: done for destructive tools and per-agent `approval_tools`, answered through the API by an admin only; agent-flagged uncertainty still open.*
+- Human-in-the-loop approvals for destructive tools and for steps the agent flags as uncertain. *Status: done for destructive tools and per-agent `approval_tools`, answered through the API by an admin only; agent-flagged uncertainty done (`AgentDef.ask_when_uncertain` offers a `request_human_review` tool that pauses the run for an approval decision).*
 - Loop and stall detection (same tool call repeated, no progress) that stops the run with a clear reason. *Status: done (repeated identical tool calls).*
 - Tighter default limits and shorter plans when the backing model is a small local model. *Status: done (`AgentDef.local`).*
 - Kill switch: stop all runs for a key, team or the whole instance. This replaces `emergency_shutdown.py`. *Status: done (`POST /v1/runs/kill`, admin scope, per owner or whole instance); `emergency_shutdown.py` kept on purpose: it is the tested drain-and-exit kill switch (`tests/test_kill_switch.py`), which satisfies the Phase 2 "tested kill switch or delete" item; the run kill switch covers agents only.*

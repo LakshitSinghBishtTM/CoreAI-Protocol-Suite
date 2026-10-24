@@ -240,3 +240,29 @@ async def test_agent_memory_off_by_default():
     runner.memory = mem
     await runner.run("a", "color", owner="alice")
     assert route.requests[0].system_prompt == "sys"
+
+
+@pytest.mark.parametrize("approve,expect", [(True, "approved"), (False, "declined")])
+async def test_agent_flagged_uncertainty_pauses_for_human(approve, expect):
+    route = Script(
+        resp(calls=[call("request_human_review", question="delete?")]), resp("ok")
+    )
+    r, store = make(route, ask_when_uncertain=True)
+    out = await r.run("a", "go")
+    assert out["status"] == "waiting_approval"
+    assert any(
+        t["function"]["name"] == "request_human_review"
+        for t in route.requests[0].tools
+    )
+    out = await r.resume(out["id"], approve=approve)
+    assert out["status"] == "completed"
+    tool_msg = [m for m in store.messages(out["id"]) if m.role == "tool"][0]
+    assert expect in tool_msg.content
+
+
+async def test_review_tool_not_offered_by_default():
+    route = Script(resp("done"))
+    r, _ = make(route)
+    await r.run("a", "go")
+    names = [t["function"]["name"] for t in route.requests[0].tools]
+    assert "request_human_review" not in names

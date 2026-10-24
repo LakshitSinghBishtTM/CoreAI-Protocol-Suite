@@ -27,6 +27,7 @@ class AgentDef:
     approval_tools: list[str] = field(default_factory=list)  # always need a human
     local: bool = False  # backing model is a small local model
     summarize: bool = False  # use the model to summarize dropped context
+    ask_when_uncertain: bool = False  # offer request_human_review to the model
     memory_ns: Optional[str] = None  # recall this memory namespace into the prompt
     memory_recall: int = 5  # max memories recalled per model call
 

@@ -24,6 +24,27 @@ from .config import AgentDef
 from .store import RunStore
 
 
+REVIEW_TOOL = "request_human_review"
+REVIEW_SPEC = {
+    "type": "function",
+    "function": {
+        "name": REVIEW_TOOL,
+        "description": (
+            "Pause and ask a human before continuing. Use when you are unsure "
+            "or an action is risky. Give your question and what you would do."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "question": {"type": "string"},
+                "proposed_action": {"type": "string"},
+            },
+            "required": ["question"],
+        },
+    },
+}
+
+
 def _finished(run: dict) -> bool:
     """Completed, cancelled or limit-stopped runs are final; an error stop can be resumed."""
     return run["status"] in ("completed", "cancelled") or (
@@ -216,7 +237,10 @@ class HarnessRunner:
         req = CompletionRequest(
             messages=list(ctx), model=agent.model, max_tokens=agent.max_tokens,
             temperature=agent.temperature, system_prompt=system,
-            tools=self.registry.specs(agent.allowed_tools) or None, metadata=meta,
+            tools=(
+                self.registry.specs(agent.allowed_tools)
+                + ([REVIEW_SPEC] if agent.ask_when_uncertain else [])
+            ) or None, metadata=meta,
         )  # fmt: skip
         run = self.store.get(rid)
         timeout = max(0.1, run["deadline"] - time.time()) if run["deadline"] else None
@@ -238,6 +262,21 @@ class HarnessRunner:
         for i, call in enumerate(calls):
             name = call.get("name", "")
             first = decision is not None and i == 0
+            if name == REVIEW_TOOL and agent.ask_when_uncertain:
+                if not first:
+                    return self._wait(rid, msgs, state, calls[i:])
+                self.store.event(rid, "approval", tool=name, approved=decision)
+                msgs.append(
+                    Message(
+                        "tool",
+                        "Human reviewer approved: proceed."
+                        if decision
+                        else "Human reviewer declined; choose another approach.",
+                        tool_call_id=call.get("id", ""),
+                    )
+                )
+                decision = None
+                continue
             forced = name in agent.approval_tools
             if forced and not first:
                 return self._wait(rid, msgs, state, calls[i:])
