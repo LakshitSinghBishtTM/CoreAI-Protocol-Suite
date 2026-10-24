@@ -1,6 +1,7 @@
 """The Textual application: a section sidebar, one pane per API area, and entry points.
 
-Run ``caips-tui`` (or ``caips tui``). Settings: ``CAIPS_URL``; the token is entered in the UI (Ctrl+K) or taken from ``CAIPS_API_KEY``.
+Run ``caips-tui`` (or ``caips tui``). Settings: ``CAIPS_URL``; the token is entered
+in the UI (Ctrl+K) or taken from ``CAIPS_API_KEY``.
 """
 
 from __future__ import annotations

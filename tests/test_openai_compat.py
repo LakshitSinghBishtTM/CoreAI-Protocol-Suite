@@ -7,7 +7,13 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from tests.helpers import StatusError, as_httpx, make_provider, make_router, make_stream_provider
+from tests.helpers import (
+    StatusError,
+    as_httpx,
+    make_provider,
+    make_router,
+    make_stream_provider,
+)
 
 BODY = {"model": "a-model", "messages": [{"role": "user", "content": "hi"}]}
 

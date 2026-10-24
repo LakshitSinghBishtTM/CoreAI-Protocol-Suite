@@ -142,9 +142,10 @@ def api(monkeypatch):
     monkeypatch.setitem(server.app_state, "router", Router({}))
     app = FastAPI()
     app.include_router(router)
-    h = lambda s: {
-        "Authorization": "Bearer " + create_access_token("u", s)
-    }  # noqa: E731
+
+    def h(s):
+        return {"Authorization": "Bearer " + create_access_token("u", s)}
+
     return TestClient(app), h, server.app_state["router"]
 
 

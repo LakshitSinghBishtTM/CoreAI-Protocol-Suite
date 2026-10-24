@@ -100,7 +100,10 @@ def format_event(event: dict) -> tuple[str, str]:
             f"Run {event.get('run_id')} {event.get('status')} ({event.get('reason')})"
         )
     elif t.startswith("budget."):
-        subject = f"Budget {t.split('.')[1]}: {event.get('subject')} at ${event.get('used_usd')} of ${event.get('cap_usd')}"
+        subject = (
+            f"Budget {t.split('.')[1]}: {event.get('subject')} at "
+            f"${event.get('used_usd')} of ${event.get('cap_usd')}"
+        )
     elif t.startswith("provider."):
         subject = f"Provider {event.get('provider')}: {t.split('.')[1]}"
     else:
