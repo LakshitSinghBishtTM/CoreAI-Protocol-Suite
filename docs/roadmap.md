@@ -197,7 +197,7 @@ Rebuild `agents/` as a small, inspectable harness on top of the gateway and tool
 
 **Later patterns, only after the loop is solid**
 
-- Sub-agents that run as tool calls with their own budgets.
+- Sub-agents that run as tool calls with their own budgets. *Status: done (`harness.subagent_tool`: child is a normal run with its own limits and trace, nesting capped at 2, child approvals are left to humans).*
 - Scheduled and event-triggered runs (cron, webhooks).
 - Reusable workflows with fixed steps for tasks that shouldn't be left to a model's judgment.
 

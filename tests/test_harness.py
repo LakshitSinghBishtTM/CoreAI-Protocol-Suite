@@ -284,3 +284,39 @@ async def test_replay_reasks_model_without_running_tools():
     assert diff["turns"][0]["same_tools"] is False
     assert diff["turns"][0]["replayed_calls"] == []
     assert not any(m.role == "tool" for m in r.store.messages(out["id"]))
+
+
+async def test_subagent_runs_as_tool_with_own_trace_and_limits():
+    from harness import subagent_tool
+
+    child = AgentDef(name="child", system_prompt="c", max_steps=3)
+    parent = AgentDef(name="a", system_prompt="p", allowed_tools=["agent_child"])
+    route = Script(
+        resp(calls=[call("agent_child", task="sub task")]),  # parent
+        resp("child answer"),  # child
+        resp("parent done"),  # parent after tool result
+    )
+    r, store = make(route)
+    r.agents.update({"a": parent, "child": child})
+    r.registry.register(subagent_tool(r, "child"))
+    out = await r.run("a", "go")
+    assert out["status"] == "completed" and out["result"] == "parent done"
+    tool_msg = [m for m in store.messages(out["id"]) if m.role == "tool"][0]
+    assert "child answer" in tool_msg.content  # wrapped as untrusted tool output
+
+
+async def test_subagent_nesting_is_capped():
+    from harness import subagent_tool
+    from harness.subagent import MAX_DEPTH, _depth
+
+    child = AgentDef(name="child", system_prompt="c")
+    r, _ = make(Script(resp("x")))
+    r.agents["child"] = child
+    tool = subagent_tool(r, "child")
+    token = _depth.set(MAX_DEPTH)
+    try:
+        assert "nesting limit" in await tool.handler("t")
+    finally:
+        _depth.reset(token)
+    with pytest.raises(KeyError):
+        subagent_tool(r, "missing")
