@@ -336,12 +336,12 @@ def _request_calls(raw: Any, index: int) -> list[dict]:
     return calls
 
 
-def _filter_input(preq) -> None:
+def _filter_input(preq, subject=None) -> None:
     """Apply the input guardrail policy in place; reject on a block."""
     from guardrails import config as gcfg
     from guardrails.filters import apply
 
-    policy = gcfg.load()[0]
+    policy = gcfg.for_subject(subject)[0]
     if policy is None:
         return
     for m in preq.messages:
@@ -363,12 +363,12 @@ def _filter_input(preq) -> None:
         preq.system_prompt = r.text
 
 
-def _filter_output(resp) -> None:
+def _filter_output(resp, subject=None) -> None:
     """Apply the output guardrail policy in place; reject on a block."""
     from guardrails import config as gcfg
     from guardrails.filters import apply
 
-    policy = gcfg.load()[1]
+    policy = gcfg.for_subject(subject)[1]
     if policy is None or not isinstance(resp.content, str) or not resp.content:
         return
     r = apply(resp.content, policy)
@@ -570,7 +570,14 @@ async def chat_completions(
 
     try:
         preq = _convert(body)
-        _filter_input(preq)
+        from guardrails import config as _gcfg
+
+        if not _gcfg.model_allowed(ctx.subject, body.model):
+            raise CompatError(
+                403, f"Model {body.model!r} is not allowed for this key",
+                "invalid_request_error", "model_not_allowed", "model",
+            )  # fmt: skip
+        _filter_input(preq, ctx.subject)
         routes._budget_check(ctx, body.model)
         _router = get_router()
         routes._bind_model_gate(_router)
@@ -597,7 +604,7 @@ async def chat_completions(
             except Exception as exc:
                 logger.error("Chat completion error for %s: %s", ctx.subject, exc)
                 raise routes._http_error(exc)
-            _filter_output(resp)
+            _filter_output(resp, ctx.subject)
             tokens = (resp.input_tokens or 0) + (resp.output_tokens or 0)
             routes._budget_record(ctx, resp.cost_usd, tokens, model=resp.model)
             routes._ledger_record(

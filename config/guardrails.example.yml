@@ -9,3 +9,10 @@ input:
 output:
   block_secrets: true
   redact_pii: true
+
+# Per-key overrides. A section here replaces the global one for that subject;
+# allowed_models is a list of globs (403 when the requested model matches none).
+subjects: {}
+#  alice:
+#    allowed_models: ["gpt-4o-mini", "local-*"]
+#    input: {block_secrets: true, redact_pii: false, blocked_topics: ["re:internal-only"]}
