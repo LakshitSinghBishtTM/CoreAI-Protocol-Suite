@@ -572,7 +572,8 @@ async def chat_completions(
         preq = _convert(body)
         from guardrails import config as _gcfg
 
-        if not _gcfg.model_allowed(ctx.subject, body.model):
+        requested_model = body.model or preq.model or ""
+        if not _gcfg.model_allowed(ctx.subject, requested_model):
             raise CompatError(
                 403, f"Model {body.model!r} is not allowed for this key",
                 "invalid_request_error", "model_not_allowed", "model",

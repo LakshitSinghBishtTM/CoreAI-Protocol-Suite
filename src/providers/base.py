@@ -332,6 +332,7 @@ SDK_TIMEOUT_S = 150.0
 class BaseProvider(ABC):
     name: str = "base"
     default_model: str = ""
+    managed: bool = False
 
     def __init__(self, api_key: str):
         self.api_key = api_key

@@ -131,9 +131,9 @@ def _load_store(result: "ProviderLoadResult") -> None:
         from coreai.keystore import load_secrets
 
         entries = load_secrets()
-    except Exception as e:
-        logger.warning(f"  [FAIL] key store — {e}")
-        result.failed["keystore"] = str(e)
+    except Exception as exc:
+        logger.warning(f"  [FAIL] key store — {exc}")
+        result.failed["keystore"] = str(exc)
         return
     by_lab: dict[str, list[dict]] = {}
     for e in entries:
@@ -152,14 +152,14 @@ def _load_store(result: "ProviderLoadResult") -> None:
         if lab.kind in ("native", "compat"):
             members = [result.providers[lab_id]] if lab_id in result.providers else []
             labels = ["env"] if members else []
-            for e in items:
-                if e["label"] == "env" and members:
+            for item in items:
+                if item["label"] == "env" and members:
                     continue  # native env key already loaded above
                 try:
-                    members.append(_build(lab_id, e["api_key"], lab_id, e))
-                    labels.append(e["label"])
+                    members.append(_build(lab_id, item["api_key"], lab_id, item))
+                    labels.append(item["label"])
                 except Exception as exc:
-                    result.failed[f"{lab_id}/{e['label']}"] = str(exc)
+                    result.failed[f"{lab_id}/{item['label']}"] = str(exc)
             if not members:
                 continue
             p = (
@@ -172,8 +172,8 @@ def _load_store(result: "ProviderLoadResult") -> None:
             result.skipped.pop(lab_id, None)
             logger.info(f"  [OK]   {lab_id} loaded ({len(members)} key(s))")
         else:  # local / custom: one provider per entry, named by its label
-            for e in items:
-                name = e["label"]
+            for item in items:
+                name = item["label"]
                 if name in result.providers:
                     result.failed[name] = "name clashes with another provider"
                     continue
@@ -183,20 +183,23 @@ def _load_store(result: "ProviderLoadResult") -> None:
 
                         p = LocalProvider(
                             name,
-                            e["base_url"],
-                            e.get("api_key", ""),
-                            default_model=e.get("model", ""),
+                            item["base_url"],
+                            item.get("api_key", ""),
+                            default_model=item.get("model", ""),
                         )
                     else:
                         p = CompatProvider(
-                            e["api_key"], name, e["base_url"], e.get("model", "")
+                            item["api_key"],
+                            name,
+                            item["base_url"],
+                            item.get("model", ""),
                         )
                 except Exception as exc:
                     result.failed[name] = str(exc)
                     continue
                 p.managed = True
                 result.providers[name] = p
-                logger.info(f"  [OK]   {name} ({lab.kind}, {e['base_url']})")
+                logger.info(f"  [OK]   {name} ({lab.kind}, {item['base_url']})")
 
 
 def load_providers(

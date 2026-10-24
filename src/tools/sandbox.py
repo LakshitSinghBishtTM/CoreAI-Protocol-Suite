@@ -84,10 +84,18 @@ class PythonSandbox:
                         break
                 if truncated:
                     try:
+                        proc.kill()
+                    except ProcessLookupError:
+                        pass
+                    try:
                         os.killpg(proc.pid, 9)
                     except ProcessLookupError:
                         pass
-                await proc.wait()
+                try:
+                    await asyncio.wait_for(proc.wait(), timeout=1)
+                except asyncio.TimeoutError:
+                    proc.kill()
+                    await proc.wait()
                 return bytes(out), truncated
 
             try:
@@ -95,6 +103,10 @@ class PythonSandbox:
                     read_output(), timeout=self.timeout_s
                 )
             except asyncio.TimeoutError:
+                try:
+                    proc.kill()
+                except ProcessLookupError:
+                    pass
                 try:
                     os.killpg(proc.pid, 9)
                 except ProcessLookupError:
