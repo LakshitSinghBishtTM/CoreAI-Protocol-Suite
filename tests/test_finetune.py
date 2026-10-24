@@ -309,3 +309,27 @@ def test_default_manager_wiring(monkeypatch, tmp_path):
         and m.prices.rate("gpt-4o-mini") == 3.0
     )
     monkeypatch.setattr(t, "_manager", None)
+
+
+def test_router_model_alias_resolves_to_real_model_id():
+    from dataclasses import replace
+
+    from coreai.router import Router
+    from providers.base import CompletionRequest, Message
+
+    reg = ModelRegistry(dict(get_registry()._catalogue))
+    base = reg.get("gpt-4o-mini")
+    reg.register(replace(base, model_id="ft:gpt-4o-mini:acme::abc"))
+    r = Router({})
+    r._model_registry = reg
+    r.add_model_alias("support-bot", "ft:gpt-4o-mini:acme::abc")
+    req = CompletionRequest(messages=[Message("user", "hi")], model="support-bot")
+    r.resolve_alias(req)
+    assert req.model == "ft:gpt-4o-mini:acme::abc"
+    assert req.metadata["model_alias"] == "support-bot"
+    with pytest.raises(ValueError):
+        r.add_model_alias("fast", "ft:gpt-4o-mini:acme::abc")  # policy alias
+    with pytest.raises(ValueError):
+        r.add_model_alias("gpt-4o-mini", "ft:gpt-4o-mini:acme::abc")  # shadows
+    with pytest.raises(ValueError):
+        r.add_model_alias("x", "no-such-model")

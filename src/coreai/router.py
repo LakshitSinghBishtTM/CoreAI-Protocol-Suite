@@ -265,6 +265,10 @@ class Router:
         # Virtual models: alias -> routing policy name. An alias only takes
         # effect while that policy exists.
         self.aliases: dict[str, str] = dict(DEFAULT_ALIASES)
+        # Model aliases: short name -> real model id (for example a fine-tuned
+        # model). Resolved before policy aliases; budgets and prices then
+        # apply to the real model id.
+        self.model_aliases: dict[str, str] = {}
         self.cache = (
             ResponseCache(max_entries=self.config.cache_max_entries)
             if self.config.enable_cache
@@ -979,6 +983,15 @@ class Router:
                 options=self._cache_options(request),
             )
 
+    def add_model_alias(self, alias: str, model: str) -> None:
+        """Map a short name to a real model id. Refuses to shadow a catalogue
+        model or a policy alias, so existing clients never change behaviour."""
+        if self._model_registry.get(alias) is not None or alias in self.aliases:
+            raise ValueError(f"alias {alias!r} is already a model or policy alias")
+        if self._model_registry.get(model) is None:
+            raise ValueError(f"unknown model {model!r}")
+        self.model_aliases[alias] = model
+
     def alias_policy(self, model: Optional[str]) -> Optional[str]:
         """Policy behind a virtual model name, if it is one and usable."""
         target = self.aliases.get(model) if model else None
@@ -991,6 +1004,14 @@ class Router:
         routing policy: the model is cleared and the policy named instead. A
         real catalogue model of the same name is never shadowed."""
         if self._model_registry.get(request.model or "") is not None:
+            return
+        target = self.model_aliases.get(request.model or "")
+        if target is not None:
+            request.metadata = {
+                **(request.metadata or {}),
+                "model_alias": request.model,
+            }
+            request.model = target
             return
         policy = self.alias_policy(request.model)
         if policy is None:

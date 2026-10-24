@@ -158,6 +158,7 @@ class TrainingJobConfig:
     suffix: str = "coreai-ft"
     description: str = ""
     tags: list[str] = field(default_factory=list)
+    alias: Optional[str] = None  # short routable name for the finished model
 
 
 @dataclass
@@ -513,6 +514,14 @@ def get_training_manager() -> TrainingManager:
             from neural.model import get_registry
 
             ok = register_finetuned(job, get_registry(), get_pricing(), prices)
+            alias = getattr(job.config, "alias", None)
+            if ok and alias:
+                try:
+                    from api.server import get_router
+
+                    get_router().add_model_alias(alias, job.fine_tuned_model)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("Alias %s not registered: %s", alias, exc)
             logger.info("Fine-tuned model %s registered: %s", job.fine_tuned_model, ok)
 
         db = os.getenv("COREAI_FINETUNE_DB")
