@@ -143,6 +143,16 @@ class BudgetManager:
     def limits_for(self, subject: str) -> BudgetLimits | None:
         return self.subjects.get(subject, self.default)
 
+    def set_limits(self, subject: str, limits: BudgetLimits) -> None:
+        """Replace one subject's limits at runtime (in memory; edit the YAML to persist)."""
+        self.subjects[subject] = limits
+        self._usage.pop(subject, None)  # new window under the new limits
+
+    def remove_limits(self, subject: str) -> bool:
+        """Drop a subject override so it falls back to the default. True if one existed."""
+        self._usage.pop(subject, None)
+        return self.subjects.pop(subject, None) is not None
+
     @staticmethod
     def _model_key(model: str) -> str:
         return "\x00model:" + model  # cannot collide with a JWT subject

@@ -12,7 +12,7 @@ import logging
 import math
 from typing import Any, Dict, List, Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Path, Query, status
 from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -877,6 +877,58 @@ async def get_budget_status(
         "status": manager.status(target),
         "stats": manager.stats(),
     }
+
+
+class BudgetLimitsBody(BaseModel):
+    max_cost_usd: Optional[float] = None
+    warn_cost_usd: Optional[float] = None
+    max_requests: Optional[int] = None
+    max_tokens: Optional[int] = None
+    window_seconds: int = 86400
+
+
+@router.put(
+    "/admin/budgets/{subject}",
+    summary="Set budget limits for a subject (in memory until restart)",
+    tags=["admin"],
+)
+async def set_budget(
+    subject: str = Path(..., max_length=128),
+    body: BudgetLimitsBody = Body(...),
+    ctx: AuthContext = Depends(require_scope("admin")),
+):
+    from api.server import app_state, get_audit
+    from coreai.budgets import BudgetLimits
+
+    manager = app_state.get("budgets")
+    if manager is None:
+        raise HTTPException(status_code=409, detail="budgets are not enabled")
+    try:
+        limits = BudgetLimits(**body.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    manager.set_limits(subject, limits)
+    get_audit().record("budget.set", ctx.subject, subject, details=body.model_dump())
+    return {"subject": subject, "status": manager.status(subject)}
+
+
+@router.delete(
+    "/admin/budgets/{subject}",
+    summary="Remove a subject's budget override (falls back to the default)",
+    tags=["admin"],
+)
+async def remove_budget(
+    subject: str = Path(..., max_length=128),
+    ctx: AuthContext = Depends(require_scope("admin")),
+):
+    from api.server import app_state, get_audit
+
+    manager = app_state.get("budgets")
+    if manager is None:
+        raise HTTPException(status_code=409, detail="budgets are not enabled")
+    removed = manager.remove_limits(subject)
+    get_audit().record("budget.remove", ctx.subject, subject, outcome="ok" if removed else "noop")
+    return {"subject": subject, "removed": removed}
 
 
 @router.get(

@@ -65,6 +65,7 @@ def run(argv, srv=None, monkeypatch=None):
         ),
         (["policies"], "GET", "/v1/admin/policies", None),
         (["budgets"], "GET", "/v1/admin/budgets", None),
+        (["budget-rm", "bob"], "DELETE", "/v1/admin/budgets/bob", None),
         (
             ["budgets", "--subject", "a b"],
             "GET",

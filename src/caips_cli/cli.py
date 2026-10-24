@@ -65,6 +65,15 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("policies", help="active routing policies (admin)")
     p = sub.add_parser("budgets", help="budget limits and usage (admin)")
     p.add_argument("--subject", default=None, help="key subject (default: yourself)")
+    p = sub.add_parser("budget-set", help="set a subject's budget limits (admin)")
+    p.add_argument("subject")
+    p.add_argument("--max-cost", type=float, default=None, dest="max_cost_usd")
+    p.add_argument("--warn-cost", type=float, default=None, dest="warn_cost_usd")
+    p.add_argument("--max-requests", type=int, default=None, dest="max_requests")
+    p.add_argument("--max-tokens", type=int, default=None, dest="max_tokens")
+    p.add_argument("--window", type=int, default=86400, dest="window_seconds", help="seconds")
+    p = sub.add_parser("budget-rm", help="remove a subject's budget override (admin)")
+    p.add_argument("subject")
     p = sub.add_parser(
         "explain", help="dry run: where would this request route, and why"
     )
@@ -186,6 +195,14 @@ def _plan(a: argparse.Namespace) -> tuple[str, str, Optional[dict]]:
             "/v1/admin/budgets" + (f"?subject={q(a.subject)}" if a.subject else ""),
             None,
         )
+    if c == "budget-set":
+        body = {
+            k: getattr(a, k)
+            for k in ("max_cost_usd", "warn_cost_usd", "max_requests", "max_tokens", "window_seconds")
+        }
+        return "PUT", f"/v1/admin/budgets/{q(a.subject)}", body
+    if c == "budget-rm":
+        return "DELETE", f"/v1/admin/budgets/{q(a.subject)}", None
     if c == "explain":
         payload: dict[str, Any] = {"messages": [{"role": "user", "content": a.prompt}]}
         for k in ("model", "policy", "provider"):
