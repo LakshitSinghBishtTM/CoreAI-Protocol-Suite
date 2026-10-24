@@ -4,6 +4,7 @@ Run:  python caips_home.py        (or: textual serve caips_home.py --port 6969)
 Env:  CAIPS_URL      gateway base URL   (default http://localhost:8743)
       CAIPS_API_KEY  bearer token       (optional; can also be set with ctrl+k)
 """
+
 from __future__ import annotations
 
 import json
@@ -17,8 +18,18 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen
 from textual.widgets import (
-    Button, ContentSwitcher, DirectoryTree, Footer, Header, Input, Label,
-    OptionList, Select, Static, Switch, TextArea,
+    Button,
+    ContentSwitcher,
+    DirectoryTree,
+    Footer,
+    Header,
+    Input,
+    Label,
+    OptionList,
+    Select,
+    Static,
+    Switch,
+    TextArea,
 )
 from textual.widgets.option_list import Option
 
@@ -26,10 +37,18 @@ BASE_URL = os.environ.get("CAIPS_URL", "http://localhost:8743")
 MAX_ATTACH_BYTES = 200_000
 
 SECTIONS = [
-    ("home", "Home"), ("chat", "Chat"), ("providers", "Providers"),
-    ("models", "Models"), ("keys", "Keys"), ("usage", "Usage"),
-    ("tools", "Tools"), ("agents", "Agents"), ("tasks", "Tasks"),
-    ("memory", "Memory"), ("local", "Local models"), ("finetune", "Fine-tuning"),
+    ("home", "Home"),
+    ("chat", "Chat"),
+    ("providers", "Providers"),
+    ("models", "Models"),
+    ("keys", "Keys"),
+    ("usage", "Usage"),
+    ("tools", "Tools"),
+    ("agents", "Agents"),
+    ("tasks", "Tasks"),
+    ("memory", "Memory"),
+    ("local", "Local models"),
+    ("finetune", "Fine-tuning"),
     ("admin", "Admin"),
 ]
 PLACEHOLDERS = {
@@ -66,7 +85,9 @@ class KeyDialog(ModalScreen[str | None]):
     def compose(self) -> ComposeResult:
         with Vertical(id="keybox"):
             yield Label("Gateway API key / bearer token")
-            yield Input(password=True, id="keyinput", placeholder="paste token, Enter to save")
+            yield Input(
+                password=True, id="keyinput", placeholder="paste token, Enter to save"
+            )
 
     @on(Input.Submitted)
     def _save(self, e: Input.Submitted) -> None:
@@ -76,7 +97,9 @@ class KeyDialog(ModalScreen[str | None]):
 class Home(VerticalScroll):
     def compose(self) -> ComposeResult:
         yield Static("[b]CoreAI Protocol Suite[/b]", id="home-title")
-        yield Static("Multi-provider LLM gateway: routing, failover, caching.", classes="muted")
+        yield Static(
+            "Multi-provider LLM gateway: routing, failover, caching.", classes="muted"
+        )
         yield Static("", id="home-status")
         with Horizontal(id="home-actions"):
             yield Button("New chat", id="go-chat", variant="primary")
@@ -95,13 +118,28 @@ class SettingsPanel(VerticalScroll):
         yield Label("[b]Model settings[/b]")
         yield Label("Provider dialect", classes="muted")
         yield Select(
-            [("Auto (routed)", ""), ("OpenAI", "openai"), ("Anthropic", "anthropic"),
-             ("Gemini", "gemini"), ("Grok", "grok"), ("DeepSeek", "deepseek")],
-            value="", allow_blank=False, id="s-provider")
+            [
+                ("Auto (routed)", ""),
+                ("OpenAI", "openai"),
+                ("Anthropic", "anthropic"),
+                ("Gemini", "gemini"),
+                ("Grok", "grok"),
+                ("DeepSeek", "deepseek"),
+            ],
+            value="",
+            allow_blank=False,
+            id="s-provider",
+        )
         yield Label("Routing policy", classes="muted")
         yield Select(
-            [(p, p) for p in ("balanced", "cheapest", "fastest", "round_robin", "fallback")],
-            value="balanced", allow_blank=False, id="s-routing")
+            [
+                (p, p)
+                for p in ("balanced", "cheapest", "fastest", "round_robin", "fallback")
+            ],
+            value="balanced",
+            allow_blank=False,
+            id="s-routing",
+        )
         yield Label("Model (blank = auto)", classes="muted")
         yield Input(id="s-model", placeholder="e.g. gpt-4o")
         yield Label("Temperature", classes="muted")
@@ -119,11 +157,13 @@ class SettingsPanel(VerticalScroll):
 
     def values(self) -> dict:
         q = self.query_one
+
         def num(sel, cast, default):
             try:
                 return cast(q(sel, Input).value)
             except ValueError:
                 return default
+
         return {
             "provider": q("#s-provider", Select).value or None,
             "routing": q("#s-routing", Select).value,
@@ -149,7 +189,9 @@ class ChatView(Horizontal):
             yield VerticalScroll(id="log")
             yield Static("", id="chips")
             with Horizontal(id="composer"):
-                yield Input(placeholder="Message...  (Enter to send, /help)", id="prompt")
+                yield Input(
+                    placeholder="Message...  (Enter to send, /help)", id="prompt"
+                )
             with Horizontal(id="toolbar"):
                 yield Button("+ Attach", id="b-attach")
                 yield Button("Tools: off", id="b-tools")
@@ -160,7 +202,10 @@ class ChatView(Horizontal):
 
     def on_mount(self) -> None:
         self.refresh_banner()
-        self.add_msg("system", "Ready. Attach files with [b]+ Attach[/b] or ctrl+o; tune the model under [b]Settings[/b].")
+        self.add_msg(
+            "system",
+            "Ready. Attach files with [b]+ Attach[/b] or ctrl+o; tune the model under [b]Settings[/b].",
+        )
 
     # ---- helpers
     def refresh_banner(self) -> None:
@@ -185,13 +230,15 @@ class ChatView(Horizontal):
 
     def render_chips(self) -> None:
         self.query_one("#chips", Static).update(
-            "  ".join(f"[reverse] {p.name} [/]" for p in self.attachments))
+            "  ".join(f"[reverse] {p.name} [/]" for p in self.attachments)
+        )
 
     async def attach(self) -> None:
         def done(p: Path | None) -> None:
             if p:
                 self.attachments.append(p)
                 self.render_chips()
+
         self.caips.push_screen(FilePicker(), done)
 
     def toggle_settings(self) -> None:
@@ -218,7 +265,9 @@ class ChatView(Horizontal):
 
     @on(Switch.Changed, "#s-tools")
     def _tools_sw(self, e: Switch.Changed) -> None:
-        self.query_one("#b-tools", Button).label = f"Tools: {'on' if e.value else 'off'}"
+        self.query_one("#b-tools", Button).label = (
+            f"Tools: {'on' if e.value else 'off'}"
+        )
 
     @on(Input.Submitted, "#prompt")
     async def _send(self, e: Input.Submitted) -> None:
@@ -227,7 +276,10 @@ class ChatView(Horizontal):
             return
         e.input.value = ""
         if text == "/help":
-            self.add_msg("system", "ctrl+o attach · ctrl+s settings · ctrl+k key · ctrl+l clear · esc stop")
+            self.add_msg(
+                "system",
+                "ctrl+o attach · ctrl+s settings · ctrl+k key · ctrl+l clear · esc stop",
+            )
             return
         if not self.caips.api_key:
             self.refresh_banner()
@@ -251,8 +303,14 @@ class ChatView(Horizontal):
     @work(exclusive=True, group="stream")
     async def stream_reply(self, out: Static) -> None:
         s = self.query_one(SettingsPanel).values()
-        msgs = ([{"role": "system", "content": s["system"]}] if s["system"] else []) + self.history
-        body = {"messages": msgs, "temperature": s["temperature"], "max_tokens": s["max_tokens"]}
+        msgs = (
+            [{"role": "system", "content": s["system"]}] if s["system"] else []
+        ) + self.history
+        body = {
+            "messages": msgs,
+            "temperature": s["temperature"],
+            "max_tokens": s["max_tokens"],
+        }
         for k in ("provider", "model"):
             if s[k]:
                 body[k] = s[k]
@@ -335,12 +393,16 @@ class CaiPS(App):
     def compose(self) -> ComposeResult:
         yield Header()
         with Horizontal():
-            yield OptionList(*[Option(label, id=sid) for sid, label in SECTIONS], id="nav")
+            yield OptionList(
+                *[Option(label, id=sid) for sid, label in SECTIONS], id="nav"
+            )
             with ContentSwitcher(initial="home", id="content"):
                 yield Home(id="home")
                 yield ChatView(self)
                 for sid, _ in SECTIONS[2:]:
-                    yield Static(f"[b]{dict(SECTIONS)[sid]}[/b]\n\n{PLACEHOLDERS[sid]}", id=sid)
+                    yield Static(
+                        f"[b]{dict(SECTIONS)[sid]}[/b]\n\n{PLACEHOLDERS[sid]}", id=sid
+                    )
         yield Footer()
 
     def on_mount(self) -> None:
@@ -354,10 +416,14 @@ class CaiPS(App):
             async with httpx.AsyncClient(base_url=BASE_URL, timeout=3) as c:
                 j = (await c.get("/health")).json()
             provs = j.get("providers") or []
-            home.set_status(f"[green]online[/green]  {BASE_URL}\nProviders: {', '.join(map(str, provs)) or 'none'}"
-                            f"\nAPI key: {'set' if self.api_key else 'not set (only needed to chat)'}")
+            home.set_status(
+                f"[green]online[/green]  {BASE_URL}\nProviders: {', '.join(map(str, provs)) or 'none'}"
+                f"\nAPI key: {'set' if self.api_key else 'not set (only needed to chat)'}"
+            )
         except Exception:  # noqa: BLE001
-            home.set_status(f"[red]offline[/red]  {BASE_URL}\nStart the gateway: uvicorn api.server:app --port 8743")
+            home.set_status(
+                f"[red]offline[/red]  {BASE_URL}\nStart the gateway: uvicorn api.server:app --port 8743"
+            )
 
     def show(self, sid: str) -> None:
         self.query_one("#content", ContentSwitcher).current = sid
@@ -373,16 +439,24 @@ class CaiPS(App):
             self.query_one("#content", ContentSwitcher).current = e.option.id
 
     @on(Button.Pressed, "#go-chat")
-    def _go_chat(self) -> None: self.show("chat")
+    def _go_chat(self) -> None:
+        self.show("chat")
+
     @on(Button.Pressed, "#go-providers")
-    def _go_prov(self) -> None: self.show("providers")
+    def _go_prov(self) -> None:
+        self.show("providers")
+
     @on(Button.Pressed, "#go-models")
-    def _go_models(self) -> None: self.show("models")
+    def _go_models(self) -> None:
+        self.show("models")
+
     @on(Button.Pressed, "#go-key")
-    def _go_key(self) -> None: self.action_key()
+    def _go_key(self) -> None:
+        self.action_key()
 
     # actions
-    def action_section(self, sid: str) -> None: self.show(sid)
+    def action_section(self, sid: str) -> None:
+        self.show(sid)
 
     def action_key(self) -> None:
         def done(k: str | None) -> None:
@@ -390,6 +464,7 @@ class CaiPS(App):
                 self.api_key = k
                 self.query_one(ChatView).refresh_banner()
                 self.check_gateway()
+
         self.push_screen(KeyDialog(), done)
 
     async def action_attach(self) -> None:
