@@ -192,7 +192,7 @@ Rebuild `agents/` as a small, inspectable harness on top of the gateway and tool
 
 **Visibility**
 
-- A full trace per run (every model call, tool call, token count, cost) that can be replayed and diffed. *Status: done (events table, `GET /v1/runs/{id}/events`, `diff_traces`); replay of a trace against a model is still open.*
+- A full trace per run (every model call, tool call, token count, cost) that can be replayed and diffed. *Status: done (events table, `GET /v1/runs/{id}/events`, `diff_traces`); replay against a model done (`harness.replay_run`: re-asks the model at each recorded turn using recorded tool results, never executes tools, reports per-turn tool and argument matches).*
 - Run viewer in the API first, UI later (Phase 10).
 
 **Later patterns, only after the loop is solid**

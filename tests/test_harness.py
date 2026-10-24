@@ -266,3 +266,21 @@ async def test_review_tool_not_offered_by_default():
     await r.run("a", "go")
     names = [t["function"]["name"] for t in route.requests[0].tools]
     assert "request_human_review" not in names
+
+
+async def test_replay_reasks_model_without_running_tools():
+    from harness import replay_run
+
+    r, _ = make(Script(resp(calls=[call("wipe")]), resp("done")), approval_tools=[])
+    out = await r.run("a", "go")
+    assert out["status"] == "waiting_approval"  # destructive: never executed
+    # same behaviour replayed
+    same = await replay_run(r, out["id"], route=Script(resp(calls=[call("wipe")])))
+    assert same["turns"][0]["same_arguments"] and same["matching_turns"] == 1
+    # a different model that answers in text instead
+    diff = await replay_run(
+        r, out["id"], model="other", route=Script(resp("no tools needed"))
+    )
+    assert diff["turns"][0]["same_tools"] is False
+    assert diff["turns"][0]["replayed_calls"] == []
+    assert not any(m.role == "tool" for m in r.store.messages(out["id"]))
