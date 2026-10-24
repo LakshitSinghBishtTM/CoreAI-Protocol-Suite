@@ -304,7 +304,7 @@ The last phase turns the layers into something both self-hosters and teams can a
 - Official Python and TypeScript SDKs (thin, since the API is OpenAI-compatible) with typed agent and tool clients.
 - Plugin system for providers, tools, guardrails and routing strategies, with a stable plugin API and a registry of community plugins.
 - Webhooks and event streams for run completion, budget alerts and provider outages.
-- Notifications to Slack and email for alerts. *Status: signed webhook alerts for budgets done (`coreai/notify.py`; `COREAI_ALERT_WEBHOOK_URL` and `COREAI_ALERT_WEBHOOK_SECRET`; `budget.warning` and `budget.exceeded` events, once per budget window, subject or model and numbers only). Provider-outage events, Slack formatting and email are open.*
+- Notifications to Slack and email for alerts. *Status: signed webhook alerts for budgets done (`coreai/notify.py`; `COREAI_ALERT_WEBHOOK_URL` and `COREAI_ALERT_WEBHOOK_SECRET`; `budget.warning` and `budget.exceeded` events, once per budget window, subject or model and numbers only). Provider-outage events, Slack and email also done through the event bus (`src/utils/events.py`, `docs/events.md`).*
 
 **Deployment**
 
