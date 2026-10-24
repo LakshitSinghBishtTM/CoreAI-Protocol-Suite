@@ -320,3 +320,44 @@ async def test_subagent_nesting_is_capped():
         _depth.reset(token)
     with pytest.raises(KeyError):
         subagent_tool(r, "missing")
+
+
+async def test_interval_trigger_fires_without_overlap_and_is_rate_capped():
+    import asyncio
+
+    from harness import TriggerManager
+
+    now = [1000.0]
+    r, store = make(Script(resp("tick done")))
+    tm = TriggerManager(r, clock=lambda: now[0])
+    tm.every("hourly", 60, "a", "report", max_per_hour=2)
+    assert tm.tick() == []  # not due yet
+    now[0] += 61
+    assert tm.tick() == ["hourly"]
+    await tm.triggers["hourly"]._task
+    assert store.get(tm.triggers["hourly"].last_run)["status"] == "completed"
+    now[0] += 61
+    assert tm.tick() == ["hourly"]
+    await tm.triggers["hourly"]._task
+    now[0] += 61
+    assert tm.tick() == []  # third firing inside an hour: capped
+    assert tm.triggers["hourly"].skipped == 1
+    with pytest.raises(ValueError):
+        tm.every("bad", 0, "a", "x")
+    with pytest.raises(KeyError):
+        tm.every("nope", 5, "missing", "x")
+
+
+async def test_event_trigger_matches_fields_and_substitutes_task():
+    from harness import TriggerManager
+
+    route = Script(resp("looked"))
+    r, store = make(route)
+    tm = TriggerManager(r)
+    tm.on_event("outage", "provider.outage", "a", "Investigate $provider now", match={"provider": "openai"})
+    tm.on_bus_event({"type": "provider.outage", "provider": "grok"})  # no match
+    assert tm.triggers["outage"]._task is None
+    tm.on_bus_event({"type": "provider.outage", "provider": "openai"})
+    await tm.triggers["outage"]._task
+    task = [m for m in store.messages(tm.triggers["outage"].last_run) if m.role == "user"][0]
+    assert task.content == "Investigate openai now"
