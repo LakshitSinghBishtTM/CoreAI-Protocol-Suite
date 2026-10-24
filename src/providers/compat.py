@@ -2,7 +2,6 @@
 
 from loguru import logger
 
-from coreai.pricing import PricingError
 
 from .grok import GrokProvider
 
@@ -22,6 +21,8 @@ class CompatProvider(GrokProvider):
         super().__init__(api_key)
 
     def _bill(self, input_tokens: int, output_tokens: int, model: str) -> float:
+        from coreai.pricing import PricingError  # lazy: avoids import cycle
+
         try:
             return super()._bill(input_tokens, output_tokens, model)
         except PricingError:
@@ -29,6 +30,8 @@ class CompatProvider(GrokProvider):
             return 0.0
 
     def estimate_cost(self, input_tokens: int, output_tokens: int, model: str) -> float:
+        from coreai.pricing import PricingError  # lazy: avoids import cycle
+
         try:
             return super().estimate_cost(input_tokens, output_tokens, model)
         except PricingError:

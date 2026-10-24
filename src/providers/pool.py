@@ -14,11 +14,19 @@ from typing import AsyncGenerator, Callable
 
 from loguru import logger
 
-from coreai.errors import ErrorKind, classify
 
 from .base import BaseProvider, CompletionRequest, CompletionResponse
 
-KEY_ERRORS = {ErrorKind.AUTH, ErrorKind.QUOTA, ErrorKind.RATE_LIMIT}
+def _key_errors() -> set:
+    from coreai.errors import ErrorKind  # lazy: avoids import cycle
+
+    return {ErrorKind.AUTH, ErrorKind.QUOTA, ErrorKind.RATE_LIMIT}
+
+
+def classify(exc):
+    from coreai.errors import classify as _classify  # lazy: avoids import cycle
+
+    return _classify(exc)
 
 
 class KeyPoolProvider(BaseProvider):
@@ -101,7 +109,7 @@ class KeyPoolProvider(BaseProvider):
             try:
                 return await self.members[i].complete(request)
             except Exception as e:
-                if classify(e).kind not in KEY_ERRORS:
+                if classify(e).kind not in _key_errors():
                     raise
                 self._park(i, e)
                 last = e
@@ -119,7 +127,7 @@ class KeyPoolProvider(BaseProvider):
                     yield chunk
                 return
             except Exception as e:
-                if started or classify(e).kind not in KEY_ERRORS:
+                if started or classify(e).kind not in _key_errors():
                     raise
                 self._park(i, e)
                 last = e
@@ -132,7 +140,7 @@ class KeyPoolProvider(BaseProvider):
             try:
                 return await self.members[i].embed(texts, model)
             except Exception as e:
-                if classify(e).kind not in KEY_ERRORS:
+                if classify(e).kind not in _key_errors():
                     raise
                 self._park(i, e)
                 last = e
