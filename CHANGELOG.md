@@ -11,6 +11,10 @@ The previous `1.0.0` label did not match the project's state; versions now start
 - `mypy` now checks all of `src` in CI (the ratchet list is gone). Only the Anthropic and Gemini adapter modules have four error codes relaxed, because the SDK types change between releases.
 - CI runs `twine check --strict` on the built wheel and sdist.
 
+### Added (evals)
+- Agent tasks in the eval suite: `agent: <name>` runs the agent through `/v1/runs` and scores its result, recording run id, steps, cost and tokens.
+- `--grader-model` on `python -m evals` and `caips eval` grades `rubric` tasks through the gateway; without it, rubric tasks report that a grader is needed.
+
 ### Added (agent planning step)
 - `plan: true` on an agent (with `plan_max_steps`) adds one tool-free planning call before the first step. The plan is stored in the run's first message, so it is checkpointed, survives compaction and is not repeated on resume; its cost and tokens count toward the agent's limits. Off by default. Removed the finished agent harness and Postgres-tool items from the roadmap (the Postgres run store and `db_query` support were already done).
 

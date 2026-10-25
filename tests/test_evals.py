@@ -138,3 +138,129 @@ def test_cli_compare_models(tmp_path, capsys):
     )
     res = json.loads(out.read_text())
     assert rc == 0 and res["best"]["quality"] == 1.0 and res["cheap"]["quality"] == 0.0
+
+
+# ---------------------------------------------------------- agent tasks, grader
+
+
+def _gateway(state):
+    """A mock gateway: chat completions, a grader reply, and the run API."""
+    import json
+
+    import httpx
+
+    def handler(req):
+        if req.url.path == "/v1/chat/completions":
+            body = json.loads(req.content)
+            state.setdefault("models", []).append(body["model"])
+            text = "8" if body["model"] == "judge" else "a fine answer"
+            return httpx.Response(
+                200,
+                json={
+                    "model": body["model"],
+                    "choices": [{"message": {"content": text}}],
+                    "usage": {},
+                },
+            )
+        if req.method == "POST" and req.url.path == "/v1/runs":
+            state["started"] = json.loads(req.content)
+            return httpx.Response(202, json={"id": "r1", "status": "running"})
+        if req.url.path == "/v1/runs/r1":
+            state["polls"] = state.get("polls", 0) + 1
+            if state["polls"] < 2:
+                return httpx.Response(200, json={"id": "r1", "status": "running"})
+            return httpx.Response(
+                200,
+                json={"id": "r1", "status": state.get("final", "completed"),
+                      "stop_reason": "max_steps", "result": "the answer is 42",
+                      "cost_usd": 0.03, "input_tokens": 10, "output_tokens": 5, "step": 3},
+            )  # fmt: skip
+        return httpx.Response(404)
+
+    return httpx.MockTransport(handler)
+
+
+def _suite(tmp_path, body):
+    f = tmp_path / "t.yml"
+    f.write_text(body)
+    return str(f)
+
+
+@pytest.mark.asyncio
+async def test_agent_task_runs_through_the_run_api_and_is_scored(tmp_path):
+    import json
+
+    from evals.__main__ import main
+
+    state = {}
+    out = tmp_path / "o.json"
+    tasks = _suite(
+        tmp_path,
+        "tasks:\n  - id: ag\n    agent: helper\n    prompt: what is 6*7\n"
+        "    scorer: {type: contains, expected: '42'}\n",
+    )
+    rc = await main([tasks, "--out", str(out)], transport=_gateway(state))
+    rep = json.loads(out.read_text())
+    r = rep["results"][0]
+    assert rc == 0 and rep["quality"] == 1.0
+    assert state["started"] == {"agent": "helper", "task": "what is 6*7"}
+    assert (r["agent"], r["run_id"], r["steps"]) == ("helper", "r1", 3)
+    assert r["cost_usd"] == pytest.approx(0.03) and r["tokens"] == 15
+
+
+@pytest.mark.asyncio
+async def test_agent_run_that_stops_on_a_limit_scores_zero_with_the_reason(tmp_path):
+    import json
+
+    from evals.__main__ import main
+
+    out = tmp_path / "o.json"
+    tasks = _suite(
+        tmp_path,
+        "tasks: [{id: ag, agent: helper, prompt: p, scorer: {type: contains, expected: '42'}}]",
+    )
+    await main([tasks, "--out", str(out)], transport=_gateway({"final": "failed"}))
+    r = json.loads(out.read_text())["results"][0]
+    assert r["score"] == 0 and "max_steps" in r["error"]
+
+
+@pytest.mark.asyncio
+async def test_agent_task_without_a_run_api_is_an_error_not_a_crash():
+    t = Task("ag", "p", {"type": "contains", "expected": "x"}, agent="helper")
+    rep = await run_suite([t], fake({}))
+    assert rep["errors"] == 1 and "run API" in rep["results"][0]["error"]
+
+
+@pytest.mark.asyncio
+async def test_cli_grades_rubric_tasks_with_a_grader_model(tmp_path):
+    import json
+
+    from evals.__main__ import main
+
+    state = {}
+    out = tmp_path / "o.json"
+    tasks = _suite(
+        tmp_path,
+        "tasks: [{id: r, prompt: q, scorer: {type: rubric, rubric: be polite}}]",
+    )
+    rc = await main(
+        [tasks, "--model", "worker", "--grader-model", "judge", "--out", str(out)],
+        transport=_gateway(state),
+    )
+    rep = json.loads(out.read_text())
+    assert rc == 0 and rep["results"][0]["score"] == pytest.approx(0.8)
+    assert state["models"] == ["worker", "judge"]
+
+
+@pytest.mark.asyncio
+async def test_rubric_task_without_a_grader_model_reports_why(tmp_path):
+    import json
+
+    from evals.__main__ import main
+
+    out = tmp_path / "o.json"
+    tasks = _suite(
+        tmp_path, "tasks: [{id: r, prompt: q, scorer: {type: rubric, rubric: x}}]"
+    )
+    await main([tasks, "--out", str(out)], transport=_gateway({}))
+    assert "grader" in json.loads(out.read_text())["results"][0]["error"]

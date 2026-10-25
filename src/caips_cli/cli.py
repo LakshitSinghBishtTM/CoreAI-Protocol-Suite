@@ -210,6 +210,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("tasks")
     p.add_argument("--model", default=None)
     p.add_argument("--baseline", default=None)
+    p.add_argument(
+        "--grader-model", default=None, help="model that grades rubric tasks"
+    )
     p.add_argument("--out", default="eval-results.json")
     return ap
 
@@ -528,6 +531,7 @@ def main(
             ["--model", a.model] if a.model else []
         )
         args += ["--baseline", a.baseline] if a.baseline else []
+        args += ["--grader-model", a.grader_model] if a.grader_model else []
         return asyncio.run(eval_main(args, transport=transport))
     if a.cmd == "chat" or (a.cmd == "runs" and a.sub == "watch"):
         return _stream(a, key, transport, out, err)

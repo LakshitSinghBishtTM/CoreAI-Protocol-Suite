@@ -49,8 +49,6 @@ Principles still apply: layers depend downward only, every layer ships alone, cl
 
 ## 7. Evals and fine-tuning
 
-- Agent replay in the eval suite.
-- CLI rubric grading.
 - Fine-tuning: stream job logs, set per-model budget defaults for fine-tuned models, verify price tables (marked UNVERIFIED), and add a dataset-upload API.
 - Anthropic fine-tuning is a stub; support it only after the provider API is verified. Later: other providers' fine-tuning and LoRA adapters for local GGUF models.
 

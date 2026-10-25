@@ -14,6 +14,8 @@ from types import SimpleNamespace
 
 import httpx
 
+from providers.base import CompletionRequest, Message
+
 from .runner import compare, load_tasks, regressions, run_suite
 
 
@@ -50,6 +52,54 @@ def http_route(client: httpx.AsyncClient):
     return route
 
 
+def agent_route(client: httpx.AsyncClient, poll: float = 0.5, timeout: float = 300.0):
+    """Run an agent through ``/v1/runs`` and wait for its answer."""
+
+    async def route(task):
+        t0 = time.monotonic()
+        r = await client.post(
+            "/v1/runs", json={"agent": task.agent, "task": task.prompt}
+        )
+        r.raise_for_status()
+        rid = r.json()["id"]
+        while True:
+            d = (await client.get(f"/v1/runs/{rid}")).json()
+            if d["status"] not in ("pending", "running"):
+                break
+            if time.monotonic() - t0 > timeout:
+                raise TimeoutError(
+                    f"run {rid} still {d['status']} after {timeout:.0f}s"
+                )
+            await asyncio.sleep(poll)
+        if d["status"] != "completed":
+            raise RuntimeError(f"run {d['status']}: {d.get('stop_reason')}")
+        return SimpleNamespace(
+            content=d.get("result") or "",
+            cost_usd=float(d.get("cost_usd") or 0),
+            latency_ms=(time.monotonic() - t0) * 1000,
+            input_tokens=d.get("input_tokens", 0),
+            output_tokens=d.get("output_tokens", 0),
+            provider=None, model=None, run_id=rid, steps=d.get("step"),
+        )  # fmt: skip
+
+    return route
+
+
+def model_grader(route, model):
+    """A rubric grader: one completion on ``model`` through the gateway."""
+
+    async def grade(prompt: str) -> str:
+        req = CompletionRequest(
+            messages=[Message(role="user", content=prompt)],
+            model=model,
+            max_tokens=20,
+            temperature=0.0,
+        )
+        return (await route(req)).content
+
+    return grade
+
+
 def _with_model(req, model):
     req.model = model
     return req
@@ -71,6 +121,11 @@ async def main(argv: list[str] | None = None, transport=None) -> int:
         metavar="MODEL",
         help="run the same tasks on several models or aliases (e.g. cheap best local) and print a table",
     )
+    ap.add_argument(
+        "--grader-model",
+        default=None,
+        help="model that grades `rubric` tasks (through the same gateway)",
+    )
     ap.add_argument("--out", default="eval-results.json")
     ap.add_argument("--baseline")
     ap.add_argument("--tolerance", type=float, default=0.05)
@@ -83,8 +138,11 @@ async def main(argv: list[str] | None = None, transport=None) -> int:
     async with httpx.AsyncClient(
         base_url=a.base_url, headers=headers, timeout=120, transport=transport
     ) as c:
+        route = http_route(c)
+        extra = {"agent_route": agent_route(c)}
+        if a.grader_model:
+            extra["grader"] = model_grader(route, a.grader_model)
         if a.compare:
-            route = http_route(c)
             reps = {}
             for m in a.compare:
                 reps[m] = (
@@ -92,6 +150,7 @@ async def main(argv: list[str] | None = None, transport=None) -> int:
                         load_tasks(a.tasks),
                         {m: _model_runner(route, m)},
                         tags=a.tag,
+                        **extra,
                     )
                 )[m]
             json.dump(reps, open(a.out, "w"), indent=2)
@@ -110,7 +169,7 @@ async def main(argv: list[str] | None = None, transport=None) -> int:
                 print("%-16s%8.2f%7d%10.4f%8.0f%8.0f" % row)
             return 0
         rep = await run_suite(
-            load_tasks(a.tasks), http_route(c), model=a.model, tags=a.tag
+            load_tasks(a.tasks), route, model=a.model, tags=a.tag, **extra
         )
     json.dump(rep, open(a.out, "w"), indent=2)
     print(f"{rep['n']} tasks  quality={rep['quality']:.2f}  errors={rep['errors']}  "

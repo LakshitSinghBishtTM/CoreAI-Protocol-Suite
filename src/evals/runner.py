@@ -24,6 +24,9 @@ class Task:
     system: str | None = None
     tags: list[str] = field(default_factory=list)
     max_tokens: int = 512
+    agent: str | None = (
+        None  # run this agent (via the run API) instead of one completion
+    )
 
 
 def load_tasks(path: str | Path) -> list[Task]:
@@ -47,6 +50,7 @@ async def run_suite(
     model: str | None = None,
     metadata: dict | None = None,
     grader: Any = None,
+    agent_route: Callable[[Task], Awaitable[Any]] | None = None,
     concurrency: int = 4,
     tags: list[str] | None = None,
 ) -> dict:
@@ -55,6 +59,8 @@ async def run_suite(
     chosen = [t for t in tasks if not tags or set(tags) & set(t.tags)]
 
     async def one(t: Task) -> dict:
+        if t.agent:
+            return await one_agent(t)
         req = CompletionRequest(
             messages=[Message(role="user", content=t.prompt)],
             model=model,
@@ -78,6 +84,29 @@ async def run_suite(
                 return {
                     "id": t.id, "score": 0.0, "cost_usd": 0.0, "latency_ms": 0.0,
                     "tokens": 0, "provider": None, "model": None, "error": str(e),
+                }  # fmt: skip
+
+    async def one_agent(t: Task) -> dict:
+        async with sem:
+            start = time.monotonic()
+            try:
+                if agent_route is None:
+                    raise ValueError("agent tasks need a gateway with the run API")
+                r = await agent_route(t)
+                sc = await score(t.scorer, r.content, grader)
+                return {
+                    "id": t.id, "score": sc, "cost_usd": r.cost_usd,
+                    "latency_ms": r.latency_ms or (time.monotonic() - start) * 1000,
+                    "tokens": (r.input_tokens or 0) + (r.output_tokens or 0),
+                    "provider": r.provider, "model": r.model, "error": None,
+                    "agent": t.agent, "run_id": getattr(r, "run_id", None),
+                    "steps": getattr(r, "steps", None),
+                }  # fmt: skip
+            except Exception as e:
+                return {
+                    "id": t.id, "score": 0.0, "cost_usd": 0.0, "latency_ms": 0.0,
+                    "tokens": 0, "provider": None, "model": None, "error": str(e),
+                    "agent": t.agent, "run_id": None, "steps": None,
                 }  # fmt: skip
 
     results = await asyncio.gather(*(one(t) for t in chosen))
