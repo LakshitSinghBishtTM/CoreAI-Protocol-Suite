@@ -13,7 +13,9 @@ from textual.widgets import (
     DataTable,
     Input,
     OptionList,
+    Select,
     Static,
+    TextArea,
 )  # noqa: E402
 
 from caips_tui.app import SECTIONS, CaipsTui  # noqa: E402
@@ -172,7 +174,7 @@ async def test_app_boots_with_every_section_and_switches():
     )
     async with app.run_test(size=SIZE) as pilot:
         await settle(app, pilot)
-        assert len(SECTIONS) == 21
+        assert len(SECTIONS) == 23
         for sid, _, _ in SECTIONS:
             assert app.pane(sid) is not None
         assert "online" in str(app.query_one("#conn", Static).render())
@@ -1535,7 +1537,13 @@ async def test_budgets_pane_sets_and_removes():
 
 # --------------------------------------------- layout: modes, keys, harness
 def hx_transcript(app):
-    return [str(w.render()) for w in app.pane("harness").query(".msg")]
+    def text(w):
+        c = w.content  # assistant replies are Markdown; read their source text
+        from rich.markdown import Markdown
+
+        return c.markup if isinstance(c, Markdown) else str(w.render())
+
+    return [text(w) for w in app.pane("harness").query(".msg")]
 
 
 async def hx_say(app, pilot, text):
@@ -1550,10 +1558,11 @@ async def test_sidebar_groups_every_section_once_and_opens_on_the_harness():
 
     grouped = [sid for _, sids in GROUPS for sid in sids]
     assert sorted(grouped) == sorted(s[0] for s in SECTIONS)  # nothing lost or doubled
-    assert [g for g, _ in GROUPS][0] == "WORKSPACE" and GROUPS[0][1][:3] == [
+    assert [g for g, _ in GROUPS][0] == "START" and GROUPS[0][1] == [
+        "home",
         "harness",
-        "chat",
         "keys",
+        "settings",  # visible without scrolling the sidebar
     ]
     app, _ = make(section="harness")
     async with app.run_test(size=SIZE) as pilot:
@@ -1562,7 +1571,7 @@ async def test_sidebar_groups_every_section_once_and_opens_on_the_harness():
         assert app.section == "harness"
         assert nav.highlighted == nav.get_option_index("harness")
         # group headings are labels, not destinations
-        assert nav.get_option("grp-WORKSPACE").disabled
+        assert nav.get_option("grp-START").disabled
 
 
 async def test_no_token_means_no_prompt_at_startup_and_keys_is_where_it_is_saved(
@@ -1717,3 +1726,132 @@ async def test_harness_attach_errors_and_clear_keep_context(tmp_path):
         assert hx.files == {}
         await hx_say(app, pilot, "/mode native")  # no dialect picker here
         assert any("OpenAI chat" in line for line in hx_transcript(app))
+
+
+# ----------------------------------------------------- home, settings, markdown
+async def test_first_run_opens_home_and_saves_the_token_there(monkeypatch):
+    from caips_cli import credentials
+
+    monkeypatch.delenv("CAIPS_API_KEY", raising=False)
+    srv = Server(
+        {
+            ("GET", "/health"): (200, {"status": "ok"}),
+            ("GET", "/v1/providers"): (200, [{"name": "openai", "available": True}]),
+        }
+    )
+    app = CaipsTui(Client("http://gw", transport=httpx.MockTransport(srv)))
+    async with app.run_test(size=SIZE) as pilot:
+        await settle(app, pilot)
+        assert app.section == "home"  # no token yet: guided start, no modal
+        home = app.pane("home")
+        steps = str(home.query_one("#home-steps", Static).render())
+        assert "Token" in steps and "paste your gateway token" in steps
+        assert home.query_one("#home-tokenrow").display
+        box = home.query_one("#home-token", Input)
+        box.value = "tok-123"
+        await home.on_input_submitted(Input.Submitted(box, box.value))
+        await settle(app, pilot)
+        assert box.value == "" and credentials.load("http://gw") == "tok-123"
+        steps = str(home.query_one("#home-steps", Static).render())
+        assert "saved" in steps and "openai" in steps
+        assert not home.query_one("#home-tokenrow").display
+        await home.on_button_pressed(Button.Pressed(home.query_one("#home-chat", Button)))
+        await settle(app, pilot)
+        assert app.section == "harness"
+
+
+async def test_with_a_token_the_app_opens_straight_on_chat():
+    app, _ = make(section=None)
+    async with app.run_test(size=SIZE) as pilot:
+        await settle(app, pilot)
+        assert app.section == "harness"
+
+
+async def test_home_says_when_the_gateway_is_down():
+    def boom(req):
+        raise httpx.ConnectError("refused")
+
+    app = CaipsTui(Client("http://gw", transport=httpx.MockTransport(boom)))
+    async with app.run_test(size=SIZE) as pilot:
+        await settle(app, pilot)
+        steps = str(app.pane("home").query_one("#home-steps", Static).render())
+        assert "cannot reach http://gw" in steps and "uvicorn" in steps
+
+
+async def test_settings_are_saved_and_become_the_chat_defaults():
+    from caips_tui import prefs
+
+    app, srv = make(
+        {("POST", "/v1/chat/completions"): OPENAI_STREAM}, section="settings"
+    )
+    async with app.run_test(size=SIZE) as pilot:
+        await settle(app, pilot)
+        st = app.pane("settings")
+        st.query_one("#set-model", Input).value = "fast"
+        st.query_one("#set-temperature", Input).value = "0.2"
+        st.query_one("#set-max_tokens", Input).value = "256"
+        st.query_one("#set-system", TextArea).text = "be brief"
+        st.query_one("#set-theme", Select).value = "caips-light"
+        await st.on_button_pressed(Button.Pressed(st.query_one("#set-save", Button)))
+        await settle(app, pilot)
+        saved = prefs.load()
+        assert saved["model"] == "fast" and saved["temperature"] == "0.2"
+        assert saved["system"] == "be brief" and app.theme == "caips-light"
+        await app.goto("harness")
+        await settle(app, pilot)
+        await hx_say(app, pilot, "hi")
+        body = srv.calls("POST", "/v1/chat/completions")[0][3]
+        assert body["model"] == "fast" and body["temperature"] == 0.2
+        assert body["max_tokens"] == 256
+        assert body["messages"][0] == {"role": "system", "content": "be brief"}
+
+
+async def test_settings_reject_bad_numbers_and_keep_the_old_file():
+    from caips_tui import prefs
+
+    app, _ = make(section="settings")
+    async with app.run_test(size=SIZE) as pilot:
+        await settle(app, pilot)
+        st = app.pane("settings")
+        st.query_one("#set-temperature", Input).value = "hot"
+        await st.on_button_pressed(Button.Pressed(st.query_one("#set-save", Button)))
+        status = str(st.query_one(".status", Static).render())
+        assert "Temperature must be a number" in status
+        assert prefs.load() == prefs.DEFAULTS
+
+
+async def test_signing_out_from_settings_forgets_the_token():
+    from caips_cli import credentials
+
+    credentials.save("http://gw", "tok")
+    app, _ = make(section="settings")
+    async with app.run_test(size=SIZE) as pilot:
+        await settle(app, pilot)
+        st = app.pane("settings")
+        await st.on_button_pressed(Button.Pressed(st.query_one("#set-signout", Button)))
+        await settle(app, pilot)
+        assert not app.client.has_key and credentials.load("http://gw") is None
+
+
+async def test_chat_renders_replies_as_markdown():
+    from rich.markdown import Markdown
+
+    app, _ = make({("POST", "/v1/chat/completions"): OPENAI_STREAM})
+    async with app.run_test(size=SIZE) as pilot:
+        await settle(app, pilot)
+        await app.goto("harness")
+        await hx_say(app, pilot, "hi")
+        msgs = list(app.pane("harness").query(".msg.assistant"))
+        assert msgs and isinstance(msgs[0].content, Markdown)
+
+
+def test_prefs_ignore_damaged_files_and_wrong_types(tmp_path, monkeypatch):
+    from caips_tui import prefs
+
+    monkeypatch.setenv("CAIPS_CONFIG_DIR", str(tmp_path))
+    assert prefs.load() == prefs.DEFAULTS
+    (tmp_path / "tui.json").write_text("{not json")
+    assert prefs.load() == prefs.DEFAULTS
+    (tmp_path / "tui.json").write_text('{"model": 5, "temperature": "0.1", "bogus": 1}')
+    got = prefs.load()
+    assert got["model"] == "" and got["temperature"] == "0.1" and "bogus" not in got

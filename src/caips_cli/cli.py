@@ -197,7 +197,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--section",
-        default="harness",
+        default=None,
         help="section to open first (see `caips-tui --help`)",
     )
 
@@ -516,7 +516,8 @@ def main(
             )
             return 2
         return tui_main(
-            ["--url", a.url, "--timeout", str(a.timeout), "--section", a.section]
+            ["--url", a.url, "--timeout", str(a.timeout)]
+            + (["--section", a.section] if a.section else [])
         )
     if a.cmd == "eval":
         import asyncio

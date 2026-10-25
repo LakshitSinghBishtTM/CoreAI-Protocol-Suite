@@ -4,6 +4,12 @@
 
 The previous `1.0.0` label did not match the project's state; versions now start at 0.1.0 (alpha).
 
+### Added (TUI: easier start, separate settings)
+- **Home** section: first-run checklist (gateway, token, provider key) with an inline token field. The TUI opens on it until a token is saved, then straight on Chat.
+- **Settings** section: chat defaults, theme and sign-out in one place, saved to `tui.json` in the config directory. The chat screen's session panel is collapsed by default.
+- **Harness** is renamed **Chat** and renders replies as Markdown; the raw **API** pane is now **API playground** under Advanced.
+- `caips tui` / `caips-tui` no longer force `--section harness`.
+
 ### Changed (TUI redesign)
 - `caips-tui` has a grouped sidebar (Workspace, Gateway, Automation, Data, Advanced), a slim top bar with a breadcrumb, and opens on the new **Harness** section.
 - **Harness**: a chat session with model, provider, policy, temperature, max tokens, history window, system prompt, context files and an Incognito toggle on top, and Tools, Reasoning and Stream below the transcript. Incognito sends `metadata.private` (local servers only) and turns off feedback and saving. Reasoning is a prompt-level instruction.

@@ -132,6 +132,10 @@ class ChatPane(Pane):
         return {}
 
     # -- transcript -----------------------------------------------------
+    def render_reply(self, text: str) -> Any:
+        """How an assistant reply is drawn. Plain text here; Chat renders Markdown."""
+        return Text(text)
+
     async def add(self, kind: str, text: str) -> Static:
         w = Static(Text(text), classes=f"msg {kind}")
         t = self.query_one("#transcript", VerticalScroll)
@@ -425,14 +429,14 @@ class ChatPane(Pane):
                         ttft = time.monotonic() - t0
                     buf += val
                     if time.monotonic() - shown > 0.05:
-                        widget.update(Text(buf))
+                        widget.update(self.render_reply(buf))
                         self.query_one("#transcript", VerticalScroll).scroll_end(
                             animate=False
                         )
                         shown = time.monotonic()
                 else:
                     meta.update({k: v for k, v in val.items() if v is not None})
-            widget.update(Text(buf or "(empty reply)"))
+            widget.update(self.render_reply(buf or "(empty reply)"))
             self.history.append({"role": "assistant", "content": buf})
             rid = meta.get("request_id") or f"tui-{uuid.uuid4().hex[:12]}"
             self.last = {

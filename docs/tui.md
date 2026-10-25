@@ -8,32 +8,40 @@ export CAIPS_URL=http://localhost:6969  # default
 caips-tui                               # or: caips tui [--section harness|chat|keys|runs|...]
 ```
 
+## Getting started
+
+First run: `caips tui` opens on **Home**, a three-line checklist (gateway reachable, token saved, provider key loaded). Paste the gateway token right there, press **Start chatting**, and you are in. Once a token is saved the TUI opens straight on **Chat**. Nothing is asked at startup and no dialog interrupts you.
+
 ## Layout
 
 The left sidebar groups everything into modes and sections; the right side shows the one you picked.
 
 | Group | Sections |
 | --- | --- |
-| **Workspace** | **Harness**, **API**, **Keys** |
+| **Start** | **Home**, **Chat**, **Keys**, **Settings** |
 | Gateway | Providers, Routing, Models, Usage, Budgets, Status |
 | Automation | Runs, Approvals, Tools, Agents, Tasks |
 | Data | Memory, RAG, Feedback |
-| Advanced | Local models, Fine-tuning, Evals, Admin |
+| Advanced | API playground, Local models, Fine-tuning, Evals, Admin |
 
-The TUI opens on **Harness**. The bottom of the sidebar shows whether the gateway answers `/health` and whether a token is set.
+The bottom of the sidebar shows whether the gateway answers `/health` and whether a token is set.
+
+## Settings
+
+Defaults for every new chat live in **Settings**, not in the chat screen: model, provider, routing policy, temperature, max tokens, history turns, reasoning, server tools, streaming, system prompt, and the theme. **Save** writes them to `~/.config/caips/tui.json` (mode follows your umask; no secrets are stored there) and Chat picks them up the next time it opens. **Reset to defaults** restores the factory values in the form, and **Sign out** removes the saved token. `Ctrl+T` toggles the theme and remembers it.
 
 ## Keys: the only place secrets are entered
 
-Nothing is asked when the TUI starts. Open **Keys** (sidebar, or `Ctrl+K` from anywhere) and:
+Nothing is asked when the TUI starts. Open **Keys** (sidebar, or `Ctrl+K` from anywhere; Home can also save the token) and:
 
 1. **Gateway token** at the top: paste it, press `Enter` or **Save token**. It is saved per gateway URL in `~/.config/caips/credentials.json` (mode `0600`; `$CAIPS_CONFIG_DIR` overrides the directory) and the `caips` CLI uses the same file. **Forget** removes it. The field is hidden and cleared after saving.
 2. **Provider keys** below it (OpenAI, Claude, DeepSeek, ...): add them to the gateway; see the Keys row in the table below.
 
 Lookup order for the gateway token: `--api-key-file PATH`, then `CAIPS_API_KEY` (for CI and containers), then the saved token. The token is never accepted as a command-line flag (other users could read it from the process list). `caips login` and `caips logout` manage the saved token from the shell.
 
-## Harness
+## Chat
 
-A chat session with its whole configuration in view. It makes the same OpenAI-chat call as the API section.
+A chat session. Replies are rendered as Markdown (code blocks, lists, bold). It makes the same OpenAI-chat call as the API playground. The **Session settings** panel (collapsed by default) overrides the Settings defaults for the current conversation only.
 
 | Control | What it does |
 | --- | --- |
@@ -67,7 +75,7 @@ The settings panel collapses (click its title); it starts collapsed on terminals
 
 | Section | API | Notes |
 | --- | --- | --- |
-| Harness | `/v1/chat/completions` | See [Harness](#harness) above. |
+| Chat | `/v1/chat/completions` | See [Chat](#chat) above. |
 | API (`--section chat`) | `/v1/chat/completions`, `/v1/completions[/stream]`, `/v1/messages`, `/v1/routing/explain`, `/v1/feedback` | Pick the dialect in the dropdown. Model, provider, policy, temperature, max tokens, system prompt; `stream` and `server tools` (`run_tools`) toggles. Slash commands: `/help /clear /retry /explain /good /bad /save /system /model /provider /policy /mode /stream`. A failed or stopped turn is dropped from history, so `/retry` is safe. |
 | Providers | `/v1/providers` | Circuit state, health, p50 latency; refreshes every 5 s. |
 | Routing | `/v1/admin/policies`, `/v1/routing/explain` | List policies (runtime-edited ones are marked). **Copy** loads a row into the fields, **Set** applies them as one policy at runtime, **Delete** removes one until restart (both `admin`, in memory only — edit `config/routing.yml` to keep a change; a `422` lists every problem in the detail view). **Explain** dry-runs a request under the selected policy: ranking, scores and exclusions, nothing sent. |

@@ -24,9 +24,11 @@ from textual.widgets import ContentSwitcher, Footer, OptionList, Static
 from textual.widgets.option_list import Option
 
 from caips_cli import credentials
+from caips_tui import prefs
 from caips_tui.chat import ChatPane
 from caips_tui.client import ApiError, Client
 from caips_tui.harness_view import HarnessPane
+from caips_tui.home import HomePane, SettingsPane
 from caips_tui.panes import (
     AdminPane,
     AgentsPane,
@@ -51,8 +53,9 @@ from caips_tui.panes import (
 from caips_tui.widgets import Pane
 
 SECTIONS: list[tuple[str, str, type[Pane]]] = [
-    ("harness", "Harness", HarnessPane),
-    ("chat", "API", ChatPane),
+    ("home", "Home", HomePane),
+    ("harness", "Chat", HarnessPane),
+    ("chat", "API playground", ChatPane),
     ("keys", "Keys", KeysPane),
     ("providers", "Providers", ProvidersPane),
     ("routing", "Routing", RoutingPane),
@@ -72,15 +75,16 @@ SECTIONS: list[tuple[str, str, type[Pane]]] = [
     ("finetune", "Fine-tuning", FinetunePane),
     ("evals", "Evals", EvalsPane),
     ("admin", "Admin", AdminPane),
+    ("settings", "Settings", SettingsPane),
 ]
 
 # How the sidebar groups the sections (every section appears exactly once).
 GROUPS: list[tuple[str, list[str]]] = [
-    ("WORKSPACE", ["harness", "chat", "keys"]),
+    ("START", ["home", "harness", "keys", "settings"]),
     ("GATEWAY", ["providers", "routing", "models", "usage", "budgets", "status"]),
     ("AUTOMATION", ["runs", "approvals", "tools", "agents", "tasks"]),
     ("DATA", ["memory", "rag", "feedback"]),
-    ("ADVANCED", ["local", "finetune", "evals", "admin"]),
+    ("ADVANCED", ["chat", "local", "finetune", "evals", "admin"]),
 ]
 LABELS = {sid: label for sid, label, _ in SECTIONS}
 
@@ -94,9 +98,11 @@ Tab       next control          Shift+Tab   previous control
 F5 / Ctrl+R   refresh the current section
 Esc       stop a reply          F1   this help      Ctrl+Q   quit
 
-Harness  a chat session with model, context, system prompt, incognito, tools
-         and reasoning in view.  API  the raw OpenAI / native / Anthropic dialects.
+Home     first-run checklist: gateway, token, provider key.
+Chat     talk to any model; replies render as Markdown. Defaults are set in Settings.
+Settings model, temperature, system prompt, theme, sign out (saved on this computer).
 Keys     the only place secrets are entered. Nothing is asked at startup.
+API playground (under Advanced) speaks the raw OpenAI / native / Anthropic dialects.
 
 Every button makes one documented API request. Sections that need the admin
 scope show the server's error if your token lacks it. Destructive actions ask first.
@@ -278,6 +284,17 @@ class CaipsTui(App[None]):
     HarnessPane.incognito #prompt { border: tall $warning 60%; }
     HarnessPane.incognito #prompt:focus { border: tall $warning; }
 
+    #home-steps { height: auto; margin-bottom: 1; }
+    #home-tokenrow { height: auto; }
+    #home-tips { margin-top: 1; }
+    #settings-scroll { height: 1fr; }
+    #set-system { height: 5; border: none; padding: 0 1; background: $panel; }
+    #set-system:focus { background: $primary 25%; }
+    .fgroup Select { width: 100%; }
+    .fgroup Select > SelectCurrent { border: none; height: 1; padding: 0 1; background: $panel; }
+    .fgroup Switch { border: none; height: 1; padding: 0; }
+    .msg.assistant { padding: 0 1; }
+
     .body { height: 1fr; }
     .body DataTable { width: 2fr; }
     .detail { width: 1fr; border-left: solid $primary-darken-2; padding: 0 1; }
@@ -298,11 +315,15 @@ class CaipsTui(App[None]):
     ]
     COMMANDS = {SectionCommands}
 
-    def __init__(self, client: Client, section: str = "harness"):
+    def __init__(self, client: Client, section: Optional[str] = None):
         super().__init__()
         self.client = client
+        self.prefs: dict[str, Any] = prefs.load()
+        self.prefs_version = 0
+        if section is None:  # first run: guide the user; otherwise straight to chat
+            section = "harness" if client.has_key else "home"
         self.start_section = (
-            section if any(s[0] == section for s in SECTIONS) else "harness"
+            section if any(s[0] == section for s in SECTIONS) else "home"
         )
         self.section = self.start_section
 
@@ -350,7 +371,11 @@ class CaipsTui(App[None]):
     async def on_mount(self) -> None:
         for t in THEMES:
             self.register_theme(t)
-        self.theme = "caips-dark"
+        self.theme = (
+            self.prefs["theme"]
+            if self.prefs["theme"] in {t.name for t in THEMES}
+            else "caips-dark"
+        )
         self.online: Optional[bool] = None
         self.query_one("#topinfo", Static).update(self.client.base_url)
         self.sub_title = self.client.base_url
@@ -422,8 +447,20 @@ class CaipsTui(App[None]):
         await self.show_section(sid)
         self.pane(sid).focus_primary()
 
+    def apply_prefs(self, values: dict[str, Any]) -> None:
+        """Use freshly saved settings: theme now, chat defaults when Chat next opens."""
+        self.prefs = values
+        self.prefs_version += 1
+        if values["theme"] in {t.name for t in THEMES}:
+            self.theme = values["theme"]
+
     def action_toggle_theme(self) -> None:
         self.theme = "caips-light" if self.theme == "caips-dark" else "caips-dark"
+        self.prefs = {**self.prefs, "theme": self.theme}
+        try:
+            prefs.save(self.prefs)
+        except OSError:
+            pass  # the theme still changes for this session
 
     def action_help(self) -> None:
         self.push_screen(HelpScreen())
@@ -434,7 +471,7 @@ class CaipsTui(App[None]):
         if self.client.has_key:
             auth = Text("key set", style="dim")
         else:
-            auth = Text.assemble(("no API key", "yellow"), ("\nadd one in Keys", "dim"))
+            auth = Text.assemble(("no API key", "yellow"), ("\nadd one on Home", "dim"))
         started = time.monotonic()
         try:
             await self.client.request("GET", "/health")
@@ -480,9 +517,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     ap.add_argument(
         "--section",
-        default="harness",
+        default=None,
         choices=[s[0] for s in SECTIONS],
-        help="section to open first",
+        help="section to open first (default: Home until a token is saved, then Chat)",
     )
     return ap
 

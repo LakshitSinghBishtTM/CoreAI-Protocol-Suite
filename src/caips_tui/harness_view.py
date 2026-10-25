@@ -23,6 +23,7 @@ import asyncio
 from pathlib import Path
 from typing import Any, Optional
 
+from rich.markdown import Markdown
 from rich.text import Text
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical, VerticalScroll
@@ -63,7 +64,7 @@ def field(label: str, widget: Any, classes: str = "") -> Vertical:
 
 
 class HarnessPane(ChatPane):
-    TITLE = "Harness"
+    TITLE = "Chat"
     HELP = ""
     FLAGS = {"tools": "Tools", "stream": "Stream"}
 
@@ -72,11 +73,38 @@ class HarnessPane(ChatPane):
         self.reasoning = "off"
         self.incognito = False
         self.files: dict[str, str] = {}
+        self._prefs_seen = -1
+
+    # -- saved defaults (Settings section) ---------------------------------
+    def apply_prefs(self) -> None:
+        """Fill the session fields from the saved defaults (chat history is untouched)."""
+        p = getattr(self.app, "prefs", None)
+        if not p:
+            return
+        self._prefs_seen = getattr(self.app, "prefs_version", 0)
+        for k in ("model", "provider", "policy", "temperature", "max_tokens", "turns"):
+            self.set_val(k, str(p[k]))
+        self.set_val("system", p["system"])
+        self.set_reasoning(p["reasoning"] if p["reasoning"] in REASONING else "off")
+        self.set_flag("tools", bool(p["tools"]))
+        self.set_flag("stream", bool(p["stream"]))
+
+    async def activate(self) -> None:
+        if self._prefs_seen != getattr(self.app, "prefs_version", 0):
+            self.apply_prefs()
+        await super().activate()
+
+    def render_reply(self, text: str) -> Any:
+        return Markdown(text)
 
     # -- layout ---------------------------------------------------------
     def body(self) -> ComposeResult:
         yield Static("", id="hx-badges")
-        with Collapsible(title="Session settings", collapsed=False, id="hx-config"):
+        with Collapsible(
+            title="Session settings (defaults live in Settings)",
+            collapsed=True,
+            id="hx-config",
+        ):
             with Horizontal(classes="frow"):
                 yield field(
                     "Model", Input(placeholder="auto: router picks", id="fld-model")
@@ -131,11 +159,12 @@ class HarnessPane(ChatPane):
             yield Button("Clear", id="clear")
             yield Button("Stop", id="stop", variant="warning")
         yield Input(
-            placeholder="Message the harness …  (/help for commands)", id="prompt"
+            placeholder="Message CaiPS …  (/help for commands)", id="prompt"
         )
 
     def on_mount(self) -> None:
         super().on_mount()
+        self.apply_prefs()
         self.update_badges()
         self.run_worker(self.show_empty_hint(), group="hint")
         try:
@@ -151,9 +180,9 @@ class HarnessPane(ChatPane):
         if self.history or self.query(".empty-hint"):
             return
         lines = [
-            "Start a conversation below.",
+            "Ask anything below.",
             "",
-            "/help lists commands · Esc stops a reply",
+            "/help lists commands · Esc stops a reply · defaults live in Settings",
         ]
         if not self.client.has_key:
             lines[1:1] = [
@@ -271,8 +300,11 @@ class HarnessPane(ChatPane):
         for hint in self.query(".empty-hint"):
             await hint.remove()
         if kind in ("user", "assistant"):
-            label = "You" if kind == "user" else "Assistant"
-            body = Text.assemble((f"{label}\n", "bold"), text)
+            body = (
+                Text.assemble(("You\n", "bold"), text)
+                if kind == "user"
+                else Text(text)  # replaced by Markdown as the reply streams in
+            )
             w = Static(body, classes=f"msg {kind}")
             t = self.query_one("#transcript", VerticalScroll)
             await t.mount(w)
