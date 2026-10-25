@@ -1,466 +1,135 @@
-# CaiPS Roadmap: Gateway, Tools, Agents and Local Models
+# CaiPS Roadmap: Remaining Work
 
-## Summary
+This file lists only what is still open. Finished work (gateway reliability, routing policies, budgets, OpenAI and Anthropic compatible APIs, tools layer and MCP, agent harness, GGUF runtime, memory, RAG, guardrails, evals, fine-tuning, CLI, TUI, Helm and k8s manifests) has been removed; see `CHANGELOG.md` and the per-layer docs for it.
 
-CaiPS becomes a self-hostable AI platform for both individuals and teams, built in four layers: a model gateway, a tools provider, an agent harness, and local model support, with each layer usable alone. The plan runs in 11 phases, and the gateway reaches a stable 1.0 before the other layers are built on it.
+Principles still apply: layers depend downward only, every layer ships alone, claims match tests, and numbers come from scripts in the repo.
 
-- **Gateway:** one OpenAI-compatible API in front of cloud and local models, with routing, failover, budgets and caching.
-- **Tools provider:** a registry of tools exposed over MCP, with permissions and sandboxing, usable by any model or agent.
-- **Agent harness:** a tool-use loop with context management, checkpoints, approvals and full traces.
-- **Local models:** run GGUF models like LM Studio does, first by connecting to existing servers, later with a managed llama.cpp runtime.
-- **Around them:** observability, cost control, memory, RAG, evals, fine-tuning, guardrails, a web UI, SDKs and plugins.
+**Non-goals:** training models from scratch, a hosted SaaS offering, multi-agent swarms.
 
-Credential cleanup (rotating keys, purging git history) is assumed done before Phase 0. Test status of the current code is unverified: the full install timed out and `tests/test_api.py` failed at collection in a minimal setup, so Phase 0 starts there.
+## 1. Gateway reliability and verification
 
-## Architecture at a glance
+- Exercise failover, breakers and retries against a real provider outage (staged outage or a scheduled live job with tiny requests), not only mocks and simulated failures.
+- Share circuit breaker state across replicas (it is per process today).
+- Add provider contract tests for Gemini, Grok and DeepSeek (Anthropic and OpenAI have them).
+- Raise API route coverage (about two thirds) and add tests for the task orchestrator.
+- Publish chaos-test results and p50/p99 gateway overhead from `scripts/chaos.py` and `scripts/loadtest.py`; target under 20 ms p99.
+- Run a memory profile (`tracemalloc` or `memray`) under load and confirm every queue and cache is bounded.
+- Verify cost accuracy against provider invoices (target within 1%) and refresh the static model registry and price tables so they don't go stale.
+- Forward `temperature` correctly for Anthropic models once the SDK allows it.
+- Make runtime budget and policy edits persistent (they reset on restart).
+- Add a token-issuing endpoint (tokens are minted by hand today).
 
-&#91;embedded content: architecture · 4 layers, 2 provider types, cross-cutting services\]
+## 2. Storage and packaging
 
-Calls flow down one layer at a time, and only the gateway talks to models, cloud or local. Auth, tracing, budgets and evals apply across all layers.
+- Postgres support for the harness run store, the database query tool, and backups (SQLite only today).
+- Confirm migrations run at startup and are tested forward and backward on both SQLite and Postgres.
+- Reduce runtime dependencies (26 in `requirements.txt`, target under 20) and confirm one logging library is used.
+- Add `gitleaks` and `pip-audit` to CI.
+- Finish type checking: `mypy` clean in CI.
+- Confirm PyPI trusted publishing and release provenance work end to end.
 
-## Principles and non-goals
+## 3. Tools layer
 
-Five rules keep a four-layer project from collapsing into one tangled codebase.
+- Container or microVM code-execution runner (the current sandbox is process level).
+- Reconnect logic in the MCP client after a dropped connection.
+- Streamed tool use and `count_tokens` for the Anthropic-compatible `/v1/messages` endpoint.
+- Tool calling and structured output for local models.
+- Postgres support for the database query tool (see section 2).
 
-1. **Layers depend downward only.** Agents use tools, tools use the gateway, the gateway uses providers. Nothing calls upward.
-2. **Every layer ships alone.** Someone can run just the gateway, or gateway plus tools, without the harness.
-3. **Claims match tests.** A feature appears in the README only after it has tests and a documented behavior.
-4. **Delete before adding.** Each module needs a live reference, an owner and a test, or it moves to `experimental/` or goes.
-5. **Measure, don't claim.** Latency, cost and reliability numbers come from a script in the repo.
+## 4. Agent harness
 
-**Non-goals:** training models from scratch, a hosted SaaS offering, multi-agent swarms, and any "AI consciousness" features. The `consciousness_detection` module is archived.
+- A separate planning step (the model plans in-loop today).
+- Postgres run store (see section 2).
 
-## Phases 0 and 1: make it green, then cut scope
+## 5. Local models
 
-A fresh clone must install and pass tests, and the repo must shrink to what the four layers need.
+- Pin a tested `llama-server` release for `python -m localrt install-runtime`, and add scheduled runtime updates.
+- Expose the GGUF model registry fully through API and CLI (listing, inspect and pull exist; the registry itself is open per the old roadmap).
+- Run model pulls as background jobs instead of inline.
+- Add presets for LM Studio, Ollama, `llama-server` and vLLM with model auto-discovery through `/v1/models`.
+- Optional speculative decoding with a draft model, and prompt-cache reuse.
+- Cold-load first-token benchmark per model size.
+- Use chat templates from the GGUF through llama.cpp for every managed model.
 
-**Phase 0: Foundation**
+## 6. Memory, RAG and caching
 
-- Reproduce and fix the `tests/test_api.py` collection error; find out why the full install is slow.
-- Split dependencies into runtime and dev files; install must finish in minutes.
-- Make CI run pytest, ruff and black on every PR, and replace the static "Production" badge with the real CI status.
-- Remove tracked junk: `logs/`, `config/*.log`, `dump.sql`, `database/production_backup.db`, `terraform.tfstate`, shell history files. Add `.env.example` with placeholders.
-- Delete `scripts/emergency_fix.sh` and `scripts/fix_server.sh`, or fold their fixes into code.
-- Move every `TODO.txt` item to a labeled GitHub issue, then delete the file.
+- Vector backend for long-term memory.
+- SQLite-vec or pgvector backend for RAG (brute-force cosine today).
+- Test PDF ingestion (needs optional `pypdf`; untested).
+- Optional semantic response cache with per-tenant isolation and privacy notes.
+- Automatic difficulty classifier for local-versus-cloud routing (today it is a caller-set hint).
 
-**Phase 1: Scope cut**
+## 7. Evals and fine-tuning
 
-- Triage each package with one question: does a request need it to be routed, or does a layer in this roadmap need it?
-- Keep `providers/`, `coreai/router.py`, limiter, cache, retry, `api/`, `middleware/`, `utils/cost.py` and `utils/tokens.py` as core.
-- Archive `neural/consciousness_detection.py`. Keep `neural/training.py` (fine-tuning) as an optional extra, to be hardened in Phase 9.
-- Rebuild `agents/` and `protocols/` on top of the tools layer (Phase 7) where the new design needs them, and keep them marked experimental until then.
-- Trim `requirements.txt` to what the code imports (about 50 packages now; target under 20). Drop SDKs for providers that aren't supported and duplicates such as two schedulers, two retry libraries and two JWT libraries.
-- Consolidate `setup.py`, `setup.cfg` and `pyproject.toml` into one `pyproject.toml`.
-- Rewrite the README to describe only what ships.
+- Agent replay in the eval suite.
+- CLI rubric grading.
+- Fine-tuning: stream job logs, set per-model budget defaults for fine-tuned models, verify price tables (marked UNVERIFIED), and add a dataset-upload API.
+- Anthropic fine-tuning is a stub; support it only after the provider API is verified. Later: other providers' fine-tuning and LoRA adapters for local GGUF models.
 
-**Exit criteria:** `pip install -e .[dev] && pytest` passes on a fresh clone, CI is green, and every remaining module has a test and a live reference.
+## 8. Multi-tenancy and access
 
-## Phase 2: Gateway reliability
+Not started. Single-user mode stays the default.
 
-The gateway is the foundation for every other layer, and its failover logic is currently untested (the TODO admits "it works, I just don't know why"). Nothing above it should be built until this phase is done.
+- Organizations, teams and users with roles (admin, developer, viewer) and per-tenant data isolation.
+- SSO through OIDC and SAML.
+- Scoped API keys with rotation and expiry.
+- Per-tenant budgets, rate limits, tool allow lists and log retention.
 
-**Tests that must exist**
+## 9. SDKs, plugins and integrations
 
-- Failover when the primary returns 5xx, times out, or returns 429 or 529; the router moves to the next provider.
-- Circuit breaker: opens after N failures, half-open probe, closes on success, tested with a fake clock.
-- Retries: bounded attempts, exponential backoff with jitter, honors `Retry-After`, never retries 4xx or non-idempotent calls.
-- Rate limiter: per-key limits under concurrent load.
-- All provider tests use recorded or mocked responses. No live API calls in CI.
+- Typed agent and tool clients in the Python and TypeScript SDKs (the TypeScript SDK exists under `sdk/typescript`; check how complete it is).
+- Stable plugin API for providers, tools, guardrails and routing strategies, plus a registry of community plugins.
+- OpenTelemetry tracing coverage for tool and agent steps.
+- Usage reports: confirm CSV and JSON export per key and model.
 
-**Known problems to fix**
+## 10. Deployment
 
-- **Anthropic 529 (overloaded):** retry with backoff and jitter, honor `Retry-After`, count toward the breaker, and fail over. Log the status distribution so the cause is visible. *Status: done (`error_statuses` per provider in router stats, `retries_by_status` in retry stats, retry log lines carry the HTTP status, Prometheus `caips_provider_error_status_total{provider,status}`).*
-- **DeepSeek reasoner latency spikes and Grok p99 near 30s:** per-provider connect and read timeouts plus a total request deadline. Add optional hedged requests for latency-sensitive routes.
-- **OOM kills under load:** profile with `tracemalloc` or `memray`, bound every queue and cache by size and TTL, and add a checked-in load test.
-- **Emergency shutdown:** make it a tested kill switch (stop accepting traffic, drain in-flight requests) or delete it.
+- Validate the Terraform example (`deploy/terraform/`, unvalidated).
+- Zero-downtime config reload.
+- Backups that copy model files (listed only today) and cover Postgres.
+- Documented upgrade path between versions.
+- Optional OpenAPI docs site and public status page template.
+- Single-binary or single-container local mode.
 
-**New capabilities**
+## 11. Security
 
-- Declarative routing policies in YAML (cost, latency, reliability weights, allow and deny lists, per-model fallback chains) with schema validation and hot reload.
-- A dry-run endpoint that explains why a request would route where it does.
-- Per-provider health scoring from recent errors and latency, used by the router.
-- Request deadlines and cancellation that propagate to providers.
+- Independent audit of, or removal of, the custom crypto in `protocols/` (unaudited and not used by the request path).
+- Decide the future of `protocols/`: rebuild on the tools layer or archive.
+- Remove or finish the unwired `middleware/` package (the server uses `api/middleware.py`).
+- Check git history for previously committed secrets (`.env`, `.netrc`, `.pypirc`, `keys/`) and rotate anything real.
+- Treat third-party GGUF files and `llama.cpp` updates as untrusted; keep the runtime updated.
+- Maintain a threat-model document reviewed at each major phase.
 
-**Exit criteria:** a chaos script can kill or slow any single provider while the gateway keeps serving, and the behavior is documented.
+## 12. Release and documentation
 
-## Phase 3: Observability, cost and governance
-
-After this phase, anyone can answer "which provider served this request, why, what did it cost and how long did it take" from logs and metrics alone.
-
-- **Request IDs** on every request, carried through logs and to providers that accept them.
-- **Structured JSON logs** with one logging library (the repo lists both loguru and structlog), real rotation and size caps. No more 847MB log files.
-- **Metrics endpoint** in Prometheus format: requests, errors, latency histograms per provider and model, cache hit rate, breaker state, token counts, cost.
-- **Distributed tracing** with OpenTelemetry spans for gateway, provider and (later) tool and agent steps.
-- **Cost tracking you can trust:** unit tests for `utils/cost.py` against current price tables, prices in a versioned config file, and a fix for the billing threshold that fires far later than the warning.
-- **Budgets and quotas:** soft and hard spend limits per API key, team and model, plus token and request quotas, with clear error responses.
-- **Usage reports:** per-key and per-model usage over time, exportable as CSV or JSON.
-- **Health endpoints:** `/healthz` (process up) and `/readyz` (dependencies reachable; *status: done, lists per-provider circuit and up state, and a down local server counts as unavailable*), plus per-provider health in the API.
-- **Audit log:** who changed keys, policies or budgets, and when.
-- **Routing policy docs:** what the weights mean, with worked examples.
-
-**Exit criteria:** a Grafana dashboard template ships in the repo, and a cost spike or provider outage is visible within one minute.
-
-## Phase 4: API, streaming and packaging
-
-This phase makes CaiPS a drop-in gateway: existing SDKs and tools work by changing a base URL. It ends with the Gateway 1.0 release.
-
-**API surface**
-
-- OpenAI-compatible `/v1/chat/completions`, `/v1/completions`, `/v1/embeddings` and `/v1/models`.
-- Streaming over server-sent events, with defined behavior when a provider fails mid-stream (clean error event, no silent truncation).
-- Normalized tool calling and structured output (JSON mode, JSON schema) across OpenAI, Anthropic and Gemini formats. *Status: done for all four providers. Streamed tool calls are buffered (complete calls sent as SSE chunks); `json_schema` output is validated with one retry. Local models are open.*
-- Vision and image inputs where the provider supports them, with capability flags per model. *Status: done for image URLs and base64 on OpenAI, Grok, Anthropic and Gemini.*
-- Optional Anthropic-compatible `/v1/messages` endpoint for clients that expect it. *Status: done (no streamed tool use, no `count_tokens`).*
-- Model aliases and virtual models (for example `fast`, `cheap`, `best`) mapped to routing policies. *Status: done (`DEFAULT_ALIASES`, listed in `/v1/models`).*
-
-**Packaging and developer experience**
-
-- `src/` layout, one `pyproject.toml`, single-source versioning, and PyPI releases through trusted publishing.
-- Type hints everywhere, `mypy` or `pyright` in CI, `ruff`, and `pre-commit` hooks.
-- Slim multi-stage Docker image (non-root, pinned base) with SQLite as the default storage (Postgres optional, migrations tested on both) and a minimal `docker-compose.yml`.
-- A five-minute quickstart tested in CI: install, set one key, run, send one `curl`. *Status: done (`scripts/quickstart_check.sh`).*
-- `examples/` for basic routing, fallback chains, budgets and adding a custom provider. *Status: done.*
-- `CONTRIBUTING.md`, an architecture doc, and a "how to add a provider" guide built on `providers/base.py`.
-- Fewer issue and PR templates, placed where GitHub reads them (`.github/ISSUE_TEMPLATE/`).
-
-**Exit criteria:** the OpenAI Python SDK works against CaiPS with only a base URL change, and Gateway 1.0 is tagged and published.
-
-## Phase 5: Local models, connect mode
-
-The fastest route to local GGUF support is a provider for any OpenAI-compatible server. The user runs the model; CaiPS routes to it. This also proves the provider abstraction is clean.
-
-- A generic `openai-compatible` provider with a configurable base URL, optional key and model list. *Status: done (`providers/local.py`).*
-- Presets for LM Studio, Ollama, `llama-server` (llama.cpp) and vLLM, with auto-discovery of loaded models through `/v1/models`.
-- Per-model capability flags (tool calling, vision, JSON mode, context length) so the router and tools layer never assume what a local model can't do. *Status: done.*
-- Local usage recorded with tokens and latency at zero dollar cost, with an optional hardware or electricity cost estimate. *Status: done.*
-- Routing rules for local models: keep requests tagged `private` on local only, try local first and fall back to cloud on timeout or queue depth, send small tasks local and hard ones to a frontier model. *Status: private, local-first fallback and queue-depth (`max_queue`) and difficulty rule done (`metadata.difficulty`: `easy` goes local first, `hard` cloud first; a hint set by the caller, no automatic classifier).*
-- Health checks that mark a local server down quickly, since desktop servers come and go. *Status: done (10 s background probe, `LocalProvider.probe`).*
-
-**Exit criteria:** a request to a model name configured against LM Studio or Ollama works through the same API as a cloud model, with failover to a cloud model when the local server is down.
-
-## Phase 6: Tools provider
-
-CaiPS becomes the place tools live: registered once, permissioned, and usable by any model, client or agent. It builds on MCP (Model Context Protocol) instead of inventing a format.
-
-**Core**
-
-- **Tool registry:** each tool has a name, JSON schema, description, version, owner, timeout and permission level (read-only, write, destructive). *Status: done (`src/tools/registry.py`), including allow lists (deny by default), schema validation, approval gate, output cap and audit hook. Not yet wired into the gateway, API or audit log.*
-- **MCP server:** expose the registry so any MCP client (editors, other agents, desktop apps) can use CaiPS tools. *Status: done (`POST /mcp` and `python -m tools` stdio; `src/tools/mcp.py`).*
-- **MCP client:** connect to external MCP servers over stdio and HTTP and add their tools to the registry, with per-server allow lists. *Status: done (`src/tools/mcp_client.py`; connects at startup, no reconnect yet).*
-- **Tool-call execution in the gateway:** when a model returns a tool call, CaiPS can run it and continue the conversation, or hand it back to the client. Selectable per request. *Status: done. `run_tools: true` on `/v1/chat/completions` runs the caller's server-side granted tools (`src/tools/executor.py`; step and cost limits, approval pause). See `docs/tools.md`.*
-- **Permissions and policy:** per-key and per-agent tool allow lists, argument validation against the schema, and rate limits per tool. *Status: done for per-subject allow lists (`config/tools.yml`), schema validation and per-tool rate limits; per-agent lists done in Phase 7 (`AgentDef.allowed_tools` is enforced by the harness and `POST /v1/runs` rejects tools the caller isn't granted).*
-- **Approvals:** destructive tools pause for human approval through an API and webhook. *Status: done (API plus signed webhook).*
-
-**Built-in tools**
-
-- HTTP fetch with domain allow lists, file read and write inside a scoped workspace, web search through a configurable provider, and a calculator. *Status: calculator, scoped files and HTTP fetch done (`src/tools/builtin.py`; files and HTTP only registered when configured; fetch blocks non-public hosts and redirects). Web search, read-only database query and an allow-listed approval-gated shell also done (`src/tools/extra.py`).*
-- Sandboxed code execution (container or microVM) with no network by default and CPU, memory and time limits. *Status: process-level version done (`src/tools/sandbox.py`: `python -I`, empty env, rlimits, timeout, network namespace via `unshare`, refuses to run if it can't isolate; DESTRUCTIVE so approval-gated; registered from `python_sandbox:` in `config/tools.yml`; container/microVM runner open).*
-- Database query tool with read-only mode, and a shell tool disabled by default. *Status: done for SQLite (Postgres open).*
-
-**Quality and safety**
-
-- Treat tool output as untrusted input: label it, cap its size, and strip or flag instruction-like content to limit prompt injection. *Status: done (`guardrails/injection.py`; `ToolResult.as_untrusted` labels, escapes wrapper tags, caps and flags; heuristic, so flags rather than proves).*
-- Record every tool call (arguments, result, duration, caller) in the audit log and traces. *Status: done (audit log and `caips.tool` spans; argument names only, by design not values).*
-- Tool test harness: replay recorded calls against a tool to catch regressions. *Status: done (`src/tools/replay.py`).*
-- Capability negotiation so tools aren't offered to local models that can't call them reliably. *Status: done (`Router.can_offer_tools`, `run_tool_loop(tools_ok=...)`; tools are withheld and the reply carries `metadata.tools_skipped` when no candidate can call them).*
-
-**Exit criteria:** an external MCP client can list and call CaiPS tools, and a model request can use a registered tool end to end with permissions enforced and the call visible in traces.
-
-## Phase 7: Agent harness
-
-Rebuild `agents/` as a small, inspectable harness on top of the gateway and tools layers. Start with one pattern that works (a tool-use loop) before adding anything multi-agent.
-
-**The loop**
-
-- Plan, call the model, run tools, observe, repeat, until done or a limit is hit. *Status: done (`src/harness/runner.py`; no separate planning step yet, the model plans in-loop).*
-- Hard limits per run: max steps, token and cost budget, and wall-clock deadline. Budgets are enforced by the gateway, not just the agent. *Status: done in harness (steps, cost, tokens, deadline); each model call is checked against and recorded in the owner's gateway budget and usage ledger (`runs_api.gateway_route`), and the run's own cap is passed in request metadata.*
-- Agent definitions as config: system prompt, model or routing policy, allowed tools, limits, and memory settings. *Status: done (`harness/config.py`, `AgentDef.from_dict`); memory settings done (`memory_ns`, `memory_recall`: owner-scoped recall into the system prompt, labeled untrusted).
-- Run API: start, status, cancel, pause, resume, and stream events. *Status: done (`HarnessRunner` and `api/runs_api.py`: `/v1/runs` start, list, status, events, SSE stream, cancel, pause, resume).*
-
-**Context and state**
-
-- Context management: token counting, truncation and summarization when the window fills, with pinned instructions that never drop. *Status: done (`harness/context.py`; pinned task and system prompt, optional model summaries).*
-- Checkpointing after every step so a crashed or paused run resumes where it stopped. *Status: done (one sqlite transaction per step).*
-- Durable run storage (database) with the full message and tool history. *Status: done (`harness/store.py`, sqlite; Postgres still open).*
-
-**Control**
-
-- Human-in-the-loop approvals for destructive tools and for steps the agent flags as uncertain. *Status: done for destructive tools and per-agent `approval_tools`, answered through the API by an admin only; agent-flagged uncertainty done (`AgentDef.ask_when_uncertain` offers a `request_human_review` tool that pauses the run for an approval decision).*
-- Loop and stall detection (same tool call repeated, no progress) that stops the run with a clear reason. *Status: done (repeated identical tool calls).*
-- Tighter default limits and shorter plans when the backing model is a small local model. *Status: done (`AgentDef.local`).*
-- Kill switch: stop all runs for a key, team or the whole instance. This replaces `emergency_shutdown.py`. *Status: done (`POST /v1/runs/kill`, admin scope, per owner or whole instance); `emergency_shutdown.py` kept on purpose: it is the tested drain-and-exit kill switch (`tests/test_kill_switch.py`), which satisfies the Phase 2 "tested kill switch or delete" item; the run kill switch covers agents only.*
-
-**Visibility**
-
-- A full trace per run (every model call, tool call, token count, cost) that can be replayed and diffed. *Status: done (events table, `GET /v1/runs/{id}/events`, `diff_traces`); replay against a model done (`harness.replay_run`: re-asks the model at each recorded turn using recorded tool results, never executes tools, reports per-turn tool and argument matches).*
-- Run viewer in the API first, UI later (Phase 10).
-
-**Later patterns, only after the loop is solid**
-
-- Sub-agents that run as tool calls with their own budgets. *Status: done (`harness.subagent_tool`: child is a normal run with its own limits and trace, nesting capped at 2, child approvals are left to humans).*
-- Scheduled and event-triggered runs (cron, webhooks). *Status: interval and event-bus triggers done (`harness.TriggerManager`: no overlap, per-hour cap; wired through a `triggers:` block in `config/agents.yml`, started and stopped with the harness runtime; cron expressions (`harness/cron.py`) and signed inbound webhooks (`POST /v1/triggers/{name}/fire`) done)*.
-- Reusable workflows with fixed steps for tasks that shouldn't be left to a model's judgment. *Status: library done (`harness.run_workflow`: ordered tool and model steps, templated, permissions and approvals enforced, tool output labeled untrusted in prompts, cost cap); `workflows:` in `config/agents.yml`, `GET /v1/workflows`, `POST /v1/workflows/{name}/run` and `caips workflows` done; runs are synchronous but every run is recorded in history (`GET /v1/workflows/{name}/runs[/run_id]`, caller-scoped, bounded at 200 per workflow and 90 days; `caips workflows runs`, `caips workflows run-detail`).*
-
-**Exit criteria:** a defined agent completes a multi-step task using tools, survives a mid-run restart through a checkpoint, respects its budget, and its trace shows every step.
-
-## Phase 8: Local models, managed GGUF runtime
-
-With this phase, dropping a `.gguf` file into a folder is enough, as in LM Studio. CaiPS launches and supervises `llama-server` (llama.cpp) as a child process and talks to it over localhost HTTP. It does not embed inference in the gateway process, so a native crash or out-of-memory kill can't take down routing, auth or the other providers.
-
-**Model registry** *(Status: done, `src/localrt/gguf.py` and `registry.py`; API and CLI exposure open.)*
-
-- A local models directory scanned for `.gguf` files, with metadata read from each header: architecture, parameter count, quantization, trained context length and embedded chat template.
-- Capability flags per model (tools, vision, JSON mode, embeddings), detected where possible and overridable in config.
-- License and source shown per model, so users see terms before use.
-
-**Downloads**
-
-- Pull from Hugging Face by name and quantization (for example `org/repo:Q4_K_M`), with resumable downloads, disk-space checks and SHA-256 verification.
-- Delete, list and inspect models through the API and CLI. *(Pull with resume, disk check and SHA-256: done, `src/localrt/download.py`. Admin API done: `GET/DELETE /v1/local/models`, `POST /v1/local/models/pull`, `POST .../unload` in `api/local_models_api.py`; CLI done (`python -m localrt list|inspect|pull|delete|hardware`); pull runs inline, not as a background job.)*
-
-**Runtime management**
-
-- Detect an installed `llama-server`, or download an official prebuilt release for the platform. Pin a tested version and update on a schedule. CaiPS does not compile llama.cpp for users.
-- Hardware detection (CUDA, Metal, Vulkan, CPU) and automatic choice of GPU layer offload and context size to fit available memory, with manual overrides. *Status: done for CUDA, Metal, Vulkan and CPU (`src/localrt/hardware.py`; Vulkan uses a conservative half-of-RAM budget because it reports no free VRAM).*
-- *(Gateway wiring done: `managed:` block in `config/local.yml` registers `ManagedLocalProvider`, `src/localrt/provider.py`, with readiness wait, fit check and busy response via `max_queue`.)*
-- Load on first request, unload after an idle timeout, and evict the least recently used model when memory runs short. One child process per loaded model, bound to localhost only.
-- Parallel request slots with a gateway-side queue and a clear "busy" response instead of piling requests on the server.
-- Supervision: health checks, restart with backoff, and crash logs captured per model. *(Lazy load, idle unload, LRU eviction, restart with backoff and give-up: done, `src/localrt/supervisor.py`; gateway wiring, per-model crash logs with rotation, and hung-child detection through the 10 s probe loop also done; prebuilt `llama-server` download done (`src/localrt/runtime.py`, `python -m localrt install-runtime --tag ...`: platform asset match, GitHub-published SHA-256 required, safe unpack; no tag is pinned yet because none has been tested, and scheduled updates are open).)*
-
-**API parity**
-
-- Same OpenAI-compatible endpoints as cloud models: chat, completions, streaming and embeddings.
-- Chat templates taken from the GGUF itself through llama.cpp rather than hand-written per model.
-- Optional speculative decoding with a draft model and prompt-cache reuse as later optimizations.
-
-**Exit criteria:** a new user drops a GGUF into the models folder, sends one request, and gets a streamed response with no other setup. A killed model process restarts without affecting cloud routing.
-
-Ship this as an optional extra (`caips[local]`) so the base gateway stays light.
-
-## Phase 9: Memory, RAG, evals, fine-tuning and guardrails
-
-These features only pay off once real agent runs exist to measure and protect. Evals come first, because without them no later change can be judged.
-
-**Evals (first)**
-
-- A small suite that replays tasks against agents, models and routing configs and scores the results (exact match, rubric, or model-graded). *Status: done for models and routing configs (`src/evals/`, `python -m evals`, `docs/evals.md`); scheduled CI job done (`.github/workflows/evals.yml`: weekly, compares against the previous run's cached results, skips when `EVAL_OPENAI_API_KEY` is unset); agent replay and CLI rubric grading are open.*
-- Regression runs in CI on a schedule, with cost and latency recorded next to quality.
-- Routing evals that compare policies, for example local-first against cloud-only, on the same tasks. *Status: `compare()` done and exposed as `python -m evals tasks.yml --compare cheap best local`, which prints quality, cost and latency per model or alias.*
-- User feedback (thumbs up or down, corrections) stored against requests, usable as an eval source. *Status: done (`src/feedback/`, `api/feedback_api.py`: `POST /v1/feedback`, list, delete, `GET /v1/feedback/eval-tasks` exports corrections that carry a prompt as `exact` tasks; stores only what the caller submits).*
-
-**Memory**
-
-- Short-term: run state and conversation history, already covered by checkpointing in Phase 7.
-- Long-term: per-user and per-agent memory in a key-value or vector store, with explicit write and forget operations and a way to view what is stored. *Status: key-value store with write, view, keyword search and forget done (`src/memory/store.py`, per-owner isolation, PII redacted on write); REST API done (`api/memory_api.py`: `PUT/GET/DELETE /v1/memory`, `GET /v1/memory/search`, scopes `memory:read`/`memory:write`, owner is always the caller); agent tools done (`memory/tool.py`: `memory_remember` WRITE, `memory_search` READ_ONLY with untrusted-wrapped results, `memory_forget` DESTRUCTIVE so approval-gated; bound to one owner, registered from `memory:` in `config/tools.yml`); a vector backend open.*
-- Retention limits and deletion on request. *Status: done (`retention_days`, per-item size and count caps, `forget`).*
-
-**RAG**
-
-- An embeddings endpoint (cloud and local) and a vector store abstraction (SQLite-vec or pgvector first). *Status: embeddings endpoint existed; SQLite vector store with brute-force cosine done (`src/rag/store.py`, per-owner collections, dimension-mismatch safe, bounded size); SQLite-vec/pgvector open.*
-- Document ingestion: text, Markdown, PDF and HTML with chunking, metadata and re-indexing. *Status: done for text, Markdown and HTML; PDF needs optional `pypdf`, untested; unchanged sources skip re-embedding; ingestion API done (`api/rag_api.py`: `POST /v1/rag/{collection}/documents`, list, delete, `POST .../search`; scopes `rag:read`/`rag:write`, per-caller collections).*
-- A retrieval tool in the tools layer, so any agent can search a collection with citations. *Status: done (`rag/tool.py`, bound to one owner and collection, results wrapped as untrusted); registered from `rag:` in `config/tools.yml`, one `search_<name>` tool per collection).*
-
-**Guardrails**
-
-- Input and output filters: PII detection and redaction, secret detection, and configurable blocked topics. *Status: PII and secret detection/redaction done (`src/guardrails/pii.py`) and on by default in logs (`COREAI_LOG_REDACT_PII=0` disables); request/response filters and blocked topics done as a library (`src/guardrails/filters.py`: secrets block, PII redacts, blocked phrases and regexes, length cap); wired into `/v1/chat/completions` through `config/guardrails.yml` (input filters always; output filters on non-streaming replies only; no file means no filtering); per-key policy done (`subjects:` block in `config/guardrails.yml`: per-subject input/output overrides and `allowed_models` globs, 403 `model_not_allowed`; tool and data allow lists per key live in `config/tools.yml`).*
-- Prompt-injection defenses for tool results and retrieved documents. *Status: tool results done (`wrap_untrusted(..., kind="retrieved_document")` is ready for RAG).*
-- Output validation against JSON schemas with automatic retry.
-- Policy per key or team: which models, tools and data an agent may use.
-
-**Caching**
-
-- Exact-match response cache first, then optional semantic cache, both opt-in with clear privacy notes and per-tenant isolation.
-
-**Fine-tuning**
-
-- Keep the existing OpenAI fine-tuning endpoints (`neural/training.py`) as an optional extra, with tests against recorded responses. *Status: tests added (`tests/test_finetune.py`, mocked SDK; no recorded real responses yet). The module claims Anthropic support, but no Anthropic fine-tuning API is verified; treat it as unsupported.*
-- Dataset upload with format and size validation before any paid job starts. *Status: format checks (roles, non-empty text, a user turn) and a 100 MB cap run before upload; no dataset-upload API.*
-- Job tracking: status, logs, a cost estimate before launch, actual cost after, and cancel. *Status: done (`neural/finetune.py`: estimate before launch with `max_cost_usd` refusal, price file `config/finetune_pricing.yml` with UNVERIFIED prices, actual cost from provider-reported tokens, durable records via `COREAI_FINETUNE_DB`). HTTP API: `POST /v1/finetune/estimate`, and `POST /v1/finetune/jobs` takes `max_cost_usd` (422 over the limit); job logs streaming open.*
-- Finished models register in the router automatically, with aliases and budgets like any other model. *Status: catalogue and price-table registration done on success (inference price assumed at 2x base, unverified); aliases done (`TrainingJobConfig.alias` registers `Router.add_model_alias`, which resolves to the real model id so per-model budgets and prices apply); per-model budget defaults for fine-tuned models still open.*
-- Later: fine-tuning APIs from other providers, and LoRA adapters for local GGUF models where llama.cpp tooling supports it.
-
-**Exit criteria:** an eval suite runs in CI, an agent can use a document collection with citations, a fine-tuned model can be launched, tracked and routed like any other, and PII redaction is on by default for logs.
-
-## Phase 10: Platform and ecosystem
-
-The last phase turns the layers into something both self-hosters and teams can adopt without reading the source.
-
-**Web UI and CLI**
-
-- Admin UI: providers and health, keys, budgets, routing policies, models (local and cloud), and usage.
-- Agent UI: define agents, start runs, watch traces live, approve tool calls, and replay past runs.
-- Playground for comparing models side by side on the same prompt.
-- Model manager for local GGUF files: download, load, unload and see memory use.
-- `caips` CLI for the same operations, so everything is scriptable. *Status: started (`src/caips_cli/`, `docs/cli.md`): health, providers, usage, models, local models, runs, approvals, fine-tune and eval. Smoke-tested against a live local server. Streaming done (`caips chat`, `caips runs watch`). Keys done; `caips budgets`, `caips policies` and `caips audit` done (read-only, via `GET /v1/admin/budgets`, `/v1/admin/policies`); budget editing done (`PUT/DELETE /v1/admin/budgets/{subject}`, audited, in memory until restart; `caips budget-set`, `caips budget-rm`); policy editing done (`PUT/DELETE /v1/admin/policies/{name}`, validated with the file's rules and audited, in memory until restart; `caips policy-set`, `caips policy-rm`).*
-
-**Multi-tenancy and access**
-
-- Organizations, teams and users with roles (admin, developer, viewer), and per-tenant data isolation.
-- SSO through OIDC and SAML, scoped API keys, key rotation and expiry.
-- Per-tenant budgets, rate limits, tool allow lists and log retention. Single-user mode stays the default, so self-hosters never need tenants or SSO.
-
-**SDKs and integrations**
-
-- Official Python and TypeScript SDKs (thin, since the API is OpenAI-compatible) with typed agent and tool clients.
-- Plugin system for providers, tools, guardrails and routing strategies, with a stable plugin API and a registry of community plugins.
-- Webhooks and event streams for run completion, budget alerts and provider outages.
-- Notifications to Slack and email for alerts. *Status: signed webhook alerts for budgets done (`coreai/notify.py`; `COREAI_ALERT_WEBHOOK_URL` and `COREAI_ALERT_WEBHOOK_SECRET`; `budget.warning` and `budget.exceeded` events, once per budget window, subject or model and numbers only). Provider-outage events, Slack and email also done through the event bus (`src/utils/events.py`, `docs/events.md`).*
-
-**Deployment**
-
-- Helm chart and Kubernetes manifests, a Terraform example (`deploy/terraform/`, unvalidated; Helm chart in `deploy/helm/`), and a single-binary or single-container local mode.
-- SQLite by default for single-node and self-hosted use, with optional Postgres and Redis for horizontal scaling, and zero-downtime config reload.
-- Backup and restore for the database and model registry, plus a documented upgrade path between versions. *Status: SQLite and config backup, verify and restore done (`python -m coreai.backup`, `docs/deployment.md`); model files are listed but not copied; Postgres not covered.*
-- Optional OpenAPI-driven docs site and a public status page template.
-
-**Exit criteria:** a new team can deploy CaiPS with the Helm chart, create a tenant, add providers and a local model, run an agent with approvals, and see its cost, all through the UI.
-
-## Feature catalog
-
-Every feature in this roadmap, sorted by phase. Must means the layer doesn't work without it, Should means expected by most users, Could means worth building if time allows.
-
-| Feature | Layer | Phase | Priority |
-| --- | --- | --- | --- |
-| Green CI, split dependencies, repo cleanup | Foundation | 0 | Must |
-| Scope cut, archive experimental modules | Foundation | 1 | Must |
-| Failover, circuit breaker, retries with jitter | Gateway | 2 | Must |
-| Per-provider timeouts and request deadlines | Gateway | 2 | Must |
-| Declarative routing policies and dry-run explain | Gateway | 2 | Must |
-| Hedged requests for latency-sensitive routes | Gateway | 2 | Could |
-| Request IDs, JSON logs, Prometheus metrics | Gateway | 3 | Must |
-| OpenTelemetry tracing | Gateway | 3 | Should |
-| Verified cost tracking, price tables | Gateway | 3 | Must |
-| Budgets and quotas per key and team | Gateway | 3 | Must |
-| Audit log | Gateway | 3 | Should |
-| OpenAI-compatible chat, embeddings, models API | Gateway | 4 | Must |
-| Streaming with mid-stream failure handling | Gateway | 4 | Must |
-| Normalized tool calling and structured output | Gateway | 4 | Must |
-| Model aliases and virtual models | Gateway | 4 | Should |
-| Anthropic-compatible `/v1/messages` | Gateway | 4 | Could |
-| PyPI release, slim Docker image, quickstart | Foundation | 4 | Must |
-| SQLite by default, optional Postgres, migrations tested on both | Foundation | 4 | Must |
-| OpenAI-compatible provider (LM Studio, Ollama, llama-server, vLLM) | Local models | 5 | Must |
-| Model capability flags | Local models | 5 | Must |
-| Local-first and privacy routing rules | Local models | 5 | Should |
-| Tool registry with schemas and permissions | Tools | 6 | Must |
-| MCP server and MCP client | Tools | 6 | Must |
-| Tool execution in the gateway | Tools | 6 | Should |
-| Built-in tools (HTTP, files, search, calculator) | Tools | 6 | Should |
-| Sandboxed code execution | Tools | 6 | Should |
-| Approval workflow for destructive tools | Tools | 6 | Must |
-| Tool-use agent loop with budgets and limits | Agents | 7 | Must |
-| Context management and summarization | Agents | 7 | Must |
-| Checkpointing and resume | Agents | 7 | Must |
-| Run traces with replay | Agents | 7 | Must |
-| Agent kill switch | Agents | 7 | Must |
-| Sub-agents, scheduled and event-triggered runs | Agents | 7 | Could |
-| GGUF model registry with metadata | Local models | 8 | Must |
-| Managed `llama-server` lifecycle (load, idle unload, LRU evict) | Local models | 8 | Must |
-| Hugging Face downloads with checksums | Local models | 8 | Should |
-| Hardware detection and offload tuning | Local models | 8 | Should |
-| Speculative decoding, prompt-cache reuse | Local models | 8 | Could |
-| Eval suite and CI regression runs | Quality | 9 | Must |
-| Long-term memory with forget controls | Agents | 9 | Should |
-| Embeddings, vector store, document ingestion, retrieval tool | RAG | 9 | Should |
-| PII redaction and prompt-injection defenses | Guardrails | 9 | Must |
-| Exact-match cache, then semantic cache | Gateway | 9 | Could |
-| Fine-tuning endpoints and job tracking (optional extra) | Models | 9 | Should |
-| Admin UI, agent UI, playground, model manager | Platform | 10 | Should |
-| `caips` CLI | Platform | 10 | Should |
-| Multi-tenancy, roles, SSO | Platform | 10 | Should |
-| Python and TypeScript SDKs | Platform | 10 | Should |
-| Plugin system and registry | Platform | 10 | Could |
-| Webhooks, event streams, Slack and email alerts | Platform | 10 | Could |
-| Helm chart, scaling, backup and restore | Platform | 10 | Should |
-
-## Security model across layers
-
-A gateway that holds provider keys, runs tools and executes agent loops is a high-value target, so security is designed in from Phase 2, not added at the end.
-
-- **Secrets:** read from the environment or a secrets manager, never from tracked files. Add secret scanning (gitleaks) and a pre-commit hook in CI.
-- **Authentication:** scoped API keys with expiry and rotation, JWT for UI sessions, signed webhooks, and SSO later.
-- **Authorization:** every request is checked against the key's allowed models, tools and budgets. Deny by default for tools.
-- **Tools and agents:** sandbox code execution (no network by default, resource limits), scoped file workspaces, domain allow lists for HTTP, approvals for destructive actions.
-- **Prompt injection:** treat tool output, web pages and retrieved documents as untrusted data. Label them, cap their size, and never let them change permissions or tool allow lists.
-- **Local runtime:** bind model servers to localhost only, verify model file hashes, keep llama.cpp updated (it parses untrusted file formats), and treat third-party GGUF files like any other download.
-- **Data handling:** PII redaction in logs by default, configurable log retention, per-tenant isolation, and no prompt or response storage unless enabled.
-- **Supply chain:** pin and hash dependencies, run `pip-audit` in CI, wait out brand-new releases before upgrading, and publish releases with provenance.
-- **Vulnerability handling:** a `SECURITY.md` with a reporting address and response targets, and a threat model document reviewed at each major phase.
-
-## Testing, release and documentation standards
-
-These apply to every phase, so the project stays shippable as it grows.
-
-**Testing**
-
-- Unit tests for routing, retry, breaker, limiter, cost and permission logic. Target 85% coverage on those modules.
-- Contract tests per provider using recorded responses, plus a scheduled job against live APIs with tiny requests to catch API drift.
-- Chaos tests that kill or slow providers, local model processes and tool servers.
-- Load tests with a checked-in script and published p50 and p99 numbers for gateway overhead.
-- Security tests: permission bypass attempts, prompt-injection fixtures, and sandbox escape checks for the code tool.
-
-**Release**
-
-- Semantic versioning, a `CHANGELOG.md`, and tagged releases built in CI.
-- Alpha, beta and stable labels per layer, so the README can say "gateway: stable, agents: alpha" honestly.
-- Database migrations tested forward and backward, with a documented upgrade path.
+- Alpha, beta and stable labels per layer in the README.
 - Deprecation policy: one minor version of warnings before removal.
+- Keep the incident runbook (`docs/operations.md`) current: provider outage, latency, cost spike, memory growth, model process crash.
+- Keep the README claims in line with tests (no claim without a test or benchmark).
 
-**Documentation**
+## Exit criteria
 
-- README: what it is, install, quickstart, supported providers, honest status per layer. No manifesto.
-- `docs/architecture.md` with the request lifecycle (auth, limits, cache, routing, provider, retry and failover, response).
-- `docs/routing.md` for policy weights and debugging a decision.
-- `docs/operations.md`: the missing incident runbook (provider outage, latency, cost spike, memory growth, model process crash).
-- Per-layer guides for tools, agents and local models, each with a runnable example.
+- A new team can deploy CaiPS with the Helm chart, create a tenant, add providers and a local model, run an agent with approvals, and see its cost through the API or CLI.
+- A chaos script can kill or slow any single provider without failed requests, and the result is published.
+- The OpenAI SDK works with a base-URL change only, verified in CI.
 
 ## Success metrics
 
-Each target is measured by a script or dashboard in the repo, not asserted in the README.
-
 | Metric | Target | Measured by |
 | --- | --- | --- |
-| Fresh clone to green tests | Under 5 minutes, one command | CI job on a clean runner |
 | Runtime dependencies | Under 20 | Dependency report in CI |
 | Coverage on router, retry, breaker, limiter | 85% or more | Coverage report |
-| Requests failed when one provider is down | Zero in chaos test | Chaos script |
-| Gateway overhead added to a request | p99 published, target under 20 ms | Load test script |
-| Time to first request for a new user | Under 5 minutes | Tested quickstart |
-| OpenAI SDK compatibility | Works with base URL change only | Compatibility test suite |
-| Cost accuracy | Within 1% of provider invoices | Monthly reconciliation |
+| Requests failed when one provider is down | Zero | Chaos script |
+| Gateway overhead added to a request | p99 published, under 20 ms | Load test script |
+| Cost accuracy | Within 1% of invoices | Monthly reconciliation |
 | Local model first-token time after cold load | Published per model size | Benchmark script |
-| Agent run success on the eval suite | Tracked per release, no regressions | Eval suite in CI |
-| Agent runs that exceed their budget | Zero | Budget enforcement tests |
+| Agent run success on the eval suite | No regressions per release | Eval suite in CI |
+| Agent runs exceeding their budget | Zero | Budget enforcement tests |
 | README claims without a test or benchmark | Zero | Docs review checklist |
 
-## Decisions
+## Decisions already made
 
-Five open questions are settled, and the phases above reflect them.
-
-| Decision | Choice | What it means for the plan |
-| --- | --- | --- |
-| License | Stays GPL-3.0, no change | No relicensing work; nothing in the plan depends on it. |
-| Agent and protocol code | Rebuild `agents/` and `protocols/` where the new design needs them | Phase 7 reuses what fits and replaces the rest. Nothing stays half-wired. |
-| Fine-tuning | Keep it | Stays an optional extra and is hardened in Phase 9. |
-| Storage | SQLite by default | Postgres is optional for multi-node setups; migrations are tested on both. |
-| Audience | Both self-hosters and teams | Single-user mode is the default; tenants, roles and SSO are opt-in (Phase 10). |
-
-## First 15 issues to open
-
-These cover Phases 0 to 2 and unblock everything after them.
-
-- [ ] Fix the test collection error in `tests/test_api.py` and document the install problem
-- [ ] Split runtime and dev dependencies; remove unused packages
-- [ ] Get CI green (pytest, ruff, black) and show a real status badge
-- [ ] Remove tracked logs, dumps, state files and history files; add `.env.example`
-- [ ] Consolidate packaging into one `pyproject.toml`
-- [ ] Move `TODO.txt` items into labeled GitHub issues
-- [ ] Write the scope decision: keep, archive or remove each package (`agents/`, `protocols/`, `neural/`)
-- [ ] Archive `consciousness_detection`; keep fine-tuning as an optional extra
-- [ ] Rewrite the README to match what ships
-- [ ] Write failover and circuit breaker tests
-- [ ] Handle Anthropic 529 with backoff, jitter, `Retry-After` and failover
-- [ ] Add per-provider timeouts and a request deadline
-- [ ] Profile memory under load and bound all queues and caches
-- [ ] Define the YAML routing policy schema with a dry-run endpoint
-- [ ] Add `SECURITY.md`
+- License stays GPL-3.0.
+- Fine-tuning stays an optional extra.
+- SQLite by default, Postgres optional.
+- Audience is both self-hosters and teams; tenants, roles and SSO are opt-in.
