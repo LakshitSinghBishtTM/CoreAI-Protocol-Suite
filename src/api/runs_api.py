@@ -105,7 +105,7 @@ async def start_run(
     if agent is None:
         raise HTTPException(status_code=404, detail="Unknown agent.")
     tools_rt = app_state.get("tools")
-    granted = (
+    granted: set[str] = (
         {t.name for t in tools_rt.registry.visible(tools_rt.allowed_for(ctx.subject))}
         if tools_rt
         else set()
@@ -275,7 +275,7 @@ async def run_workflow_endpoint(
     if wf is None:
         raise HTTPException(status_code=404, detail="Unknown workflow.")
     tools_rt = app_state.get("tools")
-    granted = (
+    granted: set[str] = (
         {t.name for t in tools_rt.registry.visible(tools_rt.allowed_for(ctx.subject))}
         if tools_rt
         else set()
@@ -370,12 +370,12 @@ async def fire_trigger(name: str, request: Request, rt=Depends(get_harness)):
             body.extend(chunk)
     if too_large:
         raise HTTPException(status_code=413, detail="Body too large.")
-    body = bytes(body)
+    raw = bytes(body)
     try:
         started = (
             tm.fire_webhook(
                 name,
-                body,
+                raw,
                 request.headers.get("X-CaiPS-Timestamp", ""),
                 request.headers.get("X-CaiPS-Signature", ""),
             )

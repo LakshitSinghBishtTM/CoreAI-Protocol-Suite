@@ -342,7 +342,7 @@ def _plan(a: argparse.Namespace) -> tuple[str, str, Optional[dict]]:
                 f"/v1/local/models/{q(getattr(a, 'model', ''))}/unload",
                 None,
             ),
-        }[s]
+        }[s or ""]
     if c == "runs":
         rid = q(getattr(a, "run_id", ""))
         if s == "list":
@@ -385,18 +385,18 @@ def _plan(a: argparse.Namespace) -> tuple[str, str, Optional[dict]]:
                 f"/v1/finetune/jobs/{q(a.job_id)}",
                 None,
             )
-        body: dict[str, Any] = {
+        ft_body: dict[str, Any] = {
             "base_model": a.base_model,
             "provider": a.provider,
             "hyperparam_preset": a.preset,
             "examples": _jsonl(a.dataset),
         }
         if s == "submit" and a.max_cost is not None:
-            body["max_cost_usd"] = a.max_cost
+            ft_body["max_cost_usd"] = a.max_cost
         return (
             "POST",
             "/v1/finetune/estimate" if s == "estimate" else "/v1/finetune/jobs",
-            body,
+            ft_body,
         )
     raise CliError(f"unhandled command {c}")
 

@@ -21,10 +21,8 @@ Principles still apply: layers depend downward only, every layer ships alone, cl
 
 ## 2. Storage and packaging
 
-- Postgres support for the harness run store, the database query tool, and backups (SQLite only today).
-- Confirm migrations run at startup and are tested forward and backward on both SQLite and Postgres.
-- Finish type checking: `mypy` clean in CI.
-- Confirm PyPI trusted publishing and release provenance work end to end.
+- Confirm PyPI trusted publishing end to end with a real release: the workflow, `twine check` and provenance defaults are tested, but it needs the publisher configured on pypi.org and a tagged release.
+- Run the Postgres tests (migrations, run store, `db_query`, backups) in CI against `postgres:16`; they pass locally on a real server, and the CI job now installs `pg_dump`.
 
 ## 3. Tools layer
 

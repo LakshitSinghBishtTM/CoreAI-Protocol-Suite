@@ -52,7 +52,7 @@ async def reload_providers() -> dict[str, str]:
             continue
         if cur is None or fingerprint(cur) != fingerprint(p):
             if getattr(p, "is_local", False):
-                await p.refresh_models()
+                await p.refresh_models()  # type: ignore[attr-defined]
             rt.set_provider(name, p)
     old = app_state.get("local_monitor")
     if old is not None:
@@ -102,9 +102,15 @@ async def list_keys(ctx: AuthContext = Depends(admin)):
                     "loaded": prov in live,
                 }
             )
-    for e in stored:
-        name = e["label"] if e["provider"] in ("local", "custom") else e["provider"]
-        rows.append({**e, "source": "store", "loaded": name in live and e["readable"]})
+    for entry in stored:
+        name = (
+            entry["label"]
+            if entry["provider"] in ("local", "custom")
+            else entry["provider"]
+        )
+        rows.append(
+            {**entry, "source": "store", "loaded": name in live and entry["readable"]}
+        )
     return {"data": rows}
 
 

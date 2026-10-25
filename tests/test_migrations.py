@@ -54,3 +54,39 @@ async def test_sqlite_migrations_roundtrip(tmp_path, fresh_db):
 async def test_postgres_migrations_roundtrip(fresh_db):
     fresh_db(os.environ["TEST_POSTGRES_URL"])
     await _roundtrip()
+
+
+def _tables(path):
+    import sqlite3
+
+    con = sqlite3.connect(path)
+    try:
+        return {r[0] for r in con.execute("select name from sqlite_master where type='table'")}
+    finally:
+        con.close()
+
+
+def test_server_applies_migrations_at_startup(monkeypatch, tmp_path):
+    from fastapi.testclient import TestClient
+
+    import api.server as server
+
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.delenv("COREAI_AUTO_MIGRATE", raising=False)
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "t.db"))
+    with TestClient(server.app):
+        pass
+    assert "_schema_migrations" in _tables(tmp_path / "t.db")
+
+
+def test_auto_migrate_can_be_disabled(monkeypatch, tmp_path):
+    from fastapi.testclient import TestClient
+
+    import api.server as server
+
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.setenv("COREAI_AUTO_MIGRATE", "0")
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "t.db"))
+    with TestClient(server.app):
+        pass
+    assert "_schema_migrations" not in _tables(tmp_path / "t.db")

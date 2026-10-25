@@ -58,7 +58,7 @@ class CoreAI:
             strategy=routing_strategy,
             enable_cache=enable_cache,
             enable_retry=enable_retry,
-            required_providers=required_providers,
+            required_providers=required_providers or [],
         )
         self._kernel: Optional[Kernel] = None
 
@@ -111,7 +111,7 @@ class CoreAI:
             max_tokens=max_tokens,
             temperature=temperature,
         )
-        return await self._kernel.router.route(request, preferred_provider=provider)
+        return await self._require_started().router.route(request, preferred_provider=provider)
 
     async def chat(
         self,
@@ -138,7 +138,7 @@ class CoreAI:
             max_tokens=max_tokens,
             temperature=temperature,
         )
-        return await self._kernel.router.route(request, preferred_provider=provider)
+        return await self._require_started().router.route(request, preferred_provider=provider)
 
     # ------------------------------------------------------------------ #
     # Agents
@@ -147,7 +147,7 @@ class CoreAI:
     def register_agent(self, agent_id: str, config: Optional[dict] = None):
         """Register an agent for task assignment."""
         self._require_started()
-        self._kernel.orchestrator.register_agent(agent_id, config)
+        self._require_started().orchestrator.register_agent(agent_id, config or {})
 
     def assign_task(
         self,
@@ -157,11 +157,11 @@ class CoreAI:
     ) -> AgentTask:
         """Assign a task to a registered agent."""
         self._require_started()
-        return self._kernel.orchestrator.assign_task(agent_id, objective, context)
+        return self._require_started().orchestrator.assign_task(agent_id, objective, context or {})
 
     def get_task(self, task_id: str) -> Optional[AgentTask]:
         self._require_started()
-        return self._kernel.orchestrator.get_task(task_id)
+        return self._require_started().orchestrator.get_task(task_id)
 
     # ------------------------------------------------------------------ #
     # Observability
@@ -170,20 +170,21 @@ class CoreAI:
     def stats(self) -> dict:
         """Full system stats — router, cache, orchestrator, memory, scheduler."""
         self._require_started()
-        return self._kernel.stats()
+        return self._require_started().stats()
 
     def health(self) -> dict:
         """Kernel health snapshot."""
         self._require_started()
-        return self._kernel.health()
+        return self._require_started().health()
 
     # ------------------------------------------------------------------ #
     # Internal
     # ------------------------------------------------------------------ #
 
-    def _require_started(self):
+    def _require_started(self) -> Kernel:
         if self._kernel is None or self._kernel.state not in ("running", "degraded"):
             raise RuntimeError("CoreAI not started. Call await ai.start() first.")
+        return self._kernel
 
 
 # ------------------------------------------------------------------ #

@@ -112,7 +112,7 @@ def _public_addresses(host: str) -> list[str]:
         infos = socket.getaddrinfo(host, None)
     except OSError:
         return []
-    addresses = sorted({info[4][0] for info in infos})
+    addresses = sorted({str(info[4][0]) for info in infos})
     try:
         if not addresses or any(
             not ipaddress.ip_address(address).is_global for address in addresses

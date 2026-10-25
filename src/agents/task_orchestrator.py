@@ -227,15 +227,17 @@ class TaskOrchestrator:
                     agent_id = idle_agents[0]
                     t = asyncio.create_task(self._run_task(item, agent_id))
                     self._running_tasks[item.task_id] = t
-                    t.add_done_callback(
-                        lambda _t, tid=item.task_id: self._running_tasks.pop(tid, None)
-                    )
+                    t.add_done_callback(self._forget_task(item.task_id))
             except asyncio.QueueEmpty:
                 pass
             except Exception as exc:
                 logger.error("Dispatch loop error: %s", exc)
 
             await asyncio.sleep(self.DISPATCH_INTERVAL)
+
+    def _forget_task(self, task_id):
+        """Done-callback that drops a finished task from the running table."""
+        return lambda _t: self._running_tasks.pop(task_id, None)
 
     async def _run_task(self, item: TaskItem, agent_id: str) -> None:
         item.assigned_to = agent_id

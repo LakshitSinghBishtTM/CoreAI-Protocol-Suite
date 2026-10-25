@@ -103,7 +103,11 @@ class HarnessRuntime:
             return
         task = asyncio.create_task(self.runner.execute(rid, decision=decision))
         self.tasks[rid] = task
-        task.add_done_callback(lambda t, r=rid: self.tasks.pop(r, None))
+        task.add_done_callback(self._forget(rid))
+
+    def _forget(self, rid):
+        """Done-callback that drops a finished run from ``self.tasks``."""
+        return lambda _t: self.tasks.pop(rid, None)
 
     def start(self) -> int:
         """Pick up runs a crash or shutdown interrupted."""
@@ -142,7 +146,7 @@ def build_runtime(cfg: dict, route, registry, memory=None) -> HarnessRuntime:
 def load_harness_runtime(
     route, registry, path: Optional[str] = None, memory=None
 ) -> Optional[HarnessRuntime]:
-    path = path or os.getenv("COREAI_AGENTS_FILE", "config/agents.yml")
+    path = path or os.getenv("COREAI_AGENTS_FILE") or "config/agents.yml"
     if not os.path.exists(path):
         return None
     import yaml

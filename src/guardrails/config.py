@@ -57,7 +57,7 @@ def for_subject(
     """
     base = load(path)
     over = (_raw(path).get("subjects") or {}).get(subject or "") or {}
-    out = []
+    out: list[FilterPolicy | None] = []
     for i, sec in enumerate(("input", "output")):
         if sec in over:
             ck = f"subj:{subject}:{sec}:{path}"

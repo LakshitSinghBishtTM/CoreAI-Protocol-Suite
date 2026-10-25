@@ -30,3 +30,19 @@ def test_stdlib_logging_goes_through_the_loguru_pipeline():
 def test_ci_runs_secret_and_dependency_scans():
     ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text()
     assert "gitleaks" in ci and "pip-audit" in ci
+
+
+def test_publish_workflow_uses_trusted_publishing_with_provenance():
+    wf = (ROOT / ".github" / "workflows" / "publish.yml").read_text()
+    assert "id-token: write" in wf and "environment: pypi" in wf
+    assert "pypa/gh-action-pypi-publish" in wf
+    assert "password:" not in wf and "PYPI_API_TOKEN" not in wf  # no stored token
+    assert "attestations: false" not in wf  # provenance stays on (the action default)
+    assert "Tag must match package version" in wf
+
+
+def test_ci_checks_the_built_distribution_and_all_of_src_with_mypy():
+    ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text()
+    assert "twine check --strict dist/*" in ci
+    assert "\n        run: mypy\n" in ci
+    assert 'files = ["src"]' in (ROOT / "pyproject.toml").read_text()

@@ -172,7 +172,7 @@ def load_tools_runtime(
     path: Optional[str] = None, embed=None
 ) -> Optional[ToolsRuntime]:
     """None when there is no config file: the tools layer is opt-in."""
-    path = path or os.getenv("COREAI_TOOLS_FILE", "config/tools.yml")
+    path = path or os.getenv("COREAI_TOOLS_FILE") or "config/tools.yml"
     if not os.path.exists(path):
         return None
     import yaml

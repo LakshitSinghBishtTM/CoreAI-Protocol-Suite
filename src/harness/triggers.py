@@ -28,7 +28,7 @@ import json
 import string
 import time
 from dataclasses import dataclass, field
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 
 @dataclass
@@ -38,7 +38,7 @@ class Trigger:
     task: str
     owner: str = "local"
     interval_s: float = 0.0  # 0 = event-only
-    cron: Optional[object] = None  # harness.cron.Cron
+    cron: Optional[Any] = None  # harness.cron.Cron
     webhook_secret: str = ""  # non-empty enables POST /v1/triggers/{name}/fire
     event: str = ""
     match: dict = field(default_factory=dict)

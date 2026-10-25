@@ -6,7 +6,7 @@ Reads config from environment variables or database.yml.
 
 import os
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator, Optional
+from typing import Any, AsyncGenerator, Optional
 
 from loguru import logger
 from sqlalchemy import text
@@ -89,7 +89,7 @@ def init_db(
     db_url = url or _build_url()
     is_sqlite = db_url.startswith("sqlite")
 
-    engine_kwargs = dict(echo=echo)
+    engine_kwargs: dict[str, Any] = dict(echo=echo)
     if is_sqlite:
         # SQLite doesn't support connection pooling
         engine_kwargs["poolclass"] = NullPool

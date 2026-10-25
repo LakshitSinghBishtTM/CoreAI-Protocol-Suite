@@ -75,12 +75,12 @@ def apply(text: str, policy: FilterPolicy) -> FilterResult:
     if reasons:
         return FilterResult(False, text, reasons)
     if policy.redact_pii:
-        kinds = {f.kind for f in detect(text, DEFAULT_KINDS)}
-        if kinds:
+        pii_kinds = {f.kind for f in detect(text, DEFAULT_KINDS)}
+        if pii_kinds:
             return FilterResult(
                 True,
                 redact(text, DEFAULT_KINDS),
-                [f"redacted:{k}" for k in sorted(kinds)],
+                [f"redacted:{k}" for k in sorted(pii_kinds)],
             )
     return FilterResult(True, text, [])
 

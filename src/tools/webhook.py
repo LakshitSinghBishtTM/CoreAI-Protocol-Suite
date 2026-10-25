@@ -14,6 +14,7 @@ import hashlib
 import hmac
 import json
 import time
+from typing import Any
 
 import httpx
 from loguru import logger
@@ -28,7 +29,7 @@ def sign(secret: str, timestamp: str, body: str) -> str:
 
 
 def payload_for(a: Approval, include_arguments: bool) -> dict:
-    p = {
+    p: dict[str, Any] = {
         "event": "tool.approval_requested", "id": a.id, "caller": a.caller,
         "tool": a.tool, "argument_names": sorted(a.arguments),
         "review": "GET /v1/tools/approvals",

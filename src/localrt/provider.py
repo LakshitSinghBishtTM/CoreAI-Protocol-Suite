@@ -124,7 +124,7 @@ class ManagedLocalProvider(LocalProvider):
             self.client = AsyncOpenAI(
                 api_key=self.api_key,
                 base_url=url,
-                timeout=httpx.Timeout(READ_TIMEOUT_S, connect=CONNECT_TIMEOUT_S),
+                timeout=httpx.Timeout(READ_TIMEOUT_S, connect=CONNECT_TIMEOUT_S),  # type: ignore[arg-type]  # openai SDK types its own httpx
                 max_retries=0,
             )
 

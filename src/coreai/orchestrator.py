@@ -80,7 +80,7 @@ class TaskStore:
             self.tasks.pop(old_id, None)
 
     def create(
-        self, agent_id: str, objective: str, context: dict = None, priority: int = 2
+        self, agent_id: str, objective: str, context: Optional[dict] = None, priority: int = 2
     ) -> AgentTask:
         task = AgentTask(
             agent_id=agent_id,
@@ -120,7 +120,7 @@ class Orchestrator:
         self.active_tasks: dict[str, str] = {}  # task_id -> agent_id
         logger.info("Orchestrator initialized")
 
-    def register_agent(self, agent_id: str, agent_config: dict = None):
+    def register_agent(self, agent_id: str, agent_config: Optional[dict] = None):
         """Register a new agent"""
         self.agents[agent_id] = {
             "id": agent_id,
@@ -142,7 +142,7 @@ class Orchestrator:
         logger.info(f"Unregistered agent {agent_id}")
 
     def assign_task(
-        self, agent_id: str, objective: str, context: dict = None, priority: int = 2
+        self, agent_id: str, objective: str, context: Optional[dict] = None, priority: int = 2
     ) -> AgentTask:
         """Assign a task to an agent (priority 0-3, higher is more urgent)"""
         if agent_id not in self.agents:

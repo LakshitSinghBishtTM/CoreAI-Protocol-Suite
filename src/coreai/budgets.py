@@ -162,17 +162,17 @@ class BudgetManager:
         Unknown or unset models are never blocked here."""
         limits = self.models.get(model or "")
         if limits is not None:
-            self._check(self._model_key(model), limits, 0.0)
+            self._check(self._model_key(model or ""), limits, 0.0)
 
     def record_model(self, model: str | None, cost_usd=0.0, tokens=0, n=1) -> None:
         limits = self.models.get(model or "")
         if limits is None:
             return
-        u = self._current(self._model_key(model), limits)
+        u = self._current(self._model_key(model or ""), limits)
         u.requests += n
         u.cost += max(0.0, cost_usd or 0.0)
         u.tokens += max(0, tokens or 0)
-        self._warn_check(self._model_key(model), limits, u)
+        self._warn_check(self._model_key(model or ""), limits, u)
 
     def _current(self, subject: str, limits: BudgetLimits) -> _Usage:
         now = self._clock()

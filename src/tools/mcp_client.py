@@ -70,7 +70,12 @@ class StdioTransport:
 
     async def send(self, message: dict, expect_reply: bool = True) -> Optional[dict]:
         proc = self._proc
-        if proc is None or proc.returncode is not None:
+        if (
+            proc is None
+            or proc.returncode is not None
+            or proc.stdin is None
+            or proc.stdout is None
+        ):
             raise McpConnectionError("MCP server process is not running", sent=False)
         async with self._lock:
             try:
@@ -98,7 +103,8 @@ class StdioTransport:
         if proc is None or proc.returncode is not None:
             return
         try:
-            proc.stdin.close()
+            if proc.stdin is not None:
+                proc.stdin.close()
             await asyncio.wait_for(proc.wait(), 3)
         except Exception:
             proc.kill()
@@ -273,6 +279,7 @@ async def connect_servers(registry: ToolRegistry, servers: dict) -> list[McpClie
             logger.warning(f"[mcp] bad server name {name!r}; skipped")
             continue
         try:
+            transport: Any
             if cfg.get("url"):
                 transport = HttpTransport(cfg["url"], cfg.get("headers"))
             elif cfg.get("command"):

@@ -108,7 +108,8 @@ class InterceptHandler(logging.Handler):
             level: str | int = logger.level(record.levelname).name
         except ValueError:
             level = record.levelno
-        frame, depth = logging.currentframe(), 2
+        frame: Any = logging.currentframe()
+        depth = 2
         while frame and frame.f_code.co_filename == logging.__file__:
             frame = frame.f_back
             depth += 1
@@ -136,11 +137,11 @@ def configure_logging(
     stream = stream or sys.stderr
 
     logger.remove()
-    logger.configure(patcher=_patcher)
+    logger.configure(patcher=_patcher)  # type: ignore[arg-type]  # loguru Record is a TypedDict
     if fmt == "json":
         logger.add(_json_sink(stream), level=level)
     else:
-        logger.add(stream, level=level, format=_text_format)
+        logger.add(stream, level=level, format=_text_format)  # type: ignore[arg-type]  # loguru Record is a TypedDict
     if file:
         # Rotation and retention are what keep a log file from growing forever.
         logger.add(
@@ -148,7 +149,7 @@ def configure_logging(
             level=level,
             rotation=rotation,
             retention=retention,
-            format=_file_format if fmt == "json" else _text_format,
+            format=_file_format if fmt == "json" else _text_format,  # type: ignore[arg-type]
         )
 
     logging.basicConfig(handlers=[InterceptHandler()], level=0, force=True)

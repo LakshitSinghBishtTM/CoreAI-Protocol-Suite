@@ -244,7 +244,7 @@ class Router:
     def __init__(
         self,
         providers: dict[str, BaseProvider],
-        config: RoutingConfig = None,
+        config: Optional[RoutingConfig] = None,
         clock: Callable[[], float] = time.monotonic,
         policies: Optional[PolicyStore] = None,
     ):
@@ -512,7 +512,7 @@ class Router:
                         deadline,
                         attempts,
                         partner_attempts,
-                        hedge_delay,
+                        hedge_delay or 0.0,
                         skip,
                         partner_request=partner_req,
                     )
@@ -1076,7 +1076,7 @@ class Router:
         if profile is not None:
             return profile.provider
         for name, p in self.providers.items():  # self-hosted servers list their models
-            if model and getattr(p, "is_local", False) is True and model in p.models:
+            if model and getattr(p, "is_local", False) is True and model in getattr(p, "models", ()):
                 return name
         return None
 
@@ -1375,10 +1375,11 @@ class Router:
         ranked = self._rank_for_policy(request, policy, eligible, trace)
 
         if policy.strategy == "explicit":
-            primary = policy.provider if policy.provider in eligible else None
+            pinned = policy.provider or ""
+            primary = pinned if pinned in eligible else None
             if primary is None:
-                trace.setdefault(policy.provider, {"provider": policy.provider})
-                trace[policy.provider].setdefault("note", "pinned provider unavailable")
+                trace.setdefault(pinned, {"provider": policy.provider})
+                trace[pinned].setdefault("note", "pinned provider unavailable")
             ranked = ([primary] if primary else []) + [
                 n for n in ranked if n != primary
             ]

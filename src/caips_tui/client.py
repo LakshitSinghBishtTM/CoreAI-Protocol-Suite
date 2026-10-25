@@ -128,7 +128,8 @@ class Client:
                     raise ApiError(r.status_code, _detail(r))
                 if on_headers:
                     on_headers(r.headers)
-                event, data = "message", []
+                event = "message"
+                data: list[str] = []
                 async for line in r.aiter_lines():
                     if line == "":
                         if data:

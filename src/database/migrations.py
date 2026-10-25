@@ -133,6 +133,10 @@ def _discover_migrations(direction: str = "up") -> list[Path]:
 async def migrate_up(target: Optional[str] = None):
     """Apply all pending up migrations, or up to target filename."""
     async with get_session() as session:
+        if session.get_bind().dialect.name == "postgresql":
+            # Replicas starting together: one migrates, the others wait, then
+            # find nothing pending. Released when this transaction ends.
+            await session.execute(text("SELECT pg_advisory_xact_lock(7305281)"))
         await _ensure_migrations_table(session)
         applied = await _get_applied(session)
 
@@ -164,7 +168,12 @@ async def migrate_up(target: Optional[str] = None):
                     ),
                     {
                         "filename": migration_file.name,
-                        "applied_at": _utcnow().isoformat(),
+                        # asyncpg wants a datetime; SQLite stores text
+                        "applied_at": (
+                            _utcnow().replace(tzinfo=None)
+                            if session.get_bind().dialect.name == "postgresql"
+                            else _utcnow().isoformat()
+                        ),
                     },
                 )
                 logger.info(f"  ✓ {migration_file.name}")

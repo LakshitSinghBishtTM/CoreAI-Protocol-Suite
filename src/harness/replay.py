@@ -45,7 +45,8 @@ async def replay_run(
     tools = runner.registry.specs(agent.allowed_tools) + (
         [REVIEW_SPEC] if agent.ask_when_uncertain else []
     )
-    turns, cost = [], 0.0
+    turns: list = []
+    cost = 0.0
     for i, m in enumerate(msgs):
         if m.role != "assistant":
             continue

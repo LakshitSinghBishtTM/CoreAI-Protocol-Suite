@@ -66,19 +66,19 @@ class KeyPoolProvider(BaseProvider):
         return getattr(self.members[0], item)
 
     @property
-    def api_key(self) -> str:
+    def api_key(self) -> str:  # type: ignore[override]  # aggregate of the members
         return self.members[0].api_key
 
     @property
-    def total_requests(self) -> int:
+    def total_requests(self) -> int:  # type: ignore[override]  # aggregate of the members
         return sum(m.total_requests for m in self.members)
 
     @property
-    def total_tokens(self) -> int:
+    def total_tokens(self) -> int:  # type: ignore[override]  # aggregate of the members
         return sum(m.total_tokens for m in self.members)
 
     @property
-    def total_cost(self) -> float:
+    def total_cost(self) -> float:  # type: ignore[override]  # aggregate of the members
         return sum(m.total_cost for m in self.members)
 
     def key_states(self) -> list[dict]:

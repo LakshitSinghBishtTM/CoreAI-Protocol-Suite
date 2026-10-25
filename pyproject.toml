@@ -93,49 +93,16 @@ ignore_missing_imports = true
 follow_imports = "silent"
 mypy_path = "src"
 explicit_package_bases = true
-# Ratchet: `mypy` (no arguments) checks the clean files below. When you fix a
-# file, add it here; never remove one.
-files = [
-    "src/api/__init__.py",
-    "src/api/anthropic_compat.py",
-    "src/api/auth.py",
-    "src/api/middleware.py",
-    "src/api/openai_compat.py",
-    "src/coreai/__init__.py",
-    "src/coreai/_paths.py",
-    "src/coreai/_version.py",
-    "src/coreai/audit.py",
-    "src/coreai/circuit_breaker.py",
-    "src/coreai/deadline.py",
-    "src/coreai/drain.py",
-    "src/coreai/errors.py",
-    "src/coreai/health.py",
-    "src/coreai/kernel.py",
-    "src/coreai/limiter.py",
-    "src/coreai/memory_manager.py",
-    "src/coreai/metrics.py",
-    "src/coreai/policy.py",
-    "src/coreai/pricing.py",
-    "src/coreai/request_context.py",
-    "src/coreai/retry.py",
-    "src/coreai/scheduler.py",
-    "src/coreai/tracing.py",
-    "src/coreai/usage.py",
-    "src/database/migrations.py",
-    "src/database/models.py",
-    "src/middleware/__init__.py",
-    "src/middleware/logger.py",
-    "src/middleware/validator.py",
-    "src/providers/__init__.py",
-    "src/providers/base.py",
-    "src/providers/local.py",
-    "src/providers/deepseek.py",
-    "src/providers/grok.py",
-    "src/providers/openai.py",
-    "src/utils/__init__.py",
-    "src/utils/cost.py",
-    "src/utils/tokens.py",
-]
+# The whole source tree is checked (`mypy` with no arguments).
+files = ["src"]
+
+# The Anthropic and Gemini SDKs ship very precise unions for responses and
+# request params, and they change between releases. These two adapter modules
+# build plain dicts for them, so these error codes are off for them only;
+# provider behaviour is covered by tests/test_provider_contracts.py.
+[[tool.mypy.overrides]]
+module = ["providers.anthropic", "providers.gemini"]
+disable_error_code = ["arg-type", "union-attr", "dict-item", "var-annotated"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

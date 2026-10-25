@@ -1,5 +1,7 @@
 import asyncio
+import os
 from contextlib import asynccontextmanager
+from typing import Any
 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import JSONResponse, PlainTextResponse
@@ -35,7 +37,7 @@ from providers import (
 # Global State
 # ============================================================================
 
-app_state = {
+app_state: dict[str, Any] = {
     "providers": None,
     "router": None,
     "orchestrator": None,
@@ -60,6 +62,10 @@ async def lifespan(app: FastAPI):
     from database import db as _db
 
     _db.init_db()
+    if os.getenv("COREAI_AUTO_MIGRATE", "1").lower() not in ("0", "false", "no"):
+        from database import migrations as _migrations
+
+        await _migrations.migrate_up()  # fail fast: a half-migrated DB must not serve
     app_state["db"] = True
 
     providers = load_providers().providers  # the live dict; the key manager edits it
@@ -72,7 +78,7 @@ async def lifespan(app: FastAPI):
         logger.info(f"Loaded providers: {list(providers.keys())}")
     for p in providers.values():
         if getattr(p, "is_local", False):
-            await p.refresh_models()  # never raises; a dead server is skipped
+            await p.refresh_models()  # type: ignore[attr-defined]  # never raises; a dead server is skipped
 
     app_state["providers"] = providers
     from tools.config import load_tools_runtime

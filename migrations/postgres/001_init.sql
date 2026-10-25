@@ -3,13 +3,11 @@
 
 BEGIN;
 
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-CREATE EXTENSION IF NOT EXISTS "pg_stat_statements";
 
 -- Providers
 
 CREATE TABLE providers (
-    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name            VARCHAR(64) NOT NULL UNIQUE,
     display_name    VARCHAR(128) NOT NULL,
     base_url        TEXT NOT NULL,
@@ -31,7 +29,7 @@ INSERT INTO providers (name, display_name, base_url, priority) VALUES
 -- Models
 
 CREATE TABLE models (
-    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     provider_id     UUID NOT NULL REFERENCES providers(id) ON DELETE CASCADE,
     name            VARCHAR(128) NOT NULL,
     display_name    VARCHAR(128) NOT NULL,
@@ -50,7 +48,7 @@ CREATE INDEX idx_models_enabled  ON models(enabled);
 -- Users
 
 CREATE TABLE users (
-    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     email           VARCHAR(320) NOT NULL UNIQUE,
     password_hash   VARCHAR(256) NOT NULL,
     plan            VARCHAR(32) NOT NULL DEFAULT 'free'
@@ -67,7 +65,7 @@ CREATE INDEX idx_users_active ON users(active);
 -- API keys
 
 CREATE TABLE api_keys (
-    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id         UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     key_hash        VARCHAR(256) NOT NULL UNIQUE,
     key_prefix      VARCHAR(12) NOT NULL,
@@ -85,7 +83,7 @@ CREATE INDEX idx_api_keys_revoked ON api_keys(revoked);
 -- Routing policies
 
 CREATE TABLE routing_policies (
-    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name            VARCHAR(128) NOT NULL UNIQUE,
     description     TEXT,
     strategy        VARCHAR(64) NOT NULL
@@ -107,7 +105,7 @@ INSERT INTO routing_policies (name, description, strategy, config) VALUES
 -- Agent definitions
 
 CREATE TABLE agent_definitions (
-    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name            VARCHAR(128) NOT NULL,
     description     TEXT,
     type            VARCHAR(64) NOT NULL
@@ -124,7 +122,7 @@ CREATE TABLE agent_definitions (
 -- Agent runs
 
 CREATE TABLE agent_runs (
-    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     agent_id        UUID NOT NULL REFERENCES agent_definitions(id),
     user_id         UUID NOT NULL REFERENCES users(id),
     status          VARCHAR(32) NOT NULL DEFAULT 'queued'

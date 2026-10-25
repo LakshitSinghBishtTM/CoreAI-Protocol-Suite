@@ -35,8 +35,14 @@ class TaskRunner:
         )  # agent -> (task_id, run)
         self._seq = itertools.count()
 
-    def submit(self, task_id: str) -> None:
+    def _task(self, task_id: str):
         task = self.orch.get_task(task_id)
+        if task is None:
+            raise KeyError(task_id)
+        return task
+
+    def submit(self, task_id: str) -> None:
+        task = self._task(task_id)
         q = self._queues.setdefault(task.agent_id, asyncio.PriorityQueue())
         q.put_nowait((-task.priority, next(self._seq), task_id))
         worker = self._workers.get(task.agent_id)
@@ -66,7 +72,7 @@ class TaskRunner:
                 self._current.pop(agent_id, None)
 
     async def _run(self, task_id: str, agent_id: str) -> None:
-        task = self.orch.get_task(task_id)
+        task = self._task(task_id)
         try:
             record = self.manager.agents.get(agent_id)
             if record is None:
@@ -106,8 +112,8 @@ class TaskRunner:
 
     def _fail(self, task_id: str, error: str) -> None:
         if self._still_running(task_id) or (
-            self.orch.get_task(task_id)
-            and self.orch.get_task(task_id).status == TaskStatus.PENDING
+            (t := self.orch.get_task(task_id)) is not None
+            and t.status == TaskStatus.PENDING
         ):
             self.orch.fail_task(task_id, error)
 

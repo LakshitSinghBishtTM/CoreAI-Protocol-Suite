@@ -89,6 +89,18 @@ class HarnessRunner:
             r["pending"] = json.loads(r["pending"]) if r["pending"] else None
         return r
 
+    def _get(self, rid: str) -> dict:
+        r = self.store.get(rid)
+        if r is None:
+            raise KeyError(rid)
+        return r
+
+    def _status(self, rid: str) -> dict:
+        r = self.status(rid)
+        if r is None:
+            raise KeyError(rid)
+        return r
+
     def cancel(self, rid: str) -> bool:
         r = self.store.get(rid)
         if r and r["status"] in (
@@ -139,7 +151,7 @@ class HarnessRunner:
         if run is None:
             raise KeyError(rid)
         if _finished(run):
-            return self.status(rid)
+            return self._status(rid)
         agent = self._agent(run["agent"]).effective()
         msgs = self.store.messages(rid)
         state = {
@@ -157,7 +169,7 @@ class HarnessRunner:
                     rid, agent, msgs, pending["calls"], state, decision
                 )
                 if stop:
-                    return self.status(rid)
+                    return self._status(rid)
             while True:
                 reason = self._limit(rid, agent, state)
                 if reason:
@@ -171,7 +183,7 @@ class HarnessRunner:
                     return self._end(rid, msgs, state, "completed", result=resp.content)
                 msgs.append(Message("assistant", resp.content or "", tool_calls=calls))
                 if await self._tools(rid, agent, msgs, calls, state, None):
-                    return self.status(rid)
+                    return self._status(rid)
                 self._checkpoint(rid, msgs, state)
                 if self._stalled(msgs, agent):
                     return self._end(rid, msgs, state, "stalled")
@@ -187,14 +199,14 @@ class HarnessRunner:
             self._checkpoint(rid, msgs, state)
             self.store.set(rid, status="failed", stop_reason="error")
             self.store.event(rid, "run_finished", reason="error", step=state["step"])
-            return self.status(rid)
+            return self._status(rid)
 
     def _system(self, rid, agent: AgentDef, msgs) -> str:
         """System prompt plus recalled memories (owner-scoped, labeled untrusted)."""
         if not (self.memory and agent.memory_ns and agent.memory_recall > 0):
             return agent.system_prompt
         task = next((m.content for m in msgs if m.role == "user" and m.content), "")
-        owner = self.store.get(rid)["owner"]
+        owner = self._get(rid)["owner"]
         found = self.memory.search(
             owner, str(task), ns=agent.memory_ns, limit=agent.memory_recall
         )
@@ -227,7 +239,7 @@ class HarnessRunner:
         meta = {
             "run_id": rid,
             "agent": agent.name,
-            "owner": self.store.get(rid)["owner"],
+            "owner": self._get(rid)["owner"],
         }
         if agent.max_cost_usd is not None:
             meta["budget_remaining_usd"] = max(
@@ -241,7 +253,7 @@ class HarnessRunner:
                 + ([REVIEW_SPEC] if agent.ask_when_uncertain else [])
             ) or None, metadata=meta,
         )  # fmt: skip
-        run = self.store.get(rid)
+        run = self._get(rid)
         timeout = max(0.1, run["deadline"] - time.time()) if run["deadline"] else None
         t0 = time.time()
         resp = await asyncio.wait_for(self.route(req), timeout)
@@ -334,7 +346,7 @@ class HarnessRunner:
 
     # -- limits, stall, bookkeeping -------------------------------------
     def _limit(self, rid, agent: AgentDef, st) -> Optional[str]:
-        run = self.store.get(rid)
+        run = self._get(rid)
         if run["control"] in PAUSE_REASONS:
             return PAUSE_REASONS[run["control"]]
         if run["deadline"] and time.time() >= run["deadline"]:
@@ -369,7 +381,7 @@ class HarnessRunner:
                 rid, msgs, state, status="paused", control="", stop_reason="paused"
             )
             self.store.event(rid, "paused", step=state["step"])
-            return self.status(rid)
+            return self._status(rid)
         status = {
             "completed": "completed",
             "cancelled": "cancelled",
@@ -392,7 +404,7 @@ class HarnessRunner:
             cost_usd=round(state["cost_usd"], 6),
         )
         self._notify_finished(rid, status, reason, state["cost_usd"])
-        return self.status(rid)
+        return self._status(rid)
 
     def _finish(self, rid, status, reason):
         self.store.set(rid, status=status, stop_reason=reason, control="")

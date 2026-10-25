@@ -15,7 +15,7 @@ with ``status="needs_approval"`` and a later call can name it in ``approved``.
 
 import string
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Any, Optional
 
 from providers.base import CompletionRequest, Message
 from tools.registry import ApprovalRequired, Permission, ToolError
@@ -77,7 +77,9 @@ async def run_workflow(
     approved = approved or set()
     raw = {"input": input}  # what templates for tools see
     safe = {"input": input}  # what model prompts see
-    out = {"status": "completed", "steps": [], "failed_step": None, "cost_usd": 0.0}
+    out: dict[str, Any] = {
+        "status": "completed", "steps": [], "failed_step": None, "cost_usd": 0.0,
+    }  # fmt: skip
     for st in steps:
         if max_cost_usd is not None and out["cost_usd"] >= max_cost_usd:
             out.update(status="cost_limit", failed_step=st.id)

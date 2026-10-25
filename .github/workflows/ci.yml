@@ -39,7 +39,7 @@ jobs:
         run: ruff check .
       - name: black
         run: black --check .
-      - name: mypy (ratchet list in pyproject.toml)
+      - name: mypy (whole src tree)
         run: mypy
 
   test:
@@ -100,7 +100,9 @@ jobs:
           python-version: '3.12'
           cache: pip
       - run: pip install -e .[dev,postgres]
-      - run: pytest tests/test_migrations.py -v
+      - name: Postgres client tools (for the pg_dump/pg_restore backup test)
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client-16
+      - run: pytest tests/test_migrations.py tests/test_backup.py tests/test_pg_store.py tests/test_pg_query.py -v
 
   quickstart:
     runs-on: ubuntu-latest
@@ -125,8 +127,9 @@ jobs:
           python-version: '3.12'
       - name: Build wheel and install it into a clean environment
         run: |
-          pip install build
+          pip install build twine
           python -m build
+          twine check --strict dist/*
           python -m venv /tmp/wheel-env
           /tmp/wheel-env/bin/pip install dist/*.whl
           cd /tmp && /tmp/wheel-env/bin/python -c "import coreai, api, agents, protocols, neural, providers, database; print(coreai.__version__)"

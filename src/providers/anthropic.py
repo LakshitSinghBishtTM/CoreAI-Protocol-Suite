@@ -132,7 +132,7 @@ class AnthropicProvider(BaseProvider):
 
     @staticmethod
     def _metadata(response, tool_calls: list[dict]) -> dict:
-        meta = {
+        meta: dict = {
             "finish_reason": normalize_finish_reason(
                 getattr(response, "stop_reason", None)
             )

@@ -11,7 +11,7 @@ import builtins  # noqa: F401  (the `list` method shadows the builtin)
 import json
 import sqlite3
 import time
-from typing import Callable, Optional
+from typing import List, Callable, Optional
 
 MAX_TEXT = 8_000
 MAX_ROWS_PER_OWNER = 10_000
@@ -110,7 +110,7 @@ class FeedbackStore:
         self.db.commit()
         return n
 
-    def eval_tasks(self, owner: str) -> list[dict]:
+    def eval_tasks(self, owner: str) -> "List[dict]":
         """Corrections that carry a prompt, as ``exact`` eval tasks (see docs/evals.md)."""
         return [
             {

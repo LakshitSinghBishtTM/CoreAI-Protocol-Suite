@@ -4,6 +4,13 @@
 
 The previous `1.0.0` label did not match the project's state; versions now start at 0.1.0 (alpha).
 
+### Changed (storage and packaging)
+- Migrations run at startup (`COREAI_AUTO_MIGRATE=0` disables); on Postgres an advisory lock lets replicas start together.
+- Fixed Postgres migrations, which could not apply through asyncpg (`applied_at` was sent as a string). The Postgres migration files no longer need the `uuid-ossp` or `pg_stat_statements` extensions (`gen_random_uuid()` is built in from PG 13).
+- Backups cover Postgres: `--pg DSN` (or `DATABASE_URL`) runs `pg_dump`, and `restore --pg-restore-to DSN` runs `pg_restore`. Passwords stay out of argv and the manifest.
+- `mypy` now checks all of `src` in CI (the ratchet list is gone). Only the Anthropic and Gemini adapter modules have four error codes relaxed, because the SDK types change between releases.
+- CI runs `twine check --strict` on the built wheel and sdist.
+
 ### Added (Anthropic-compatible count_tokens)
 - `POST /v1/messages/count_tokens` returns `{"input_tokens": n}`, estimated with a provider's local tokenizer over the system prompt, messages, tool calls and tool schemas (images not counted). Same validation as `/v1/messages`; scope `completions:read`; header `X-CaiPS-Estimate: true`.
 

@@ -55,6 +55,10 @@ def _with_model(req, model):
     return req
 
 
+def _model_runner(route, model):
+    return lambda r: route(_with_model(r, model))
+
+
 async def main(argv: list[str] | None = None, transport=None) -> int:
     ap = argparse.ArgumentParser(prog="evals")
     ap.add_argument("tasks")
@@ -86,7 +90,7 @@ async def main(argv: list[str] | None = None, transport=None) -> int:
                 reps[m] = (
                     await compare(
                         load_tasks(a.tasks),
-                        {m: lambda r, m=m: route(_with_model(r, m))},
+                        {m: _model_runner(route, m)},
                         tags=a.tag,
                     )
                 )[m]

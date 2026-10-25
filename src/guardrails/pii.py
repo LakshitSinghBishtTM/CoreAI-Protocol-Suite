@@ -3,6 +3,7 @@ it catches common formats, not every possible leak."""
 
 import re
 from dataclasses import dataclass
+from typing import Callable, Optional
 
 
 @dataclass(frozen=True)
@@ -28,7 +29,7 @@ def _card(m: re.Match) -> bool:
 
 
 # (kind, pattern, optional validator). Secrets first: they win overlaps.
-_RULES: list[tuple[str, re.Pattern, object]] = [
+_RULES: list[tuple[str, re.Pattern, Optional[Callable[[re.Match], bool]]]] = [
     ("private_key", re.compile(
         r"-----BEGIN [A-Z ]*PRIVATE KEY-----.*?(?:-----END [A-Z ]*PRIVATE KEY-----|\Z)",
         re.S,

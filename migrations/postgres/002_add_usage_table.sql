@@ -6,7 +6,7 @@ BEGIN;
 -- Request log
 
 CREATE TABLE api_requests (
-    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id             UUID NOT NULL REFERENCES users(id),
     api_key_id          UUID REFERENCES api_keys(id),
     provider_id         UUID NOT NULL REFERENCES providers(id),
@@ -41,7 +41,7 @@ CREATE INDEX idx_api_requests_agent       ON api_requests(agent_run_id) WHERE ag
 -- Daily usage aggregates (materialised for billing and dashboards)
 
 CREATE TABLE usage_daily (
-    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id             UUID NOT NULL REFERENCES users(id),
     provider_id         UUID NOT NULL REFERENCES providers(id),
     date                DATE NOT NULL,
@@ -62,7 +62,7 @@ CREATE INDEX idx_usage_daily_date ON usage_daily(date DESC);
 -- Provider health snapshots
 
 CREATE TABLE provider_health (
-    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     provider_id     UUID NOT NULL REFERENCES providers(id),
     status          VARCHAR(32) NOT NULL
                         CHECK (status IN ('healthy', 'degraded', 'unavailable')),
@@ -79,7 +79,7 @@ CREATE INDEX idx_provider_health_provider ON provider_health(provider_id, sample
 -- Billing records
 
 CREATE TABLE billing_events (
-    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id         UUID NOT NULL REFERENCES users(id),
     type            VARCHAR(64) NOT NULL
                         CHECK (type IN ('charge', 'credit', 'refund', 'threshold_warning', 'budget_exceeded')),

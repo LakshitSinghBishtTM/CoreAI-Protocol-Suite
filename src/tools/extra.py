@@ -264,7 +264,7 @@ class ShellRunner:
 def register_extras(
     registry: ToolRegistry,
     search: Optional[WebSearch] = None,
-    db: Optional[SqliteReader] = None,
+    db: Optional[DatabaseReader] = None,
     shell: Optional[ShellRunner] = None,
 ) -> None:
     def obj(props: dict, req: list[str]) -> dict:

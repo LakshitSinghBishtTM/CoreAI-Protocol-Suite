@@ -31,7 +31,9 @@ class TrainingPrices:
 
 def load_training_prices(path: str | os.PathLike | None = None) -> TrainingPrices:
     p = Path(
-        path or os.getenv("COREAI_FINETUNE_PRICING_FILE", "config/finetune_pricing.yml")
+        path
+        or os.getenv("COREAI_FINETUNE_PRICING_FILE")
+        or "config/finetune_pricing.yml"
     )
     if not p.exists():
         return TrainingPrices({})

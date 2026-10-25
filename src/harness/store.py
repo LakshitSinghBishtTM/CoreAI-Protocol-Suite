@@ -11,7 +11,7 @@ import threading
 import time
 import uuid
 from dataclasses import asdict
-from typing import Optional
+from typing import Any, Optional
 
 from providers.base import Message
 
@@ -58,6 +58,8 @@ class RunStore:
     def __init__(self, path: str = ":memory:"):
         self._lock = threading.RLock()
         self._pg = _is_pg(path)
+        self._integrity: Any
+        self._db: Any
         if self._pg:
             try:
                 import psycopg
