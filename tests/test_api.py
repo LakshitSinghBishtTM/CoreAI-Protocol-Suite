@@ -147,7 +147,7 @@ class TestAuthContext:
 class TestRateLimitMiddleware:
 
     def test_check_rate_limit_allows_under_limit(self):
-        from middleware import RateLimitMiddleware
+        from api.middleware import RateLimitMiddleware
 
         mw = RateLimitMiddleware.__new__(RateLimitMiddleware)
         mw.rpm = 5
@@ -157,7 +157,7 @@ class TestRateLimitMiddleware:
             assert allowed is True
 
     def test_check_rate_limit_blocks_at_limit(self):
-        from middleware import RateLimitMiddleware
+        from api.middleware import RateLimitMiddleware
 
         mw = RateLimitMiddleware.__new__(RateLimitMiddleware)
         mw.rpm = 3
@@ -169,7 +169,7 @@ class TestRateLimitMiddleware:
         assert retry_after > 0
 
     def test_remaining_decreases_with_requests(self):
-        from middleware import RateLimitMiddleware
+        from api.middleware import RateLimitMiddleware
 
         mw = RateLimitMiddleware.__new__(RateLimitMiddleware)
         mw.rpm = 10
@@ -180,7 +180,7 @@ class TestRateLimitMiddleware:
         assert remaining == 8
 
     def test_api_key_used_as_client_key(self):
-        from middleware import RateLimitMiddleware
+        from api.middleware import RateLimitMiddleware
 
         mw = RateLimitMiddleware.__new__(RateLimitMiddleware)
         req = MagicMock()
@@ -191,7 +191,7 @@ class TestRateLimitMiddleware:
         assert key.startswith("key:")
 
     def test_ip_used_as_fallback_client_key(self):
-        from middleware import RateLimitMiddleware
+        from api.middleware import RateLimitMiddleware
 
         mw = RateLimitMiddleware.__new__(RateLimitMiddleware)
         req = MagicMock()

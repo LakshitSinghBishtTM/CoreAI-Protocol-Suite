@@ -64,7 +64,6 @@ It is **alpha software**. The gateway core works and is unit tested. Several oth
 | Legacy agents (`agents/`) | Experimental | Lifecycle management only; no tools. Superseded by the harness. See `src/agents/README.md`. |
 | Distributed and secure protocols (`protocols/`) | Experimental | Not used by the request path. The custom crypto is **unaudited**; do not rely on it. See `src/protocols/README.md`. |
 | Legacy cost helpers (`utils/cost.py`) | Not wired in | A facade over `config/pricing.yml`; the router prices through `coreai/pricing.py`. |
-| Request logging and validation (`middleware/`) | Not wired in | The server uses `src/api/middleware.py` and `coreai/request_context.py`. |
 | SQL migrations (`migrations/`, `src/database/migrations.py`) | Not wired in | Not run at startup. |
 
 ## Quickstart

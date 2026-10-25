@@ -77,7 +77,6 @@ CoreAI Protocol Suite
 ├── coreai/
 ├── database/
 ├── kernel/
-├── middleware/
 ├── protocols/
 ├── providers/
 ├── runtime/

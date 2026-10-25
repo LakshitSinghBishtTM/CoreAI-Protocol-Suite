@@ -11,6 +11,10 @@ The previous `1.0.0` label did not match the project's state; versions now start
 - `mypy` now checks all of `src` in CI (the ratchet list is gone). Only the Anthropic and Gemini adapter modules have four error codes relaxed, because the SDK types change between releases.
 - CI runs `twine check --strict` on the built wheel and sdist.
 
+### Changed (security)
+- Removed the unwired `middleware/` package (the server uses `api/middleware.py`); its tests now import `RateLimitMiddleware` from `api.middleware`, and the validator tests were dropped with the code.
+- Added `docs/threat-model.md` and `docs/secret-history-audit.md` (secret files found in git history; rotation and purge are owner actions).
+
 ### Added (provider contract tests)
 - Contract tests for Gemini, Grok and DeepSeek: the real provider classes and SDKs over mock HTTP transports, covering complete, streaming, request wire format, base URLs, error classification and failover (`tests/test_provider_contracts.py`).
 

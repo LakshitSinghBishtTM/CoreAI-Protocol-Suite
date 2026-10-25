@@ -87,12 +87,10 @@ Not started. Single-user mode stays the default.
 
 ## 11. Security
 
-- Independent audit of, or removal of, the custom crypto in `protocols/` (unaudited and not used by the request path).
+- Independent audit of, or removal of, the custom crypto in `protocols/` (unaudited; `agents/agent_manager.py` still imports it, see `docs/threat-model.md`).
 - Decide the future of `protocols/`: rebuild on the tools layer or archive.
-- Remove or finish the unwired `middleware/` package (the server uses `api/middleware.py`).
-- Check git history for previously committed secrets (`.env`, `.netrc`, `.pypirc`, `keys/`) and rotate anything real.
+- Rotate the credentials found in git history and purge the paths (owner action; steps in `docs/secret-history-audit.md`).
 - Treat third-party GGUF files and `llama.cpp` updates as untrusted; keep the runtime updated.
-- Maintain a threat-model document reviewed at each major phase.
 
 ## 12. Release and documentation
 
