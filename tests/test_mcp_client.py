@@ -163,3 +163,51 @@ async def test_real_stdio_round_trip_with_our_own_server(tmp_path):
     finally:
         for c in clients:
             await c.close()
+
+
+class FlakyTransport(FakeTransport):
+    """Drops the connection on the Nth tools/call (sent=False or True)."""
+
+    def __init__(self, tools, fail_at=1, sent=False):
+        super().__init__(tools)
+        self.fail_at, self.sent_flag, self.calls, self.starts = fail_at, sent, 0, 0
+
+    async def start(self):
+        self.starts += 1
+
+    async def send(self, msg, expect_reply=True):
+        if msg.get("method") == "tools/call":
+            self.calls += 1
+            if self.calls == self.fail_at:
+                from tools.mcp_client import McpConnectionError
+
+                raise McpConnectionError("dropped", sent=self.sent_flag)
+        return await super().send(msg, expect_reply)
+
+
+async def test_reconnects_and_retries_when_request_never_sent():
+    t = FlakyTransport([spec("a")], sent=False)
+    c = McpClient("srv", t)
+    await c.connect()
+    assert await c.call_tool("a", {"x": 1}) == "a:{'x': 1}"
+    assert t.starts == 2 and t.calls == 2
+
+
+async def test_reconnects_but_does_not_retry_midflight_tool_call():
+    from tools.mcp_client import McpClientError
+
+    t = FlakyTransport([spec("a")], sent=True)
+    c = McpClient("srv", t)
+    await c.connect()
+    with pytest.raises(McpClientError, match="not retried"):
+        await c.call_tool("a", {})
+    assert t.calls == 1 and t.starts == 2
+    assert await c.call_tool("a", {}) == "a:{}"  # next call works
+
+
+async def test_http_transport_restarts_after_close():
+    h = HttpTransport("http://x", transport=httpx.MockTransport(lambda r: httpx.Response(200, json={})))
+    await h.close()
+    await h.start()
+    assert not h._http.is_closed
+    await h.close()

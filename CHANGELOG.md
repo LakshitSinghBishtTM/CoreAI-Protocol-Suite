@@ -4,6 +4,9 @@
 
 The previous `1.0.0` label did not match the project's state; versions now start at 0.1.0 (alpha).
 
+### Added (MCP client reconnect)
+- The MCP client reconnects (close, restart, re-handshake) after a dropped stdio or HTTP connection. A request that never reached the server, and `tools/list`, are retried once; a `tools/call` lost mid-flight is not retried, so a tool never runs twice.
+
 ### Added (TUI: easier start, separate settings)
 - **Home** section: first-run checklist (gateway, token, provider key) with an inline token field. The TUI opens on it until a token is saved, then straight on Chat.
 - **Settings** section: chat defaults, theme and sign-out in one place, saved to `tui.json` in the config directory. The chat screen's session panel is collapsed by default.

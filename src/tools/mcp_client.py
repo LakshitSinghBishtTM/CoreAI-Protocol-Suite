@@ -39,6 +39,15 @@ class McpClientError(Exception):
     pass
 
 
+class McpConnectionError(McpClientError):
+    """The transport dropped. ``sent`` is False when the request provably never
+    reached the server, so retrying it cannot run a tool twice."""
+
+    def __init__(self, message: str, sent: bool = True):
+        super().__init__(message)
+        self.sent = sent
+
+
 class StdioTransport:
     def __init__(
         self, command: list[str], env: Optional[dict] = None, cwd: Optional[str] = None
@@ -62,16 +71,21 @@ class StdioTransport:
     async def send(self, message: dict, expect_reply: bool = True) -> Optional[dict]:
         proc = self._proc
         if proc is None or proc.returncode is not None:
-            raise McpClientError("MCP server process is not running")
+            raise McpConnectionError("MCP server process is not running", sent=False)
         async with self._lock:
-            proc.stdin.write((json.dumps(message) + "\n").encode())
-            await proc.stdin.drain()
+            try:
+                proc.stdin.write((json.dumps(message) + "\n").encode())
+                await proc.stdin.drain()
+            except (BrokenPipeError, ConnectionError) as exc:
+                raise McpConnectionError(
+                    f"MCP server pipe closed: {exc}", sent=False
+                ) from exc
             if not expect_reply:
                 return None
             while True:  # skip anything that isn't the reply to this request
                 line = await proc.stdout.readline()
                 if not line:
-                    raise McpClientError("MCP server closed the connection")
+                    raise McpConnectionError("MCP server closed the connection")
                 try:
                     reply = json.loads(line)
                 except ValueError:
@@ -93,15 +107,24 @@ class StdioTransport:
 class HttpTransport:
     def __init__(self, url: str, headers: Optional[dict] = None, transport=None):
         self.url, self.headers = url, headers or {}
-        self._http = httpx.AsyncClient(timeout=REQUEST_TIMEOUT_S, transport=transport)
+        self._transport = transport
+        self._http = self._new_http()
+
+    def _new_http(self) -> httpx.AsyncClient:
+        return httpx.AsyncClient(timeout=REQUEST_TIMEOUT_S, transport=self._transport)
 
     async def start(self) -> None:
-        return None
+        if self._http.is_closed:  # restart after close() during a reconnect
+            self._http = self._new_http()
 
     async def send(self, message: dict, expect_reply: bool = True) -> Optional[dict]:
         try:
             r = await self._http.post(self.url, json=message, headers=self.headers)
             r.raise_for_status()
+        except httpx.ConnectError as exc:  # never reached the server
+            raise McpConnectionError(f"MCP HTTP connect failed: {exc}", sent=False) from exc
+        except httpx.TransportError as exc:
+            raise McpConnectionError(f"MCP HTTP connection lost: {exc}") from exc
         except httpx.HTTPError as exc:
             raise McpClientError(f"MCP HTTP request failed: {exc}") from exc
         if not expect_reply or r.status_code == 202 or not r.content:
@@ -116,8 +139,41 @@ class McpClient:
     def __init__(self, name: str, transport):
         self.name, self.transport = name, transport
         self._ids = itertools.count(1)
+        self._reconnect_lock = asyncio.Lock()
+
+    async def _reconnect(self) -> None:
+        """Tear down the dead transport and run the handshake again."""
+        async with self._reconnect_lock:
+            logger.warning(f"[mcp:{self.name}] connection lost, reconnecting")
+            try:
+                await self.transport.close()
+            except Exception:
+                pass
+            await self.connect()
 
     async def _rpc(self, method: str, params: Optional[dict] = None) -> dict:
+        """Send a request. On a dropped connection, reconnect; retry once only
+        when that cannot duplicate a side effect (never sent, or a read-only
+        method). A tool call lost mid-flight is not retried."""
+        try:
+            return await self._rpc_once(method, params)
+        except McpConnectionError as exc:
+            if method == "initialize":
+                raise
+            safe = (not exc.sent) or method == "tools/list"
+            try:
+                await self._reconnect()
+            except Exception as rexc:
+                raise McpConnectionError(
+                    f"{method} failed and reconnect failed: {rexc}"
+                ) from exc
+            if not safe:
+                raise McpClientError(
+                    f"{method}: connection dropped mid-call; reconnected, not retried"
+                ) from exc
+            return await self._rpc_once(method, params)
+
+    async def _rpc_once(self, method: str, params: Optional[dict] = None) -> dict:
         msg = {"jsonrpc": "2.0", "id": next(self._ids), "method": method}
         if params is not None:
             msg["params"] = params
