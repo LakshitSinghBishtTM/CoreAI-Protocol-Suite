@@ -296,3 +296,227 @@ def test_real_gemini_errors_are_classified(cls_name, code, status, kind):
         code, {"error": {"code": code, "message": "m", "status": status}}
     )
     assert classify(exc).kind is kind
+
+
+# ------------------------------------------------------- Grok and DeepSeek
+# Both use the OpenAI SDK against their own base URL, so these run the real
+# provider classes over a mock transport and pin what goes on the wire.
+
+from providers.deepseek import DEEPSEEK_BASE_URL, DeepSeekProvider  # noqa: E402
+from providers.grok import GrokProvider  # noqa: E402
+
+COMPAT_PROVIDERS = [
+    (GrokProvider, "https://api.x.ai/v1", "grok-3-mini"),
+    (DeepSeekProvider, DEEPSEEK_BASE_URL, "deepseek-chat"),
+]
+
+
+def compat_provider(cls, handler):
+    p = cls("test-key")
+    p.client = AsyncOpenAI(
+        api_key="k",
+        base_url=str(p.client.base_url),
+        max_retries=0,
+        http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
+    )
+    return p
+
+
+@pytest.mark.parametrize("cls,base_url,model", COMPAT_PROVIDERS)
+def test_compat_providers_point_at_their_own_base_url(cls, base_url, model):
+    p = cls("test-key")
+    assert str(p.client.base_url).rstrip("/") == base_url
+    assert p.default_model == model
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("cls,base_url,model", COMPAT_PROVIDERS)
+async def test_compat_complete_works_with_the_installed_sdk(cls, base_url, model):
+    seen = {}
+
+    def handler(r):
+        seen["url"] = str(r.url)
+        seen["body"] = json.loads(r.content)
+        return httpx.Response(200, json=OPENAI_OK)
+
+    resp = await compat_provider(cls, handler).complete(
+        req(temperature=0.3, system_prompt="be brief")
+    )
+    assert resp.content == "hello from gpt"
+    assert (resp.input_tokens, resp.output_tokens) == (9, 3)
+    assert resp.provider == cls.name
+    assert seen["url"].startswith(base_url)
+    assert seen["body"]["model"] == model
+    assert seen["body"]["temperature"] == 0.3
+    assert seen["body"]["max_tokens"] == 50
+    assert seen["body"]["messages"][0] == {"role": "system", "content": "be brief"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("cls,base_url,model", COMPAT_PROVIDERS)
+async def test_compat_stream_works_with_the_installed_sdk(cls, base_url, model):
+    def chunk(delta, finish=None, usage=None, choices=True):
+        d = {"id": "c", "object": "chat.completion.chunk", "created": 1, "model": "m"}
+        d["choices"] = (
+            [{"index": 0, "delta": delta, "finish_reason": finish}] if choices else []
+        )
+        if usage:
+            d["usage"] = usage
+        return f"data: {json.dumps(d)}\n\n"
+
+    sse = (
+        chunk({"role": "assistant", "content": "Hel"})
+        + chunk({"content": "lo"})
+        + chunk({}, finish="stop")
+        + chunk(
+            {},
+            usage={"prompt_tokens": 5, "completion_tokens": 2, "total_tokens": 7},
+            choices=False,
+        )
+        + "data: [DONE]\n\n"
+    )
+    seen = {}
+
+    def handler(r):
+        seen["body"] = json.loads(r.content)
+        return httpx.Response(
+            200, headers={"content-type": "text/event-stream"}, content=sse.encode()
+        )
+
+    chunks = [c async for c in compat_provider(cls, handler).stream(req())]
+    assert "".join(chunks) == "Hello"
+    assert seen["body"]["stream"] is True
+    assert seen["body"]["stream_options"] == {"include_usage": True}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("cls,base_url,model", COMPAT_PROVIDERS)
+@pytest.mark.parametrize(
+    "status,headers,kind,retry_after",
+    [
+        (429, {"retry-after": "7"}, ErrorKind.RATE_LIMIT, 7.0),
+        (500, None, ErrorKind.SERVER_ERROR, None),
+        (503, None, ErrorKind.OVERLOADED, None),
+        (401, None, ErrorKind.AUTH, None),
+        (400, None, ErrorKind.BAD_REQUEST, None),
+    ],
+)
+async def test_compat_real_errors_are_classified(
+    cls, base_url, model, status, headers, kind, retry_after
+):
+    provider = compat_provider(cls, status_handler(httpx, status, headers))
+    with pytest.raises(Exception) as info:
+        await provider.complete(req())
+    result = classify(info.value)
+    assert result.kind is kind
+    assert result.retry_after == retry_after
+
+
+@pytest.mark.asyncio
+async def test_router_fails_over_from_a_real_deepseek_503_to_grok():
+    ds = compat_provider(DeepSeekProvider, status_handler(httpx, 503))
+    grok = compat_provider(GrokProvider, lambda r: httpx.Response(200, json=OPENAI_OK))
+    router = make_router({"deepseek": ds, "grok": grok}, max_retry_attempts=1)
+    resp = await router.route(request())
+    assert resp.content == "hello from gpt"
+    assert resp.metadata["failed_over_from"] == ["deepseek"]
+
+
+# ------------------------------------------------------------------ Gemini
+# Real google-genai client over a mock transport.
+
+GEMINI_OK = {
+    "candidates": [
+        {
+            "content": {"role": "model", "parts": [{"text": "hello from gemini"}]},
+            "finishReason": "STOP",
+            "index": 0,
+        }
+    ],
+    "usageMetadata": {
+        "promptTokenCount": 8,
+        "candidatesTokenCount": 3,
+        "totalTokenCount": 11,
+    },
+}
+
+
+def gemini_provider(handler):
+    from google.genai import types
+
+    from providers.gemini import GeminiProvider
+
+    p = GeminiProvider("test-key")
+    from google import genai
+
+    p.client = genai.Client(
+        api_key="k",
+        http_options=types.HttpOptions(
+            httpx_async_client=httpx.AsyncClient(
+                transport=httpx.MockTransport(handler)
+            ),
+            retry_options=None,
+        ),
+    )
+    return p
+
+
+@pytest.mark.asyncio
+async def test_gemini_complete_works_with_the_installed_sdk():
+    seen = {}
+
+    def handler(r):
+        seen["url"] = str(r.url)
+        seen["body"] = json.loads(r.content)
+        return httpx.Response(200, json=GEMINI_OK)
+
+    resp = await gemini_provider(handler).complete(
+        req(temperature=0.4, system_prompt="be brief")
+    )
+    assert resp.content == "hello from gemini"
+    assert (resp.input_tokens, resp.output_tokens) == (8, 3)
+    assert "generateContent" in seen["url"] and "gemini-2.0-flash" in seen["url"]
+    cfg = seen["body"]["generationConfig"]
+    assert cfg["temperature"] == 0.4 and cfg["maxOutputTokens"] == 50
+    assert seen["body"]["systemInstruction"]["parts"][0]["text"].startswith("be brief")
+
+
+@pytest.mark.asyncio
+async def test_gemini_stream_works_with_the_installed_sdk():
+    def part(text):
+        d = json.loads(json.dumps(GEMINI_OK))
+        d["candidates"][0]["content"]["parts"][0]["text"] = text
+        return f"data: {json.dumps(d)}\r\n\r\n"
+
+    def handler(r):
+        assert "streamGenerateContent" in str(r.url)
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            content=(part("Hel") + part("lo")).encode(),
+        )
+
+    chunks = [c async for c in gemini_provider(handler).stream(req())]
+    assert "".join(chunks) == "Hello"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "status,gstatus,kind",
+    [
+        (429, "RESOURCE_EXHAUSTED", ErrorKind.RATE_LIMIT),
+        (503, "UNAVAILABLE", ErrorKind.OVERLOADED),
+        (500, "INTERNAL", ErrorKind.SERVER_ERROR),
+        (400, "INVALID_ARGUMENT", ErrorKind.BAD_REQUEST),
+        (403, "PERMISSION_DENIED", ErrorKind.AUTH),
+    ],
+)
+async def test_gemini_http_errors_are_classified_end_to_end(status, gstatus, kind):
+    def handler(r):
+        return httpx.Response(
+            status, json={"error": {"code": status, "message": "m", "status": gstatus}}
+        )
+
+    with pytest.raises(Exception) as info:
+        await gemini_provider(handler).complete(req())
+    assert classify(info.value).kind is kind

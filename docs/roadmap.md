@@ -10,7 +10,6 @@ Principles still apply: layers depend downward only, every layer ships alone, cl
 
 - Exercise failover, breakers and retries against a real provider outage (staged outage or a scheduled live job with tiny requests), not only mocks and simulated failures.
 - Share circuit breaker state across replicas (it is per process today).
-- Add provider contract tests for Gemini, Grok and DeepSeek (Anthropic and OpenAI have them).
 - Raise API route coverage (about two thirds) and add tests for the task orchestrator.
 - Publish chaos-test results and p50/p99 gateway overhead from `scripts/chaos.py` and `scripts/loadtest.py`; target under 20 ms p99.
 - Run a memory profile (`tracemalloc` or `memray`) under load and confirm every queue and cache is bounded.

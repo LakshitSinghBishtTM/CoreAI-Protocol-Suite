@@ -11,6 +11,9 @@ The previous `1.0.0` label did not match the project's state; versions now start
 - `mypy` now checks all of `src` in CI (the ratchet list is gone). Only the Anthropic and Gemini adapter modules have four error codes relaxed, because the SDK types change between releases.
 - CI runs `twine check --strict` on the built wheel and sdist.
 
+### Added (provider contract tests)
+- Contract tests for Gemini, Grok and DeepSeek: the real provider classes and SDKs over mock HTTP transports, covering complete, streaming, request wire format, base URLs, error classification and failover (`tests/test_provider_contracts.py`).
+
 ### Added (Anthropic-compatible count_tokens)
 - `POST /v1/messages/count_tokens` returns `{"input_tokens": n}`, estimated with a provider's local tokenizer over the system prompt, messages, tool calls and tool schemas (images not counted). Same validation as `/v1/messages`; scope `completions:read`; header `X-CaiPS-Estimate: true`.
 
