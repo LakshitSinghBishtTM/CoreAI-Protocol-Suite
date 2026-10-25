@@ -11,6 +11,7 @@ agents:
     max_cost_usd: 0.25
     deadline_s: 120
     # approval_tools: [shell]       # always ask a human first
+    # plan: true                   # one planning call before the first step
     # local: true                   # small local model: tighter limits
 
 # Unattended runs. Each trigger starts a normal run of one of the agents above,

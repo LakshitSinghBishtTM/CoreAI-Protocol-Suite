@@ -9,6 +9,15 @@ tool (`question`, optional `proposed_action`). Calling it pauses the run in
 `waiting_approval`; an admin answers through the normal approval API. Approved or declined,
 the decision is returned to the model as the tool result, and no real tool runs.
 
+## Planning step
+
+Set `plan: true` on an agent (and optionally `plan_max_steps`, default 6). Before the first
+step the model gets one call with no tools, asking for a short numbered plan. The plan is
+appended to the first message of the run, so it is checkpointed, survives context compaction
+and is not redone when a run resumes. It is not counted as a step, but its cost and tokens
+count toward `max_cost_usd` and `max_total_tokens`, and a deadline applies. The trace has a
+`plan` event. An empty plan leaves the task unchanged. Off by default: it adds one model call.
+
 ## Replay a run against a model
 
 ```python

@@ -44,6 +44,14 @@ REVIEW_SPEC = {
 }
 
 
+PLAN_MARK = "\n\n[Plan]\n"
+PLAN_PROMPT = (
+    "Before acting, write a short numbered plan (at most {n} steps) for the task "
+    "below. Name the tools you expect to use. Do not carry out the task yet and "
+    "do not call tools.\n\nTask:\n{task}"
+)
+
+
 def _finished(run: dict) -> bool:
     """Completed, cancelled or limit-stopped runs are final; an error stop can be resumed."""
     return run["status"] in ("completed", "cancelled") or (
@@ -170,6 +178,11 @@ class HarnessRunner:
                 )
                 if stop:
                     return self._status(rid)
+            if agent.plan and not state["step"] and not pending:
+                reason = self._limit(rid, agent, state)
+                if reason:
+                    return self._end(rid, msgs, state, reason)
+                await self._plan(rid, agent, msgs, state)
             while True:
                 reason = self._limit(rid, agent, state)
                 if reason:
@@ -200,6 +213,55 @@ class HarnessRunner:
             self.store.set(rid, status="failed", stop_reason="error")
             self.store.event(rid, "run_finished", reason="error", step=state["step"])
             return self._status(rid)
+
+    async def _plan(self, rid, agent: AgentDef, msgs, state) -> None:
+        """One tool-free model call. The plan is appended to the pinned first
+        message, so it is checkpointed, survives compaction and is not redone
+        on resume. It does not count as a step but does count toward cost and
+        token limits."""
+        first = msgs[0]
+        if PLAN_MARK in first.content:
+            return
+        req = CompletionRequest(
+            messages=[
+                Message(
+                    "user",
+                    PLAN_PROMPT.format(n=agent.plan_max_steps, task=first.content),
+                )
+            ],
+            model=agent.model,
+            max_tokens=agent.max_tokens,
+            temperature=agent.temperature,
+            system_prompt=self._system(rid, agent, msgs),
+            metadata={
+                "run_id": rid,
+                "agent": agent.name,
+                "owner": self._get(rid)["owner"],
+                "purpose": "plan",
+            },
+        )
+        run = self._get(rid)
+        timeout = max(0.1, run["deadline"] - time.time()) if run["deadline"] else None
+        resp = await asyncio.wait_for(self.route(req), timeout)
+        state["cost_usd"] += resp.cost_usd or 0.0
+        state["input_tokens"] += resp.input_tokens or 0
+        state["output_tokens"] += resp.output_tokens or 0
+        plan = (resp.content or "").strip()
+        self.store.event(
+            rid,
+            "plan",
+            chars=len(plan),
+            cost_usd=resp.cost_usd,
+            input_tokens=resp.input_tokens,
+            output_tokens=resp.output_tokens,
+        )
+        if plan:
+            msgs[0] = Message(
+                first.role,
+                first.content + PLAN_MARK + plan + "\n\nFollow the plan; revise it if "
+                "a step fails.",
+            )
+        self._checkpoint(rid, msgs, state)
 
     def _system(self, rid, agent: AgentDef, msgs) -> str:
         """System prompt plus recalled memories (owner-scoped, labeled untrusted)."""

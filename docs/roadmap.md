@@ -28,12 +28,6 @@ Principles still apply: layers depend downward only, every layer ships alone, cl
 - Container or microVM code-execution runner (the current sandbox is process level).
 - Streamed tool use for the Anthropic-compatible `/v1/messages` endpoint.
 - Tool calling and structured output for local models.
-- Postgres support for the database query tool (see section 2).
-
-## 4. Agent harness
-
-- A separate planning step (the model plans in-loop today).
-- Postgres run store (see section 2).
 
 ## 5. Local models
 
