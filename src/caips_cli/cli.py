@@ -197,7 +197,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--section",
-        default="chat",
+        default="harness",
         help="section to open first (see `caips-tui --help`)",
     )
 

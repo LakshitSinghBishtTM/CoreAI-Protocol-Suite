@@ -4,6 +4,12 @@
 
 The previous `1.0.0` label did not match the project's state; versions now start at 0.1.0 (alpha).
 
+### Changed (TUI redesign)
+- `caips-tui` has a grouped sidebar (Workspace, Gateway, Automation, Data, Advanced), a slim top bar with a breadcrumb, and opens on the new **Harness** section.
+- **Harness**: a chat session with model, provider, policy, temperature, max tokens, history window, system prompt, context files and an Incognito toggle on top, and Tools, Reasoning and Stream below the transcript. Incognito sends `metadata.private` (local servers only) and turns off feedback and saving. Reasoning is a prompt-level instruction.
+- The old chat view is now **API** (section id `chat` is unchanged).
+- The TUI no longer asks for a token at startup. **Keys** holds a gateway-token card (save, forget) above the provider keys; `Ctrl+K` jumps there.
+
 ### Added (runtime routing-policy edits)
 - `PUT /v1/admin/policies/{name}` and `DELETE /v1/admin/policies/{name}` (admin): change one routing policy while the gateway runs. The body uses the same fields as `config/routing.yml` and is validated with the same rules; every problem is returned at once and an invalid edit never touches the active policies. Edits override file policies of the same name, survive file reloads, are marked in `GET /v1/admin/policies` (`runtime_edits`) and reset on restart. Audited as `policy.set` / `policy.remove`.
 - `caips policy-set NAME [--strategy --weights --ceiling --hedge --chain --provider --model --fallback-model --allow --deny | --file]` and `caips policy-rm NAME`.

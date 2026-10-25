@@ -172,11 +172,12 @@ async def test_app_boots_with_every_section_and_switches():
     )
     async with app.run_test(size=SIZE) as pilot:
         await settle(app, pilot)
-        assert len(SECTIONS) == 20
+        assert len(SECTIONS) == 21
         for sid, _, _ in SECTIONS:
             assert app.pane(sid) is not None
         assert "online" in str(app.query_one("#conn", Static).render())
-        app.query_one("#nav", OptionList).highlighted = 1  # Providers
+        nav = app.query_one("#nav", OptionList)
+        nav.highlighted = nav.get_option_index("providers")
         await settle(app, pilot)
         assert app.section == "providers"
         table = app.pane("providers").query_one(DataTable)
@@ -1530,3 +1531,189 @@ async def test_budgets_pane_sets_and_removes():
 
         await pane.perform("rm", {"subject": "bob"})
         assert srv.calls("DELETE", "/v1/admin/budgets/bob")
+
+
+# --------------------------------------------- layout: modes, keys, harness
+def hx_transcript(app):
+    return [str(w.render()) for w in app.pane("harness").query(".msg")]
+
+
+async def hx_say(app, pilot, text):
+    box = app.pane("harness").query_one("#prompt", Input)
+    box.value = text
+    await app.pane("harness").on_input_submitted(Input.Submitted(box, box.value))
+    await settle(app, pilot)
+
+
+async def test_sidebar_groups_every_section_once_and_opens_on_the_harness():
+    from caips_tui.app import GROUPS
+
+    grouped = [sid for _, sids in GROUPS for sid in sids]
+    assert sorted(grouped) == sorted(s[0] for s in SECTIONS)  # nothing lost or doubled
+    assert [g for g, _ in GROUPS][0] == "WORKSPACE" and GROUPS[0][1][:3] == [
+        "harness",
+        "chat",
+        "keys",
+    ]
+    app, _ = make(section="harness")
+    async with app.run_test(size=SIZE) as pilot:
+        await settle(app, pilot)
+        nav = app.query_one("#nav", OptionList)
+        assert app.section == "harness"
+        assert nav.highlighted == nav.get_option_index("harness")
+        # group headings are labels, not destinations
+        assert nav.get_option("grp-WORKSPACE").disabled
+
+
+async def test_no_token_means_no_prompt_at_startup_and_keys_is_where_it_is_saved(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("CAIPS_CONFIG_DIR", str(tmp_path))
+    monkeypatch.delenv("CAIPS_API_KEY", raising=False)
+    from caips_cli import credentials
+
+    srv = Server({("GET", "/health"): (200, {"status": "ok"})})
+    app = CaipsTui(Client("http://gw", transport=httpx.MockTransport(srv)), "harness")
+    async with app.run_test(size=SIZE) as pilot:
+        await settle(app, pilot)
+        assert len(app.screen_stack) == 1  # no modal asking for a key
+        assert "no API key" in str(app.query_one("#conn", Static).render())
+        await pilot.press("ctrl+k")  # jumps to Keys instead of opening a dialog
+        await settle(app, pilot)
+        assert app.section == "keys" and len(app.screen_stack) == 1
+        pane = app.pane("keys")
+        box = pane.query_one("#fld-token", Input)
+        assert box.password and app.focused is box
+        box.value = "s3cret-token"
+        await pane.on_input_submitted(Input.Submitted(box, box.value))
+        await settle(app, pilot)
+        assert box.value == "" and app.client.api_key == "s3cret-token"
+        assert credentials.load("http://gw") == "s3cret-token"
+        assert "key set" in str(app.query_one("#conn", Static).render())
+        await pane.on_button_pressed(
+            Button.Pressed(pane.query_one("#tok-clear", Button))
+        )
+        await settle(app, pilot)
+        assert not app.client.has_key and credentials.load("http://gw") is None
+        assert "no API key" in str(app.query_one("#conn", Static).render())
+        box.value = "  "
+        await pane.on_input_submitted(Input.Submitted(box, box.value))
+        assert "Paste a token" in str(pane.query_one(".status", Static).render())
+
+
+async def test_harness_sends_settings_tools_reasoning_and_context(tmp_path):
+    notes = tmp_path / "notes.txt"
+    notes.write_text("the launch code is 1234")
+    app, srv = make({("POST", "/v1/chat/completions"): OPENAI_STREAM})
+    async with app.run_test(size=SIZE) as pilot:
+        await settle(app, pilot)
+        hx = app.pane("harness")
+        hx.query_one("#fld-model", Input).value = "fast"
+        hx.query_one("#hx-system").text = "be brief"
+        await hx.on_input_submitted(
+            Input.Submitted(hx.query_one("#fld-attach", Input), str(notes))
+        )
+        hx.set_reasoning("deep")
+        hx.set_flag("tools", True)
+        await hx_say(app, pilot, "hi")
+        body = srv.calls("POST", "/v1/chat/completions")[0][3]
+        assert body["model"] == "fast" and body["run_tools"] is True
+        assert "metadata" not in body  # not incognito
+        system, user = body["messages"]
+        assert system["role"] == "system" and user == {"role": "user", "content": "hi"}
+        assert system["content"].startswith("be brief")  # your prompt comes first
+        assert (
+            "step by step" in system["content"]
+            or "Reason carefully" in system["content"]
+        )
+        assert "--- notes.txt ---" in system["content"] and "1234" in system["content"]
+        assert (
+            hx_transcript(app)[0].startswith("You") and "Hello" in hx_transcript(app)[1]
+        )
+        assert "notes.txt" in str(hx.query_one("#hx-chips", Static).render())
+        hx.set_reasoning("off")
+        await pilot.pause()
+        await hx.on_button_pressed(Button.Pressed(hx.query_one("#ctx-clear", Button)))
+        await hx_say(app, pilot, "again")
+        system = srv.calls("POST", "/v1/chat/completions")[1][3]["messages"][0]
+        assert system["content"] == "be brief"  # reasoning off, context cleared
+
+
+async def test_harness_reasoning_button_cycles_and_history_turns_trim():
+    app, srv = make({("POST", "/v1/chat/completions"): OPENAI_STREAM})
+    async with app.run_test(size=SIZE) as pilot:
+        await settle(app, pilot)
+        hx = app.pane("harness")
+        btn = hx.query_one("#cycle-reasoning", Button)
+        seen = []
+        for _ in range(3):
+            await hx.on_button_pressed(Button.Pressed(btn))
+            seen.append(hx.reasoning)
+        assert seen == ["brief", "deep", "off"] and "off" in str(btn.label)
+        hx.query_one("#fld-turns", Input).value = "1"
+        for text in ("one", "two", "three"):
+            await hx_say(app, pilot, text)
+        sent = srv.calls("POST", "/v1/chat/completions")[2][3]["messages"]
+        assert [m["content"] for m in sent] == [
+            "two",
+            "Hello",
+            "three",
+        ]  # last exchange + new
+        assert len(hx.history) == 6  # the full history is kept locally
+        hx.query_one("#fld-turns", Input).value = "zero"
+        before = len(srv.calls("POST", "/v1/chat/completions"))
+        await hx_say(app, pilot, "x")
+        assert len(srv.calls("POST", "/v1/chat/completions")) == before
+        assert "History turns" in str(hx.query_one(".status", Static).render())
+
+
+async def test_harness_incognito_routes_private_and_leaves_no_traces(tmp_path):
+    app, srv = make(
+        {
+            ("POST", "/v1/chat/completions"): OPENAI_STREAM,
+            ("POST", "/v1/feedback"): (200, {"ok": True}),
+        }
+    )
+    async with app.run_test(size=SIZE) as pilot:
+        await settle(app, pilot)
+        hx = app.pane("harness")
+        await hx.on_button_pressed(
+            Button.Pressed(hx.query_one("#btn-incognito", Button))
+        )
+        assert hx.incognito and "INCOGNITO" in str(
+            hx.query_one("#hx-badges", Static).render()
+        )
+        assert hx.query_one("#good", Button).disabled
+        await hx_say(app, pilot, "secret")
+        assert srv.calls("POST", "/v1/chat/completions")[0][3]["metadata"] == {
+            "private": True
+        }
+        await hx_say(app, pilot, "/good")
+        await hx_say(app, pilot, f"/save {tmp_path / 'out.md'}")
+        assert (
+            not srv.calls("POST", "/v1/feedback") and not (tmp_path / "out.md").exists()
+        )
+        assert any("Incognito" in line for line in hx_transcript(app))
+        await hx_say(app, pilot, "/incognito off")
+        assert not hx.incognito
+        await hx_say(app, pilot, "plain")
+        assert "metadata" not in srv.calls("POST", "/v1/chat/completions")[1][3]
+
+
+async def test_harness_attach_errors_and_clear_keep_context(tmp_path):
+    app, _ = make()
+    async with app.run_test(size=SIZE) as pilot:
+        await settle(app, pilot)
+        hx = app.pane("harness")
+        await hx.attach(str(tmp_path / "missing.txt"))
+        assert "cannot read" in str(hx.query_one(".status", Static).render())
+        f = tmp_path / "a.txt"
+        f.write_text("x")
+        await hx.attach(str(f))
+        assert list(hx.files) == ["a.txt"]
+        await hx_say(app, pilot, "/clear")
+        assert list(hx.files) == ["a.txt"] and hx.history == []
+        await hx_say(app, pilot, "/detach")
+        assert hx.files == {}
+        await hx_say(app, pilot, "/mode native")  # no dialect picker here
+        assert any("OpenAI chat" in line for line in hx_transcript(app))

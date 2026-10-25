@@ -12,8 +12,8 @@ from typing import Any, Optional
 
 from rich.text import Text
 from textual.app import ComposeResult
-from textual.containers import Grid
-from textual.widgets import Button, Input, RichLog
+from textual.containers import Grid, Horizontal, Vertical
+from textual.widgets import Button, Input, RichLog, Static
 
 from caips_tui.client import ApiError, q
 from caips_tui.widgets import Action, Field, Pane, TablePane
@@ -32,11 +32,13 @@ def read_jsonl(path: str) -> list[dict]:
 
 
 class KeysPane(TablePane):
+    """The one place the UI asks for secrets: the gateway token, then provider keys."""
+
     TITLE = "Keys"
     HELP = (
-        "Provider API keys (admin). Pick a provider id from Catalog, add as many keys per "
-        "provider as you like (they rotate; an exhausted key is skipped), or add a Local "
-        "or Custom server. Keys are encrypted on the server and never shown again."
+        "Nothing is asked for at startup. Save the gateway token once (kept per gateway URL in "
+        "~/.config/caips, mode 0600), then add provider keys to the gateway. Keys are encrypted on "
+        "the server and never shown again."
     )
     PATH = "/v1/keys"
     ID_KEY = "id"
@@ -50,11 +52,11 @@ class KeysPane(TablePane):
         ("Model", "model"),
     ]
     FIELDS = [
-        Field("provider", "provider id (openai, qwen, local, custom, ...)"),
-        Field("label", "label / server name (optional for cloud)"),
+        Field("provider", "provider (openai, qwen, local, …)"),
+        Field("label", "label (optional for cloud)"),
         Field("key", "API key (hidden)", password=True),
-        Field("base_url", "base URL (local/custom, optional override)"),
-        Field("model", "default model (optional)"),
+        Field("base_url", "base URL (local / custom)"),
+        Field("model", "default model"),
     ]
     ACTIONS = [
         Action("add", "Add key"),
@@ -67,6 +69,86 @@ class KeysPane(TablePane):
             variant="error",
         ),
     ]
+
+    # -- gateway token card ------------------------------------------------
+    def body(self) -> ComposeResult:
+        with Vertical(classes="card", id="token-card"):
+            yield Static("Gateway token", classes="card-title")
+            yield Static("", id="token-state")
+            with Horizontal(classes="frow"):
+                yield Input(
+                    password=True,
+                    placeholder="paste the gateway API token, then press Enter",
+                    id="fld-token",
+                )
+                yield Button(
+                    "Save token", id="tok-save", variant="primary", classes="inline"
+                )
+                yield Button("Forget", id="tok-clear", classes="inline")
+        yield Static("Provider keys", classes="card-title")
+        yield from super().body()
+
+    def focus_primary(self) -> None:
+        self.query_one("#fld-token", Input).focus()
+
+    def token_state(self) -> Text:
+        from caips_cli import credentials
+
+        if os.getenv("CAIPS_API_KEY"):
+            return Text(
+                "● using CAIPS_API_KEY from the environment (it overrides the saved token)",
+                style="green",
+            )
+        if self.client.has_key:
+            saved = credentials.load(self.client.base_url) is not None
+            return Text(
+                "● token set"
+                + (
+                    " and saved for this gateway" if saved else " for this session only"
+                ),
+                style="green",
+            )
+        return Text(
+            "○ no token yet. Paste one below; requests are sent without it until then.",
+            style="yellow",
+        )
+
+    async def refresh_data(self) -> None:
+        try:
+            self.query_one("#token-state", Static).update(self.token_state())
+        except Exception:
+            pass
+        await super().refresh_data()
+
+    async def on_input_submitted(self, event: Input.Submitted) -> None:
+        if event.input.id == "fld-token":
+            event.stop()
+            await self.save_token()
+            return
+        await super().on_input_submitted(event)
+
+    async def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "tok-save":
+            event.stop()
+            await self.save_token()
+        elif event.button.id == "tok-clear":
+            event.stop()
+            self.app.forget_token()  # type: ignore[attr-defined]
+            self.say("token forgotten")
+            await self.refresh_data()
+        else:
+            await super().on_button_pressed(event)
+
+    async def save_token(self) -> None:
+        box = self.query_one("#fld-token", Input)
+        key = box.value.strip()
+        if not key:
+            self.say("Paste a token first.", error=True)
+            return
+        box.value = ""  # never leave the secret in the widget
+        warn = self.app.store_token(key)  # type: ignore[attr-defined]
+        await self.refresh_data()
+        self.say(warn or "token saved", error=bool(warn))
 
     async def act_add(self, row: Optional[dict]) -> None:
         provider = self.val("provider")

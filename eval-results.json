@@ -1,0 +1,40 @@
+{
+  "n": 3,
+  "quality": 0.0,
+  "errors": 3,
+  "cost_usd": 0.0,
+  "p50_ms": 0.0,
+  "p95_ms": 0.0,
+  "results": [
+    {
+      "id": "arith",
+      "score": 0.0,
+      "cost_usd": 0.0,
+      "latency_ms": 0.0,
+      "tokens": 0,
+      "provider": null,
+      "model": null,
+      "error": "All connection attempts failed"
+    },
+    {
+      "id": "capital",
+      "score": 0.0,
+      "cost_usd": 0.0,
+      "latency_ms": 0.0,
+      "tokens": 0,
+      "provider": null,
+      "model": null,
+      "error": "All connection attempts failed"
+    },
+    {
+      "id": "json",
+      "score": 0.0,
+      "cost_usd": 0.0,
+      "latency_ms": 0.0,
+      "tokens": 0,
+      "provider": null,
+      "model": null,
+      "error": "All connection attempts failed"
+    }
+  ]
+}

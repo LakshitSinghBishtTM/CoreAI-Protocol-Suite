@@ -1,7 +1,7 @@
 """The Textual application: a section sidebar, one pane per API area, and entry points.
 
-Run ``caips-tui`` (or ``caips tui``). Settings: ``CAIPS_URL``; the token is entered
-in the UI (Ctrl+K) or taken from ``CAIPS_API_KEY``.
+Run ``caips-tui`` (or ``caips tui``). Settings: ``CAIPS_URL``; the token is added in the
+Keys section (Ctrl+K jumps there) or taken from ``CAIPS_API_KEY``. Nothing is asked at startup.
 """
 
 from __future__ import annotations
@@ -20,12 +20,13 @@ from textual.command import DiscoveryHit, Hit, Hits, Provider
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.theme import Theme
-from textual.widgets import ContentSwitcher, Footer, Header, Input, OptionList, Static
+from textual.widgets import ContentSwitcher, Footer, OptionList, Static
 from textual.widgets.option_list import Option
 
 from caips_cli import credentials
 from caips_tui.chat import ChatPane
 from caips_tui.client import ApiError, Client
+from caips_tui.harness_view import HarnessPane
 from caips_tui.panes import (
     AdminPane,
     AgentsPane,
@@ -50,10 +51,11 @@ from caips_tui.panes import (
 from caips_tui.widgets import Pane
 
 SECTIONS: list[tuple[str, str, type[Pane]]] = [
-    ("chat", "Chat", ChatPane),
+    ("harness", "Harness", HarnessPane),
+    ("chat", "API", ChatPane),
+    ("keys", "Keys", KeysPane),
     ("providers", "Providers", ProvidersPane),
     ("routing", "Routing", RoutingPane),
-    ("keys", "Keys", KeysPane),
     ("models", "Models", ModelsPane),
     ("usage", "Usage", UsagePane),
     ("budgets", "Budgets", BudgetsPane),
@@ -72,37 +74,48 @@ SECTIONS: list[tuple[str, str, type[Pane]]] = [
     ("admin", "Admin", AdminPane),
 ]
 
+# How the sidebar groups the sections (every section appears exactly once).
+GROUPS: list[tuple[str, list[str]]] = [
+    ("WORKSPACE", ["harness", "chat", "keys"]),
+    ("GATEWAY", ["providers", "routing", "models", "usage", "budgets", "status"]),
+    ("AUTOMATION", ["runs", "approvals", "tools", "agents", "tasks"]),
+    ("DATA", ["memory", "rag", "feedback"]),
+    ("ADVANCED", ["local", "finetune", "evals", "admin"]),
+]
+LABELS = {sid: label for sid, label, _ in SECTIONS}
+
 HELP = """CaiPS terminal UI
 
+Ctrl+B    focus the section list (↑/↓ switch section, Enter moves into it)
+Ctrl+K    open Keys: save the gateway token, add provider keys
 Ctrl+P    command palette: jump to any section or action
 Ctrl+T    toggle light/dark theme
-Ctrl+B    focus the section list (↑/↓ switch section, Enter moves into it)
 Tab       next control          Shift+Tab   previous control
 F5 / Ctrl+R   refresh the current section
-Esc       stop a chat reply     F1   this help      Ctrl+Q   quit
-Ctrl+K    set API token
+Esc       stop a reply          F1   this help      Ctrl+Q   quit
+
+Harness  a chat session with model, context, system prompt, incognito, tools
+         and reasoning in view.  API  the raw OpenAI / native / Anthropic dialects.
+Keys     the only place secrets are entered. Nothing is asked at startup.
 
 Every button makes one documented API request. Sections that need the admin
-scope (Stats, Approvals, Local models, Fine-tuning, Admin) show the server's
-error if your token lacks it. Destructive actions ask first.
-
-Ctrl+K    set or replace the API token (saved to ~/.config/caips, mode 0600)
+scope show the server's error if your token lacks it. Destructive actions ask first.
 CAIPS_API_KEY in the environment overrides the saved token; it is never shown."""
 
 
 THEMES = [
     Theme(
         name="caips-dark",
-        primary="#4f8cff",
-        secondary="#7c8aa5",
-        accent="#2dd4bf",
-        foreground="#d7dde8",
-        background="#0f141b",
-        surface="#151b24",
-        panel="#1b2330",
-        success="#34d399",
-        warning="#fbbf24",
-        error="#f87171",
+        primary="#5b9dff",
+        secondary="#8b98ad",
+        accent="#35c9b0",
+        foreground="#d8dee9",
+        background="#0b0f14",
+        surface="#11161d",
+        panel="#19212b",
+        success="#3fb97f",
+        warning="#e3b341",
+        error="#f0605d",
         dark=True,
     ),
     Theme(
@@ -139,7 +152,7 @@ class SectionCommands(Provider):
             ("Refresh section", "Reload the current section (F5)", app.action_refresh),
             (
                 "Set API token",
-                "Enter or replace the token (Ctrl+K)",
+                "Open Keys and paste the gateway token (Ctrl+K)",
                 app.action_set_key,
             ),
             (
@@ -177,61 +190,56 @@ class HelpScreen(ModalScreen[None]):
         self.dismiss(None)
 
 
-class KeyScreen(ModalScreen[Optional[str]]):
-    BINDINGS = [Binding("escape", "skip", "Skip")]
-    DEFAULT_CSS = """
-    KeyScreen { align: center middle; }
-    KeyScreen > Vertical { width: 64; height: auto; padding: 1 2; border: thick $primary; background: $surface; }
-    """
-
-    def compose(self) -> ComposeResult:
-        with Vertical():
-            yield Static(
-                "Gateway API token\nEnter to save, Esc to skip. Input is hidden."
-            )
-            yield Input(password=True, placeholder="token", id="token")
-
-    def on_input_submitted(self, event: Input.Submitted) -> None:
-        self.dismiss(event.value.strip() or None)
-
-    def action_skip(self) -> None:
-        self.dismiss(None)
-
-
 class CaipsTui(App[None]):
     TITLE = "CaiPS"
     HORIZONTAL_BREAKPOINTS = [(0, "-narrow"), (110, "-wide")]
     CSS = """
     Screen { background: $background; }
-    Header { background: $panel; color: $foreground; }
     Footer { background: $panel; }
-    #side { width: 22; background: $surface; border-right: tall $panel; }
-    #brand { height: 3; padding: 1 1 0 1; color: $accent; text-style: bold; }
-    #nav { height: 1fr; background: transparent; border: none; padding: 0; }
+
+    /* top bar */
+    #topbar { height: 1; background: $panel; padding: 0 1; }
+    #crumb { width: 1fr; }
+    #topinfo { width: auto; color: $text-muted; }
+
+    /* sidebar */
+    #side { width: 26; background: $surface; border-right: tall $panel; }
+    #brand { height: 4; padding: 1 2 0 2; }
+    #nav { height: 1fr; background: transparent; border: none; padding: 0; scrollbar-size-vertical: 1; }
     #nav > .option-list--option { padding: 0 2; }
-    #nav > .option-list--option-highlighted { background: $primary 30%; color: $foreground; text-style: bold; }
+    #nav > .option-list--option-highlighted { background: $primary 25%; color: $foreground; text-style: bold; }
     #nav:focus > .option-list--option-highlighted { background: $primary; color: $background; }
-    #conn { height: 3; padding: 0 1; border-top: tall $panel; background: $panel 60%; }
+    #conn { height: auto; min-height: 4; padding: 1 2; border-top: tall $panel; background: $panel 60%; }
+
+    /* panes */
+    Pane { padding: 1 2 0 2; height: 1fr; }
+    .pane-title { text-style: bold; color: $accent; height: 1; }
+    .pane-help { color: $text-muted; margin-bottom: 1; }
+    .status { height: 1; color: $text-muted; }
+    .card { border: round $panel; background: $surface; padding: 0 1; height: auto; margin-bottom: 1; }
+    .card-title { color: $accent; text-style: bold; height: 1; }
+    #token-state { height: 1; margin-bottom: 1; }
+
+    /* controls */
+    Button { border: none; min-width: 8; }
+    Button.-default { background: $panel; color: $foreground; }
+    Button.-default:hover { background: $primary 40%; }
+    Button:hover { text-style: bold; }
+    Input:focus { border: none; }
     DataTable { background: $surface; }
     DataTable > .datatable--header { background: $panel; text-style: bold; color: $accent; }
     DataTable > .datatable--cursor { background: $primary 40%; }
     DataTable:focus > .datatable--cursor { background: $primary; color: $background; }
-    Button { border: none; }
-    Button:hover { text-style: bold; }
-    Input:focus { border: none; }
-    Pane { padding: 0 1; height: 1fr; }
-    .pane-title { text-style: bold; color: $accent; }
-    .pane-help { color: $text-muted; }
 
     /* input fields and action buttons wrap into rows instead of overflowing */
-    .fields { grid-size: 2; grid-rows: 1; grid-gutter: 0 1; height: auto; margin-bottom: 1; }
+    .fields { grid-size: 2; grid-rows: 1; grid-gutter: 1 1; height: auto; margin-bottom: 1; }
     .actions { grid-size: 4; grid-rows: 1; grid-gutter: 0 1; height: auto; margin-bottom: 1; }
     .-wide .fields { grid-size: 3; }
     .-wide .actions { grid-size: 6; }
-    .fields Input, .row Input { height: 1; border: none; padding: 0 1; background: $boost; }
+    .fields Input, .row Input, .frow Input, .fgroup Input { height: 1; border: none; padding: 0 1; background: $panel; }
     .fields Input { width: 100%; }
-    .fields Input:focus, .row Input:focus { background: $primary 40%; }
-    .actions Button, .bar Button { height: 1; min-width: 6; border: none; padding: 0 1; }
+    .fields Input:focus, .row Input:focus, .frow Input:focus, .fgroup Input:focus { background: $primary 40%; }
+    .actions Button, .bar Button, .frow Button.inline { height: 1; min-width: 6; border: none; padding: 0 1; }
     .actions Button { width: 100%; }
     .bar { height: 1; margin: 1 0; }
     .bar Button { margin-right: 1; }
@@ -239,45 +247,85 @@ class CaipsTui(App[None]):
     .row Input { width: 1fr; margin-right: 1; }
     .row Input.wide { width: 3fr; }
     #mode { width: 20; margin-right: 1; }
-    #mode > SelectCurrent { border: none; height: 1; padding: 0 1; background: $boost; }
+    #mode > SelectCurrent { border: none; height: 1; padding: 0 1; background: $panel; }
+
+    /* labelled form rows (Harness, Keys) */
+    .frow { height: auto; margin-bottom: 1; }
+    .fgroup { width: 1fr; height: auto; margin-right: 2; }
+    .fgroup.narrow { width: 12; }
+    .fgroup.full { width: 100%; margin-right: 0; }
+    .frow Button.inline { margin-top: 1; width: auto; }
+    #token-card .frow { margin-bottom: 0; }
+    #token-card .frow Button.inline { margin-top: 0; }
+    #token-card .frow Input { width: 1fr; margin-right: 1; }
+    .flabel { color: $text-muted; height: 1; }
+    .inline-toggle { width: 100%; }
+    .empty-hint { color: $text-muted; width: 100%; margin-top: 2; text-align: center; }
+    Collapsible { border-top: none; padding: 0; background: transparent; }
+    Collapsible > Contents { padding: 0 0 0 1; height: auto; }
+    CollapsibleTitle { padding: 0; color: $accent; text-style: bold; background: transparent; }
+    #hx-system { height: 5; border: none; padding: 0 1; background: $panel; }
+    #hx-system:focus { background: $primary 25%; }
+    #hx-badges { height: 1; margin-bottom: 1; }
+    #hx-chips { height: 1; }
+    .bar.tools { margin: 1 0 1 0; }
+    #cycle-reasoning { min-width: 19; }
+    .spacer { width: 1fr; }
+    .-narrow .bar.tools .opt { display: none; }
+    #prompt { height: 3; border: tall $panel; padding: 0 1; background: $surface; }
+    #prompt:focus { border: tall $primary; }
+    HarnessPane.incognito #transcript { border: round $warning; }
+    HarnessPane.incognito #prompt { border: tall $warning 60%; }
+    HarnessPane.incognito #prompt:focus { border: tall $warning; }
 
     .body { height: 1fr; }
     .body DataTable { width: 2fr; }
     .detail { width: 1fr; border-left: solid $primary-darken-2; padding: 0 1; }
     .detail.wide { width: 1fr; border-left: none; }
-    .status { height: 1; }
-    #transcript { height: 1fr; border: round $primary-darken-2; padding: 0 1; }
+    #transcript { height: 1fr; border: round $panel; padding: 0 1; }
     .msg { margin-bottom: 1; }
-    .msg.user { background: $boost; padding: 0 1; }
+    .msg.user { background: $panel; padding: 0 1; }
     .msg.meta { color: $text-muted; text-style: italic; }
     .msg.info { color: $accent; }
     .msg.error { color: $error; }
     """
     BINDINGS = [
         Binding("ctrl+b", "focus_sidebar", "Sections"),
-        Binding("ctrl+k", "set_key", "API key"),
+        Binding("ctrl+k", "set_key", "Keys"),
         Binding("f5,ctrl+r", "refresh", "Refresh"),
         Binding("f1", "help", "Help"),
         Binding("ctrl+t", "toggle_theme", "Theme"),
     ]
     COMMANDS = {SectionCommands}
 
-    def __init__(self, client: Client, section: str = "chat"):
+    def __init__(self, client: Client, section: str = "harness"):
         super().__init__()
         self.client = client
         self.start_section = (
-            section if any(s[0] == section for s in SECTIONS) else "chat"
+            section if any(s[0] == section for s in SECTIONS) else "harness"
         )
         self.section = self.start_section
 
+    # -- layout ---------------------------------------------------------
+    def nav_options(self) -> list[Option]:
+        """Group headers (not selectable) followed by their sections."""
+        out: list[Option] = []
+        for i, (group, sids) in enumerate(GROUPS):
+            head = Text(("" if i == 0 else "\n") + group, style="bold dim")
+            out.append(Option(head, id=f"grp-{group}", disabled=True))
+            out += [Option(LABELS[sid], id=sid) for sid in sids]
+        return out
+
     def compose(self) -> ComposeResult:
-        yield Header(show_clock=True, icon="◆")
+        with Horizontal(id="topbar"):
+            yield Static("", id="crumb")
+            yield Static("", id="topinfo")
         with Horizontal():
             with Vertical(id="side"):
-                yield Static("◆ CaiPS\n[dim]Protocol Suite[/]", id="brand")
-                yield OptionList(
-                    *[Option(label, id=sid) for sid, label, _ in SECTIONS], id="nav"
+                yield Static(
+                    "[b $accent]◆ CaiPS[/]\n[dim]Protocol Suite[/]", id="brand"
                 )
+                yield OptionList(*self.nav_options(), id="nav")
                 yield Static("", id="conn")
             yield ContentSwitcher(
                 *[cls(self.client, id=f"p-{sid}") for sid, _, cls in SECTIONS],
@@ -286,34 +334,55 @@ class CaipsTui(App[None]):
             )
         yield Footer()
 
+    def nav_index(self, sid: str) -> int:
+        return self.query_one("#nav", OptionList).get_option_index(sid)
+
+    def set_crumb(self, sid: str) -> None:
+        group = next((g for g, sids in GROUPS if sid in sids), "")
+        self.query_one("#crumb", Static).update(
+            Text.assemble(
+                ("◆ CaiPS", "bold"),
+                (f"  ›  {group.title()}  ›  ", "dim"),
+                (LABELS[sid], "bold"),
+            )
+        )
+
     async def on_mount(self) -> None:
         for t in THEMES:
             self.register_theme(t)
         self.theme = "caips-dark"
         self.online: Optional[bool] = None
+        self.query_one("#topinfo", Static).update(self.client.base_url)
         self.sub_title = self.client.base_url
-        nav = self.query_one("#nav", OptionList)
-        nav.highlighted = [s[0] for s in SECTIONS].index(self.start_section)
+        self.set_crumb(self.start_section)
+        self.query_one("#nav", OptionList).highlighted = self.nav_index(
+            self.start_section
+        )
         self.set_interval(15, self.check_connection)
         self.run_worker(self.check_connection(), group="conn", exclusive=True)
-        if not self.client.has_key:
-            self.action_set_key()
 
-    def action_set_key(self) -> None:
-        def done(key: Optional[str]) -> None:
-            if not key:
-                return
-            self.client.set_key(key)
-            try:
-                credentials.save(self.client.base_url, key)
-            except OSError as e:
-                self.notify(f"token not saved: {e.strerror or e}", severity="warning")
-            self.run_worker(self.check_connection(), group="conn", exclusive=True)
-            self.run_worker(
-                self.pane(self.section).refresh_data(), group="refresh", exclusive=True
-            )
+    # -- token (entered in the Keys section, never at startup) -----------
+    async def action_set_key(self) -> None:
+        await self.goto("keys")
 
-        self.push_screen(KeyScreen(), done)
+    def store_token(self, key: str) -> Optional[str]:
+        """Use ``key`` now and save it for this gateway. Returns a warning if it could not be saved."""
+        self.client.set_key(key)
+        warning: Optional[str] = None
+        try:
+            credentials.save(self.client.base_url, key)
+        except OSError as e:
+            warning = f"token kept for this session, not saved: {e.strerror or e}"
+        self.run_worker(self.check_connection(), group="conn", exclusive=True)
+        return warning
+
+    def forget_token(self) -> None:
+        self.client.clear_key()
+        try:
+            credentials.delete(self.client.base_url)
+        except OSError:
+            pass
+        self.run_worker(self.check_connection(), group="conn", exclusive=True)
 
     async def on_unmount(self) -> None:
         await self.client.aclose()
@@ -326,17 +395,18 @@ class CaipsTui(App[None]):
         if sid != self.section:
             self.pane(self.section).deactivate()
         self.section = sid
+        self.set_crumb(sid)
         self.query_one("#panes", ContentSwitcher).current = f"p-{sid}"
         self.run_worker(self.pane(sid).activate(), group="activate", exclusive=True)
 
     async def on_option_list_option_highlighted(
         self, event: OptionList.OptionHighlighted
     ) -> None:
-        if event.option_id:
+        if event.option_id and not event.option_id.startswith("grp-"):
             await self.show_section(event.option_id)
 
     def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
-        if event.option_id:
+        if event.option_id and not event.option_id.startswith("grp-"):
             self.pane(event.option_id).focus_primary()
 
     def action_focus_sidebar(self) -> None:
@@ -348,8 +418,8 @@ class CaipsTui(App[None]):
         )
 
     async def goto(self, sid: str) -> None:
-        nav = self.query_one("#nav", OptionList)
-        nav.highlighted = [s[0] for s in SECTIONS].index(sid)
+        self.query_one("#nav", OptionList).highlighted = self.nav_index(sid)
+        await self.show_section(sid)
         self.pane(sid).focus_primary()
 
     def action_toggle_theme(self) -> None:
@@ -361,12 +431,15 @@ class CaipsTui(App[None]):
     # -- connection indicator ------------------------------------------
     async def check_connection(self) -> None:
         conn = self.query_one("#conn", Static)
-        auth = "key set" if self.client.has_key else "no API key"
+        if self.client.has_key:
+            auth = Text("key set", style="dim")
+        else:
+            auth = Text.assemble(("no API key", "yellow"), ("\nadd one in Keys", "dim"))
         started = time.monotonic()
         try:
             await self.client.request("GET", "/health")
         except ApiError as e:
-            conn.update(Text.assemble(("● offline\n", "bold red"), (auth, "dim")))
+            conn.update(Text.assemble(("● offline\n", "bold red"), auth))
             conn.tooltip = str(e)
             if self.online is True:
                 self.notify("Connection lost", severity="error", title="CaiPS")
@@ -377,7 +450,7 @@ class CaipsTui(App[None]):
                 Text.assemble(
                     ("● online", "bold green"),
                     (f"  {ms:.0f} ms\n", "dim"),
-                    (auth, "dim"),
+                    auth,
                 )
             )
             conn.tooltip = None
@@ -389,8 +462,8 @@ class CaipsTui(App[None]):
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(
         prog="caips-tui",
-        description="Terminal UI for a CaiPS gateway. The token is entered inside the UI and saved "
-        "(see `caips login`); CAIPS_API_KEY or --api-key-file override it. It is never accepted "
+        description="Terminal UI for a CaiPS gateway. Add the token in the UI's Keys section; it is saved "
+        "(see `caips login`) and CAIPS_API_KEY or --api-key-file override it. It is never accepted "
         "on the command line, where other users could see it.",
         allow_abbrev=False,  # so `--api-key SECRET` is an error, not a silent match for --api-key-file
     )
@@ -407,7 +480,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     ap.add_argument(
         "--section",
-        default="chat",
+        default="harness",
         choices=[s[0] for s in SECTIONS],
         help="section to open first",
     )

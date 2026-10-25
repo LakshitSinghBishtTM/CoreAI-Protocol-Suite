@@ -59,8 +59,9 @@ def meta_line(meta: dict, ttft: Optional[float], total: float) -> str:
 
 
 class ChatPane(Pane):
-    TITLE = "Chat"
-    HELP = "Enter sends · Esc stops · /help for commands · the dropdown picks the API dialect"
+    FLAGS = FLAGS
+    TITLE = "API"
+    HELP = "Raw API playground · the dropdown picks the dialect · Enter sends · Esc stops · /help"
     BINDINGS = [Binding("escape", "stop", "Stop reply", show=False)]
 
     def __init__(self, *a: Any, **kw: Any):
@@ -93,7 +94,7 @@ class ChatPane(Pane):
             yield Button("Explain", id="explain")
             yield Button("Good", id="good", variant="success")
             yield Button("Bad", id="bad", variant="error")
-            for name in FLAGS:
+            for name in self.FLAGS:
                 yield Button(
                     self.flag_label(name),
                     id=f"tg-{name}",
@@ -102,7 +103,7 @@ class ChatPane(Pane):
         yield Input(placeholder="Message …  (/help for commands)", id="prompt")
 
     def flag_label(self, name: str) -> str:
-        return f"{FLAGS[name]}: {'on' if self.flags[name] else 'off'}"
+        return f"{self.FLAGS[name]}: {'on' if self.flags[name] else 'off'}"
 
     def set_flag(self, name: str, on: bool) -> None:
         self.flags[name] = on
@@ -115,8 +116,20 @@ class ChatPane(Pane):
 
     @property
     def mode(self) -> str:
-        v = self.query_one("#mode", Select).value
+        try:
+            v = self.query_one("#mode", Select).value
+        except Exception:  # panes without a dialect dropdown always speak OpenAI chat
+            return "chat"
         return v if isinstance(v, str) else "chat"
+
+    # -- hooks for subclasses -------------------------------------------
+    def window(self) -> list[dict]:
+        """The messages sent to the model (all of the history by default)."""
+        return list(self.history)
+
+    def extra_body(self) -> dict:
+        """Extra fields merged into an OpenAI-chat request body."""
+        return {}
 
     # -- transcript -----------------------------------------------------
     async def add(self, kind: str, text: str) -> Static:
@@ -194,7 +207,13 @@ class ChatPane(Pane):
             self.set_val(setters[cmd], arg)
             await self.note(f"{cmd} = {arg or '(cleared)'}")
         elif cmd == "mode" and arg in ("chat", "native", "anthropic"):
-            self.query_one("#mode", Select).value = arg
+            try:
+                self.query_one("#mode", Select).value = arg
+            except Exception:
+                await self.note(
+                    "This view always uses the OpenAI chat dialect.", error=True
+                )
+                return
             await self.note(f"mode = {arg}")
         elif cmd == "stream" and arg in ("on", "off"):
             self.set_flag("stream", arg == "on")
@@ -229,8 +248,9 @@ class ChatPane(Pane):
         if mode == "chat":
             msgs = (
                 [{"role": "system", "content": s["system"]}] if s["system"] else []
-            ) + self.history
+            ) + self.window()
             body: dict[str, Any] = {"messages": msgs, "stream": stream}
+            body.update(self.extra_body())
             for k in ("model", "provider", "policy", "temperature", "max_tokens"):
                 if s[k] is not None:
                     body[k] = s[k]
@@ -253,7 +273,7 @@ class ChatPane(Pane):
                 yield "meta", self._chat_meta(obj, hdrs)
         elif mode == "native":
             body = {
-                "messages": self.history,
+                "messages": self.window(),
                 "max_tokens": s["max_tokens"] or 1024,
                 "temperature": (
                     s["temperature"] if s["temperature"] is not None else 0.7
@@ -295,7 +315,7 @@ class ChatPane(Pane):
                 }
         else:  # anthropic
             body = {
-                "messages": self.history,
+                "messages": self.window(),
                 "max_tokens": s["max_tokens"] or 1024,
                 "stream": stream,
             }
@@ -451,7 +471,7 @@ class ChatPane(Pane):
         self.run_worker(self.send(text), group="chat", exclusive=True)
 
     async def explain(self, draft: str) -> None:
-        msgs = list(self.history)
+        msgs = self.window()
         if draft:
             msgs.append({"role": "user", "content": draft})
         if not msgs:

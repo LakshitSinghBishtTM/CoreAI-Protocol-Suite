@@ -69,6 +69,10 @@ class Client:
         self.api_key = key
         self._http.headers["Authorization"] = f"Bearer {key}"
 
+    def clear_key(self) -> None:
+        self.api_key = ""
+        self._http.headers.pop("Authorization", None)
+
     async def aclose(self) -> None:
         await self._http.aclose()
 
