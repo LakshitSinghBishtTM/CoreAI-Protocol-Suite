@@ -23,8 +23,6 @@ Principles still apply: layers depend downward only, every layer ships alone, cl
 
 - Postgres support for the harness run store, the database query tool, and backups (SQLite only today).
 - Confirm migrations run at startup and are tested forward and backward on both SQLite and Postgres.
-- Reduce runtime dependencies (26 in `requirements.txt`, target under 20) and confirm one logging library is used.
-- Add `gitleaks` and `pip-audit` to CI.
 - Finish type checking: `mypy` clean in CI.
 - Confirm PyPI trusted publishing and release provenance work end to end.
 

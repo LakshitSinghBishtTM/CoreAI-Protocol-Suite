@@ -4,6 +4,9 @@
 
 The previous `1.0.0` label did not match the project's state; versions now start at 0.1.0 (alpha).
 
+### Added (packaging checks)
+- `tests/test_packaging_claims.py` enforces: runtime dependencies under 20 (12 today), loguru as the only logging library with stdlib logging bridged into it, and gitleaks and pip-audit in CI.
+
 ### Added (MCP client reconnect)
 - The MCP client reconnects (close, restart, re-handshake) after a dropped stdio or HTTP connection. A request that never reached the server, and `tools/list`, are retried once; a `tools/call` lost mid-flight is not retried, so a tool never runs twice.
 
