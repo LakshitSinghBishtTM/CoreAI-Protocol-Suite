@@ -187,6 +187,26 @@ app.include_router(rag_api.router)
 app.include_router(keys_api.router)
 
 
+# Web UI: one static page; all data comes from the documented API.
+from pathlib import Path as _Path  # noqa: E402
+
+from fastapi.responses import FileResponse, RedirectResponse  # noqa: E402
+
+_WEB = _Path(__file__).resolve().parent.parent / "web" / "index.html"
+
+
+@app.get("/app", include_in_schema=False)
+async def web_app():
+    if not _WEB.is_file():
+        raise HTTPException(status_code=404, detail="Web UI not installed.")
+    return FileResponse(_WEB, headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/", include_in_schema=False)
+async def web_root():
+    return RedirectResponse("/app")
+
+
 def _load_rate_limits():
     """Per-provider limits from providers.<name>.rate_limits in the routing
     file. Without a valid file, providers keep the built-in defaults."""

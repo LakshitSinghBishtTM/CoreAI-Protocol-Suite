@@ -201,6 +201,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="section to open first (see `caips-tui --help`)",
     )
 
+    p = sub.add_parser(
+        "web", help="open the web UI (signs in with SECRET_KEY, a saved token or asks)"
+    )
+    p.add_argument("--no-open", action="store_true", help="print the URL only")
+
     p = sub.add_parser("eval", help="run an eval suite (see docs/evals.md)")
     p.add_argument("tasks")
     p.add_argument("--model", default=None)
@@ -481,6 +486,26 @@ def main(
     from caips_cli import credentials
 
     key = credentials.resolve(a.url)
+    if a.cmd == "web":
+        import webbrowser
+        from datetime import timedelta
+
+        tok = key
+        if not tok and os.getenv("SECRET_KEY"):
+            from api.auth import create_access_token
+
+            tok = create_access_token(
+                "user:web",
+                ["admin", "completions:read", "completions:write", "tools:read",
+                 "runs:read", "runs:write"],
+                timedelta(hours=12),
+            )
+        # The token goes in the URL fragment: browsers never send it to a server.
+        url = a.url.rstrip("/") + "/app" + (f"#token={tok}" if tok else "")
+        print(url if a.no_open else a.url.rstrip("/") + "/app", file=out)
+        if not a.no_open:
+            webbrowser.open(url)
+        return 0
     if a.cmd == "tui":
         try:
             from caips_tui.app import main as tui_main

@@ -70,6 +70,9 @@ dependencies = { file = ["requirements.txt"] }
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+web = ["index.html"]
+
 [tool.ruff]
 line-length = 120
 extend-exclude = ["build", "dist"]

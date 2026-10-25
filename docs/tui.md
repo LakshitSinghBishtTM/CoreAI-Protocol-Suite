@@ -96,3 +96,19 @@ Sections that need a scope you lack show the server's error in the status line. 
 - Routing and budget edits from the TUI are runtime overrides: they reset on restart (write `config/routing.yml` or `config/budgets.yml` to persist).
 - Chat shows plain text (no Markdown rendering) and does not send images or client-side tool definitions.
 - Verified against a fake gateway in `tests/test_caips_tui.py`, not against a live provider.
+
+## Web UI
+
+A browser UI served by the gateway itself, in the style of a chat app: sidebar with chat history, one message box, and **Settings on its own page** (General, Provider keys, Chat defaults, Connection). Like the TUI it keeps no server state; every action is one documented API request.
+
+```bash
+caips web          # opens http://localhost:6969/app already signed in
+```
+
+`caips web` signs in with a saved token or, when `SECRET_KEY` is set, a 12 hour admin token. The token travels in the URL fragment, which browsers never send to a server; the page stores it in the browser and clears the address bar. Without either, `/app` shows a single "paste your token" screen.
+
+| Area | What it does |
+| --- | --- |
+| Chat | Streaming chat, model picker, **Tools** (`run_tools`) and **Incognito** (local models only) toggles under the message box, Stop button. Chats are stored in the browser only; right-click a chat to delete it. |
+| Agents | Agents from `config/agents.yml` (`GET /v1/harness/agents`), start a run with a task, recent runs with their trace events, cancel, and pending tool approvals. |
+| Settings | Provider keys (add/remove), system prompt, temperature, max tokens, routing policy, history turns, theme, sign out. |

@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CaiPS</title>
+<style>
+:root{--bg:#fff;--side:#f7f7f5;--fg:#1f1f1e;--mut:#6b6b68;--line:#e6e5e0;--acc:#c96442;--accfg:#fff;--card:#fff;--user:#f0efea;--code:#f4f3ee;--err:#b3261e}
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#262624;--side:#1f1e1d;--fg:#ececea;--mut:#9a9994;--line:#3a3935;--card:#2e2d2b;--user:#33322f;--code:#1f1e1d;--err:#f2b8b5}}
+:root[data-theme=dark]{--bg:#262624;--side:#1f1e1d;--fg:#ececea;--mut:#9a9994;--line:#3a3935;--card:#2e2d2b;--user:#33322f;--code:#1f1e1d;--err:#f2b8b5}
+*{box-sizing:border-box}html,body{height:100%;margin:0}
+body{font:15px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--bg);color:var(--fg);display:flex}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer;border:1px solid var(--line);background:var(--card);border-radius:8px;padding:6px 12px}
+button:hover{border-color:var(--mut)}button.pri{background:var(--acc);color:var(--accfg);border-color:var(--acc)}
+button.ghost{border-color:transparent;background:none}button.ghost:hover{background:var(--user)}
+input,select,textarea{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px 10px;width:100%}
+label{display:block;font-size:13px;color:var(--mut);margin:12px 0 4px}
+#side{width:260px;background:var(--side);border-right:1px solid var(--line);display:flex;flex-direction:column;padding:10px;gap:4px;flex:none}
+#side .brand{font-weight:600;padding:6px 8px;font-size:16px}
+.nav{display:flex;flex-direction:column;gap:2px}
+.nav button{text-align:left;border:0;background:none;padding:8px 10px}
+.nav button.on,.nav button:hover{background:var(--user)}
+#hist{flex:1;overflow:auto;display:flex;flex-direction:column;gap:2px;margin-top:6px}
+#hist .h{padding:7px 10px;border-radius:8px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--mut)}
+#hist .h:hover,#hist .h.on{background:var(--user);color:var(--fg)}
+#status{font-size:12px;color:var(--mut);padding:6px 10px}
+#status i{display:inline-block;width:8px;height:8px;border-radius:50%;background:#aaa;margin-right:6px}
+#status i.ok{background:#3b9c5a}#status i.bad{background:var(--err)}
+main{flex:1;display:flex;flex-direction:column;min-width:0}
+.view{display:none;flex:1;min-height:0;flex-direction:column}.view.on{display:flex}
+.top{display:flex;gap:8px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--line)}
+.top select{width:auto;max-width:260px}.top .sp{flex:1}
+#msgs{flex:1;overflow:auto;padding:24px 16px}
+.wrap{max-width:760px;margin:0 auto}
+.m{margin:0 0 22px}.m.u .b{background:var(--user);border-radius:14px;padding:10px 14px;display:inline-block;white-space:pre-wrap;max-width:100%}
+.m.u{text-align:right}.m.u .b{text-align:left}
+.m .b p{margin:.5em 0}.m .b pre{background:var(--code);padding:12px;border-radius:8px;overflow:auto}
+.m .b code{background:var(--code);padding:1px 5px;border-radius:4px;font-size:13px}.m .b pre code{padding:0;background:none}
+.m.e .b{color:var(--err)}
+.empty{text-align:center;margin-top:18vh}.empty h1{font-weight:500;font-size:28px;margin:0 0 6px}.empty p{color:var(--mut);margin:0 0 18px}
+.chips{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+#comp{padding:0 16px 16px}
+.box{max-width:760px;margin:0 auto;border:1px solid var(--line);border-radius:16px;background:var(--card);padding:10px 12px}
+.box textarea{border:0;resize:none;padding:4px;max-height:200px;background:none;outline:none}
+.row{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}
+.tg{font-size:13px;padding:3px 10px;border-radius:99px}.tg.on{background:var(--acc);color:var(--accfg);border-color:var(--acc)}
+.pad{padding:24px 16px;overflow:auto;flex:1}
+.card{border:1px solid var(--line);border-radius:12px;padding:14px;margin:0 0 12px;background:var(--card)}
+.card h3{margin:0 0 4px;font-size:15px}.mut{color:var(--mut);font-size:13px}
+.pill{font-size:12px;border:1px solid var(--line);border-radius:99px;padding:1px 8px;color:var(--mut)}
+pre.log{background:var(--code);padding:10px;border-radius:8px;overflow:auto;font-size:12px;max-height:260px}
+#conn{position:fixed;inset:0;background:var(--bg);display:none;align-items:center;justify-content:center;z-index:9}
+#conn .card{width:min(440px,92vw);padding:24px}
+.sec{display:none}.sec.on{display:block}
+.tabs{display:flex;gap:4px;margin:0 0 14px;flex-wrap:wrap}.tabs button.on{background:var(--user)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media(max-width:760px){#side{display:none}.grid{grid-template-columns:1fr}}
+</style></head><body>
+
+<div id="conn"><div class="card">
+ <h2 style="margin:0 0 6px">Connect to CaiPS</h2>
+ <p class="mut" style="margin:0 0 10px">Paste your gateway token. It stays in this browser only.<br>Tip: run <code>caips web</code> in a terminal to be signed in automatically.</p>
+ <input id="tok" type="password" placeholder="Gateway token" autocomplete="off">
+ <div id="connerr" class="mut" style="color:var(--err);min-height:20px;margin-top:6px"></div>
+ <button class="pri" id="connbtn" style="width:100%">Connect</button>
+</div></div>
+
+<aside id="side">
+ <div class="brand">CaiPS</div>
+ <button class="pri" id="newchat">+ New chat</button>
+ <div class="nav" style="margin-top:8px">
+  <button data-v="chat" class="on">Chat</button>
+  <button data-v="agents">Agents</button>
+ </div>
+ <div class="mut" style="padding:10px 10px 2px;font-size:12px">Recent</div>
+ <div id="hist"></div>
+ <div class="nav"><button data-v="settings">Settings</button></div>
+ <div id="status"><i></i><span>Connecting…</span></div>
+</aside>
+
+<main>
+ <section class="view on" id="v-chat">
+  <div class="top"><select id="model" title="Model"><option value="">Auto (router picks)</option></select><span class="sp"></span><span class="mut" id="ctxinfo"></span></div>
+  <div id="msgs"><div class="wrap" id="thread"></div></div>
+  <div id="comp"><div class="box">
+   <textarea id="inp" rows="1" placeholder="Message CaiPS…"></textarea>
+   <div class="row">
+    <button class="tg ghost" id="tgTools" title="Let the gateway run tools you are granted">Tools</button>
+    <button class="tg ghost" id="tgPriv" title="Local models only">Incognito</button>
+    <span style="flex:1"></span>
+    <button id="stop" style="display:none">Stop</button>
+    <button class="pri" id="send">Send</button>
+   </div></div></div>
+ </section>
+
+ <section class="view" id="v-agents">
+  <div class="top"><b>Agents</b><span class="sp"></span><button id="refAg">Refresh</button></div>
+  <div class="pad"><div class="wrap">
+   <div id="approvals"></div>
+   <h3>Start a run</h3><div id="agentList"></div>
+   <h3 style="margin-top:22px">Recent runs</h3><div id="runList"></div>
+  </div></div>
+ </section>
+
+ <section class="view" id="v-settings">
+  <div class="top"><b>Settings</b></div>
+  <div class="pad"><div class="wrap">
+   <div class="tabs" id="stabs">
+    <button data-s="general" class="on">General</button><button data-s="keys">Provider keys</button>
+    <button data-s="chat">Chat defaults</button><button data-s="conn">Connection</button>
+   </div>
+   <div class="sec on" id="s-general">
+    <label>Theme</label>
+    <select id="theme"><option value="auto">Match system</option><option value="light">Light</option><option value="dark">Dark</option></select>
+   </div>
+   <div class="sec" id="s-keys">
+    <p class="mut">Keys are encrypted by the gateway and never shown again. Needs the admin scope.</p>
+    <div id="keyList"></div>
+    <div class="card"><h3>Add a provider key</h3>
+     <div class="grid"><div><label>Provider</label><select id="kProv"></select></div>
+     <div><label>API key</label><input id="kKey" type="password" autocomplete="off"></div></div>
+     <div id="kExtra" class="grid" style="display:none"><div><label>Base URL</label><input id="kUrl"></div><div><label>Label</label><input id="kLabel"></div></div>
+     <div id="kMsg" class="mut" style="min-height:20px;margin:8px 0"></div>
+     <button class="pri" id="kAdd">Add key</button></div>
+   </div>
+   <div class="sec" id="s-chat">
+    <label>System prompt</label><textarea id="sSys" rows="4" placeholder="Optional. Sent with every chat."></textarea>
+    <div class="grid"><div><label>Temperature (blank = default)</label><input id="sTemp" type="number" step="0.1" min="0" max="2"></div>
+    <div><label>Max tokens (blank = default)</label><input id="sMax" type="number" min="1"></div>
+    <div><label>Routing policy (blank = default)</label><input id="sPol"></div>
+    <div><label>History turns sent (blank = all)</label><input id="sHist" type="number" min="1"></div></div>
+    <p class="mut">Saved automatically in this browser.</p>
+   </div>
+   <div class="sec" id="s-conn">
+    <label>Gateway</label><input id="cUrl" disabled>
+    <div id="cInfo" class="mut" style="margin:8px 0"></div>
+    <button id="cOut">Sign out (forget token)</button>
+   </div>
+  </div></div>
+ </section>
+</main>
+
+<script>
+const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+const LS={get:(k,d)=>{try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch{return d}},set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v))}catch{}}};
+let token=LS.get('caips.token',''),chats=LS.get('caips.chats',[]),cur=null,ctl=null;
+const cfg=Object.assign({sys:'',temp:'',max:'',pol:'',hist:'',tools:false,priv:false,model:'',theme:'auto'},LS.get('caips.cfg',{}));
+const saveCfg=()=>LS.set('caips.cfg',cfg);
+
+// token from "caips web" arrives in the URL fragment; take it and clear the address bar
+if(location.hash.startsWith('#token=')){token=decodeURIComponent(location.hash.slice(7));LS.set('caips.token',token);history.replaceState(null,'',location.pathname)}
+
+const esc=s=>s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function md(t){ // small, safe renderer: escape first, then code/bold/italic/paragraphs
+ const blocks=[];t=esc(t).replace(/```(\w*)\n?([\s\S]*?)```/g,(_,l,c)=>{blocks.push(c.replace(/\n$/,''));return '\u0000'+(blocks.length-1)+'\u0000'});
+ t=t.replace(/`([^`\n]+)`/g,'<code>$1</code>').replace(/\*\*([^*\n]+)\*\*/g,'<b>$1</b>').replace(/(^|\s)\*([^*\n]+)\*/g,'$1<i>$2</i>');
+ t=t.split(/\n{2,}/).map(p=>'<p>'+p.replace(/\n/g,'<br>')+'</p>').join('');
+ return t.replace(/\u0000(\d+)\u0000/g,(_,i)=>'</p><pre><code>'+blocks[i]+'</code></pre><p>').replace(/<p><\/p>/g,'');
+}
+async function api(path,opt={}){
+ const r=await fetch(path,{...opt,headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json',...(opt.headers||{})}});
+ if(!r.ok){let m=r.status+'';try{const j=await r.json();m=(j.error&&j.error.message)||j.detail||m}catch{}const e=new Error(typeof m==='string'?m:JSON.stringify(m));e.status=r.status;throw e}
+ return r;
+}
+const J=async(p,o)=>(await api(p,o)).json();
+
+// ---------- navigation ----------
+function show(v){$$('.view').forEach(x=>x.classList.toggle('on',x.id==='v-'+v));$$('.nav button').forEach(b=>b.classList.toggle('on',b.dataset.v===v));
+ if(v==='agents')loadAgents();if(v==='settings')loadSettings()}
+$$('.nav button').forEach(b=>b.onclick=()=>show(b.dataset.v));
+
+// ---------- connection ----------
+async function connect(){
+ if(!token){$('#conn').style.display='flex';return}
+ try{await J('/v1/providers');$('#conn').style.display='none';setStatus(true);loadModels()}
+ catch(e){setStatus(false,e.message);if(e.status===401||e.status===403){token='';LS.set('caips.token','');$('#connerr').textContent='That token was not accepted.'}
+  $('#conn').style.display='flex'}
+}
+function setStatus(ok,m){$('#status i').className=ok?'ok':'bad';$('#status span').textContent=ok?'Connected':(m||'Not connected')}
+$('#connbtn').onclick=()=>{token=$('#tok').value.trim();LS.set('caips.token',token);$('#tok').value='';$('#connerr').textContent='';connect()};
+$('#tok').onkeydown=e=>{if(e.key==='Enter')$('#connbtn').click()};
+
+async function loadModels(){
+ try{const d=await J('/v1/models');const s=$('#model');s.length=1;d.data.forEach(m=>s.add(new Option(m.id,m.id)));s.value=cfg.model||''}catch{}
+}
+$('#model').onchange=e=>{cfg.model=e.target.value;saveCfg()};
+
+// ---------- chat ----------
+const saveChats=()=>LS.set('caips.chats',chats.slice(0,60));
+function newChat(){cur={id:Date.now()+'',title:'New chat',msgs:[]};chats.unshift(cur);renderHist();renderThread();$('#inp').focus();show('chat')}
+$('#newchat').onclick=newChat;
+function renderHist(){const h=$('#hist');h.innerHTML='';chats.forEach(c=>{const d=document.createElement('div');d.className='h'+(c===cur?' on':'');d.textContent=c.title;
+ d.onclick=()=>{cur=c;renderHist();renderThread();show('chat')};d.oncontextmenu=e=>{e.preventDefault();if(confirm('Delete this chat?')){chats=chats.filter(x=>x!==c);if(cur===c)cur=chats[0]||null;saveChats();renderHist();renderThread()}};h.appendChild(d)})}
+function bubble(m){const d=document.createElement('div');d.className='m '+(m.role==='user'?'u':m.err?'e':'a');const b=document.createElement('div');b.className='b';
+ if(m.role==='user')b.textContent=m.content;else b.innerHTML=md(m.content||'');d.appendChild(b);return d}
+function renderThread(){const t=$('#thread');t.innerHTML='';
+ if(!cur||!cur.msgs.length){t.innerHTML='<div class="empty"><h1>How can I help?</h1><p>Ask anything. Models are routed for you; change settings any time in Settings.</p><div class="chips"></div></div>';
+  ['Explain how request routing works','Write a Python function to retry with backoff','Summarize the pros and cons of local models'].forEach(s=>{const b=document.createElement('button');b.textContent=s;b.onclick=()=>{$('#inp').value=s;send()};t.querySelector('.chips').appendChild(b)});return}
+ cur.msgs.forEach(m=>t.appendChild(bubble(m)));$('#msgs').scrollTop=1e9}
+function sync(){$('#tgTools').classList.toggle('on',cfg.tools);$('#tgPriv').classList.toggle('on',cfg.priv)}
+$('#tgTools').onclick=()=>{cfg.tools=!cfg.tools;saveCfg();sync()};$('#tgPriv').onclick=()=>{cfg.priv=!cfg.priv;saveCfg();sync()};
+const inp=$('#inp');inp.oninput=()=>{inp.style.height='auto';inp.style.height=Math.min(inp.scrollHeight,200)+'px'};
+inp.onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}};
+$('#send').onclick=send;$('#stop').onclick=()=>ctl&&ctl.abort();
+
+async function send(){
+ const text=inp.value.trim();if(!text||ctl)return;if(!cur)newChat();
+ inp.value='';inp.style.height='auto';
+ cur.msgs.push({role:'user',content:text});if(cur.title==='New chat'){cur.title=text.slice(0,40);renderHist()}
+ const a={role:'assistant',content:''};cur.msgs.push(a);renderThread();
+ const node=$('#thread').lastChild.querySelector('.b');node.innerHTML='<span class="mut">Thinking…</span>';
+ const hist=cur.msgs.slice(0,-1).filter(m=>!m.err).map(({role,content})=>({role,content}));
+ const n=parseInt(cfg.hist);const sent=n?hist.slice(-(2*n-1)):hist;
+ const body={messages:(cfg.sys?[{role:'system',content:cfg.sys}]:[]).concat(sent),stream:!cfg.tools};
+ if(cfg.model)body.model=cfg.model;if(cfg.temp!=='')body.temperature=+cfg.temp;if(cfg.max!=='')body.max_tokens=+cfg.max;
+ if(cfg.pol)body.policy=cfg.pol;if(cfg.tools)body.run_tools=true;if(cfg.priv)body.metadata={private:true};
+ ctl=new AbortController();$('#send').style.display='none';$('#stop').style.display='';
+ try{
+  const r=await api('/v1/chat/completions',{method:'POST',body:JSON.stringify(body),signal:ctl.signal});
+  if(body.stream){
+   const rd=r.body.getReader(),dec=new TextDecoder();let buf='';
+   for(;;){const{done,value}=await rd.read();if(done)break;buf+=dec.decode(value,{stream:true});
+    const parts=buf.split('\n\n');buf=parts.pop();
+    for(const p of parts){const l=p.replace(/^data: ?/,'').trim();if(!l||l==='[DONE]')continue;
+     try{const j=JSON.parse(l);if(j.error)throw new Error(j.error.message||'stream error');const dl=j.choices&&j.choices[0]&&j.choices[0].delta&&j.choices[0].delta.content;
+      if(dl){a.content+=dl;node.innerHTML=md(a.content);$('#msgs').scrollTop=1e9}}catch(e){if(e.message!==undefined&&!(e instanceof SyntaxError))throw e}}}
+  }else{const j=await r.json();a.content=(j.choices[0].message.content)||'';node.innerHTML=md(a.content)}
+  if(!a.content){a.content='(empty reply)';node.textContent=a.content}
+ }catch(e){
+  if(e.name==='AbortError'){if(!a.content){a.content='(stopped)';a.err=true}}
+  else{a.err=true;a.content=(a.content?a.content+'\n\n':'')+'Error: '+e.message}
+  node.parentNode.parentNode.className='m '+(a.err?'e':'a');node.innerHTML=md(a.content);
+  if(e.status===401){token='';connect()}
+ }finally{ctl=null;$('#send').style.display='';$('#stop').style.display='none';saveChats()}
+}
+
+// ---------- agents ----------
+async function loadAgents(){
+ const L=$('#agentList'),R=$('#runList'),A=$('#approvals');
+ try{const d=await J('/v1/harness/agents');L.innerHTML=d.data.length?'':'<p class="mut">No agents yet. Copy config/agents.example.yml to config/agents.yml.</p>';
+  d.data.forEach(g=>{const c=document.createElement('div');c.className='card';
+   c.innerHTML=`<h3>${esc(g.name)}</h3><div class="mut">Tools: ${g.allowed_tools.map(esc).join(', ')||'none'} · up to ${g.max_steps} steps${g.max_cost_usd?` · $${g.max_cost_usd} cap`:''}</div>
+   <div style="display:flex;gap:8px;margin-top:10px"><input placeholder="Task for this agent…"><button class="pri">Run</button></div>`;
+   const i=c.querySelector('input'),b=c.querySelector('button');
+   const go=async()=>{if(!i.value.trim())return;b.disabled=true;try{await J('/v1/runs',{method:'POST',body:JSON.stringify({agent:g.name,task:i.value})});i.value='';loadAgents()}catch(e){alert(e.message)}b.disabled=false};
+   b.onclick=go;i.onkeydown=e=>{if(e.key==='Enter')go()};L.appendChild(c)})}
+ catch(e){L.innerHTML='<p class="mut">'+esc(e.status===404?'The agent harness is not enabled on this gateway.':e.message)+'</p>'}
+ try{const d=await J('/v1/runs');R.innerHTML=d.data.length?'':'<p class="mut">No runs yet.</p>';
+  d.data.slice(0,15).forEach(r=>{const c=document.createElement('div');c.className='card';
+   c.innerHTML=`<div style="display:flex;gap:8px;align-items:center"><b>${esc(r.agent||'')}</b><span class="pill">${esc(r.status)}</span><span class="sp" style="flex:1"></span><button class="ghost">Details</button>${['running','paused','waiting_approval'].includes(r.status)?'<button class="ghost">Cancel</button>':''}</div><div class="mut">${esc((r.task||'').slice(0,160))}</div><div class="det"></div>`;
+   const [det,can]=c.querySelectorAll('button');
+   det.onclick=async()=>{const x=c.querySelector('.det');if(x.innerHTML){x.innerHTML='';return}
+    try{const ev=await J('/v1/runs/'+r.id+'/events');x.innerHTML='<pre class="log">'+esc(ev.data.map(e=>JSON.stringify(e)).join('\n')||'No events.')+'</pre>'}catch(e){x.textContent=e.message}};
+   if(can)can.onclick=async()=>{try{await J('/v1/runs/'+r.id+'/cancel',{method:'POST'});loadAgents()}catch(e){alert(e.message)}};
+   R.appendChild(c)})}catch(e){R.innerHTML=''}
+ try{const d=await J('/v1/tools/approvals');A.innerHTML='';
+  d.data.forEach(a=>{const c=document.createElement('div');c.className='card';c.style.borderColor='var(--acc)';
+   c.innerHTML=`<h3>Approval needed: ${esc(a.tool)}</h3><pre class="log">${esc(JSON.stringify(a.arguments||a.args||{},null,1))}</pre><button class="pri">Approve</button> <button>Deny</button>`;
+   const [y,n]=c.querySelectorAll('button');const dec=ok=>async()=>{try{await J('/v1/tools/approvals/'+a.id,{method:'POST',body:JSON.stringify({approve:ok})});loadAgents()}catch(e){alert(e.message)}};
+   y.onclick=dec(true);n.onclick=dec(false);A.appendChild(c)})}catch{$('#approvals').innerHTML=''}
+}
+$('#refAg').onclick=loadAgents;
+
+// ---------- settings (separate page) ----------
+$$('#stabs button').forEach(b=>b.onclick=()=>{$$('#stabs button').forEach(x=>x.classList.toggle('on',x===b));$$('.sec').forEach(s=>s.classList.toggle('on',s.id==='s-'+b.dataset.s))});
+function applyTheme(){const t=cfg.theme;if(t==='auto')document.documentElement.removeAttribute('data-theme');else document.documentElement.setAttribute('data-theme',t)}
+$('#theme').onchange=e=>{cfg.theme=e.target.value;saveCfg();applyTheme()};
+[['sSys','sys'],['sTemp','temp'],['sMax','max'],['sPol','pol'],['sHist','hist']].forEach(([id,k])=>{$('#'+id).oninput=e=>{cfg[k]=e.target.value;saveCfg()}});
+let catalog=[];
+async function loadSettings(){
+ $('#theme').value=cfg.theme;[['sSys','sys'],['sTemp','temp'],['sMax','max'],['sPol','pol'],['sHist','hist']].forEach(([id,k])=>$('#'+id).value=cfg[k]);
+ $('#cUrl').value=location.origin;$('#cInfo').textContent=token?'Signed in with a saved token.':'Not signed in.';
+ const L=$('#keyList');
+ try{const d=await J('/v1/keys');L.innerHTML=d.data.length?'':'<p class="mut">No provider keys yet. Add one below to start chatting.</p>';
+  d.data.forEach(k=>{const c=document.createElement('div');c.className='card';c.style.display='flex';c.style.alignItems='center';c.style.gap='10px';
+   c.innerHTML=`<div style="flex:1"><b>${esc(k.provider)}</b> <span class="mut">${esc(k.label||'')} · ${esc(k.key||'')}</span></div><span class="pill">${k.loaded?'active':'not loaded'}</span><span class="pill">${esc(k.source)}</span>${k.source==='store'?'<button class="ghost">Remove</button>':''}`;
+   const rm=c.querySelector('button');if(rm)rm.onclick=async()=>{if(!confirm('Remove this key?'))return;try{await J('/v1/keys/'+encodeURIComponent(k.id),{method:'DELETE'});loadSettings();loadModels()}catch(e){alert(e.message)}};L.appendChild(c)})}
+ catch(e){L.innerHTML='<p class="mut">'+esc(e.status===403?'Your token does not have the admin scope.':e.message)+'</p>'}
+ if(!catalog.length)try{catalog=(await J('/v1/keys/catalog')).data;const s=$('#kProv');catalog.forEach(c=>s.add(new Option(c.label||c.id,c.id)));kSel()}catch{}
+}
+function kSel(){const c=catalog.find(x=>x.id===$('#kProv').value)||{};$('#kExtra').style.display=(c.kind==='local'||c.kind==='custom'||['local','custom'].includes(c.id))?'grid':'none';if(c.base_url&&!$('#kUrl').value)$('#kUrl').value=c.base_url}
+$('#kProv').onchange=()=>{$('#kUrl').value='';kSel()};
+$('#kAdd').onclick=async()=>{const m=$('#kMsg');m.textContent='Adding…';
+ try{const r=await J('/v1/keys',{method:'POST',body:JSON.stringify({provider:$('#kProv').value,api_key:$('#kKey').value,label:$('#kLabel').value,base_url:$('#kUrl').value})});
+  $('#kKey').value='';m.textContent=r.loaded?'Added and active.':'Saved, but not loaded: '+(r.problem||'unknown problem');loadSettings();loadModels()}catch(e){m.textContent=e.message}};
+$('#cOut').onclick=()=>{token='';LS.set('caips.token','');connect()};
+
+// ---------- start ----------
+applyTheme();sync();if(!chats.length)newChat();else{cur=chats[0];renderHist();renderThread()}
+connect();
+</script></body></html>

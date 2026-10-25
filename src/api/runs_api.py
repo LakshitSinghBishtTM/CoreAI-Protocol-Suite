@@ -73,6 +73,26 @@ class Kill(BaseModel):
     owner: Optional[str] = None
 
 
+@router.get("/v1/harness/agents", summary="Agents defined in config/agents.yml")
+async def list_agents(
+    ctx: AuthContext = Depends(require_scope("runs:read")), rt=Depends(get_harness)
+):
+    return {
+        "object": "list",
+        "data": [
+            {
+                "name": a.name,
+                "allowed_tools": list(a.allowed_tools),
+                "approval_tools": list(a.approval_tools),
+                "max_steps": a.max_steps,
+                "max_cost_usd": a.max_cost_usd,
+                "model": a.model,
+            }
+            for a in rt.runner.agents.values()
+        ],
+    }
+
+
 @router.post("/v1/runs", status_code=202, summary="Start an agent run")
 async def start_run(
     body: StartRun,
