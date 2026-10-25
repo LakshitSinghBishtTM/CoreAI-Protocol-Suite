@@ -85,20 +85,6 @@ Not started. Single-user mode stays the default.
 - Optional OpenAPI docs site and public status page template.
 - Single-binary or single-container local mode.
 
-## 11. Security
-
-- Independent audit of, or removal of, the custom crypto in `protocols/` (unaudited; `agents/agent_manager.py` still imports it, see `docs/threat-model.md`).
-- Decide the future of `protocols/`: rebuild on the tools layer or archive.
-- Rotate the credentials found in git history and purge the paths (owner action; steps in `docs/secret-history-audit.md`).
-- Treat third-party GGUF files and `llama.cpp` updates as untrusted; keep the runtime updated.
-
-## 12. Release and documentation
-
-- Alpha, beta and stable labels per layer in the README.
-- Deprecation policy: one minor version of warnings before removal.
-- Keep the incident runbook (`docs/operations.md`) current: provider outage, latency, cost spike, memory growth, model process crash.
-- Keep the README claims in line with tests (no claim without a test or benchmark).
-
 ## Exit criteria
 
 - A new team can deploy CaiPS with the Helm chart, create a tenant, add providers and a local model, run an agent with approvals, and see its cost through the API or CLI.

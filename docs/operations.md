@@ -19,13 +19,37 @@ The operations they covered, to be rewritten as documented, tested procedures:
 | Clear hung DB connections | emergency_fix.sh `clear-db-locks` | Connection pool timeouts |
 | Full state reset | emergency_fix.sh `full-reset` | Documented, confirmed, backed-up procedure |
 
-## To write
+## Incident runbook
 
-- Provider outage
-- High latency
-- Cost spike
-- Memory growth
-- Local model process crash (after the local runtime lands)
+Each entry: how to see it, what to do, how to confirm. Metric names come from `/metrics`; alert rules are in `deploy/prometheus/caips-alerts.yml`.
+
+### Provider outage
+
+- **See:** `GET /v1/providers` (health score 0 to 1 per provider), `caips_circuit_state`, `caips_provider_errors_total`, `caips_failovers_total`; alerts for an open circuit or all providers down.
+- **Do:** if another provider is configured, traffic fails over on its own, so check `caips_failovers_total` rises and requests still succeed. If every provider is down, nothing routes; check the provider status pages and your keys (`GET /v1/keys`). To pull a bad provider out by hand, remove its key with `DELETE /v1/keys/{id}` or set a routing policy that excludes it (`POST /v1/admin/policies`, see `docs/routing.md`).
+- **Confirm:** the circuit closes and `GET /v1/providers` health recovers. Policy edits made at runtime reset on restart.
+
+### High latency
+
+- **See:** `caips_request_duration_seconds` and `caips_provider_latency_p*` per provider; the high p95 alert.
+- **Do:** find whether one provider is slow (then route away as above) or all are (check your own network and `caips_in_flight_requests`). Per-provider `rpm`/`tpm`/`concurrent` limits queue requests, so a limit set too low looks like latency; see Per-provider rate limits below.
+- **Confirm:** p95 returns under your threshold for 15 minutes.
+
+### Cost spike
+
+- **See:** `caips_provider_cost_usd_total`, `caips_tokens_total`, `caips_unpriced_requests_total` (calls the price table cannot price); the cost spike alert; `budget.warning` webhooks (see Budget alerts).
+- **Do:** find the key and model from the usage report (`docs/budgets.md`), tighten or add a budget for that subject or model, revoke the key if abuse is suspected, and check agent runs for loops (runs have step and cost limits).
+- **Confirm:** spend per hour returns to normal. Unpriced requests mean the real cost is higher than shown; update `config/pricing.yml`.
+
+### Memory growth
+
+See Memory growth below: run `scripts/loadtest.py --requests 100000`, then profile the live process with `memray`.
+
+### Local model process crash
+
+- **See:** `GET /v1/local/models` shows what is loaded. The supervisor restarts a crashed `llama-server` child with backoff on the next request, up to 5 restarts; after that the model is marked failed and requests return an error saying to reload manually. The child's log is kept per model (the supervisor's `crash_log`).
+- **Do:** read the child log for the cause (out of memory, a bad GGUF file, a wrong runtime version). Free memory or pick a smaller quantization, then `POST /v1/local/models/{id}/unload` and send a request to load it again. Treat a crash loop on a downloaded model file as a possibly corrupt or hostile file.
+- **Confirm:** the model loads and answers; routing falls back to a cloud provider meanwhile if your policy allows it.
 
 ## Gateway failure behavior (Phase 2)
 

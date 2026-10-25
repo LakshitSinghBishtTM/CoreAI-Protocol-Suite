@@ -48,11 +48,13 @@ It is **alpha software**. The gateway core works and is unit tested. Several oth
 
 ## Status by component
 
+Labels: **Alpha** works and has tests but the interface may change in any release; **Beta** the interface is stable within a minor version; **Stable** follows the [deprecation policy](docs/deprecation-policy.md). Nothing is Beta or Stable yet. **Optional** is an extra you install separately; **Experimental** and **Not wired in** carry no guarantee.
+
 | Component | Status | Notes |
 | --- | --- | --- |
 | Router, failover, circuit breaker, retry, limiter | Alpha | Tested with simulated failures, and with the real Anthropic, OpenAI and Gemini SDK error types over mock HTTP transports. Not yet exercised against a live provider outage. |
 | Key manager (`/v1/keys`, `coreai/keystore.py`, `providers/pool.py`) | Alpha | Runtime key add/remove with multi-key rotation. Tested with fakes; the extra labs are not tested against live endpoints. |
-| Providers and cache | Alpha | Anthropic and OpenAI have request/response contract tests; Gemini, Grok and DeepSeek do not yet. |
+| Providers and cache | Alpha | All five providers have request/response contract tests over mock HTTP transports (`tests/test_provider_contracts.py`); none has been exercised against a live outage. |
 | API server and auth | Alpha | Error mapping, streaming and provider health are tested; roughly two thirds of the route code is covered. |
 | Task orchestrator | Alpha | Queue and dispatch exist; limited tests. |
 | Model registry (`neural/model.py`) and pricing (`config/pricing.yml`) | Alpha | Static tables; prices are marked unreviewed and go stale. |

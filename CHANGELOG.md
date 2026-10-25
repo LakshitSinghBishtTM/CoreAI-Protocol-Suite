@@ -11,6 +11,9 @@ The previous `1.0.0` label did not match the project's state; versions now start
 - `mypy` now checks all of `src` in CI (the ratchet list is gone). Only the Anthropic and Gemini adapter modules have four error codes relaxed, because the SDK types change between releases.
 - CI runs `twine check --strict` on the built wheel and sdist.
 
+### Changed (release and documentation)
+- Incident runbook in `docs/operations.md` now covers provider outage, high latency, cost spike, memory growth and local model crash; added `docs/deprecation-policy.md`; README status labels are defined and the stale contract-test claim is fixed. Removed the finished security and release sections from the roadmap.
+
 ### Changed (security)
 - Removed the unwired `middleware/` package (the server uses `api/middleware.py`); its tests now import `RateLimitMiddleware` from `api.middleware`, and the validator tests were dropped with the code.
 - Added `docs/threat-model.md` and `docs/secret-history-audit.md` (secret files found in git history; rotation and purge are owner actions).
