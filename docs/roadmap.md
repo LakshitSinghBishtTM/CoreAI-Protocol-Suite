@@ -63,10 +63,7 @@ Not started. Single-user mode stays the default.
 
 ## 9. SDKs, plugins and integrations
 
-- Typed agent and tool clients in the Python and TypeScript SDKs (the TypeScript SDK exists under `sdk/typescript`; check how complete it is).
-- Stable plugin API for providers, tools, guardrails and routing strategies, plus a registry of community plugins.
-- OpenTelemetry tracing coverage for tool and agent steps.
-- Usage reports: confirm CSV and JSON export per key and model.
+- Plugin API: providers and tools exist (`docs/plugins.md`). Still to do: guardrail and routing-strategy plugins, a stability promise for the API, and a registry of community plugins.
 
 ## 10. Deployment
 

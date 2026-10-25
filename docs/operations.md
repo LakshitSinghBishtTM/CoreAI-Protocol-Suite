@@ -243,6 +243,18 @@ sampled caller is always traced even at ratio 0.
   ones carry `caips.error_kind`.
 - `caips.stream` per streamed completion, with the settled usage and cost
   (`caips.usage_estimated`, `caips.stream_completed`).
+- `caips.agent.run` per run execution (a resume after an approval or pause is a
+  new span): `caips.run_id`, `caips.agent`, and on exit `caips.run.status`,
+  `caips.run.stop_reason`, `caips.run.steps`, cost and tokens. Marked as an error
+  when the run stops on an error.
+- `caips.agent.model_call` per model call and `caips.agent.plan` for the
+  planning call, children of the run span, with provider, model, tokens and
+  cost. Their `caips.route` and `caips.provider_call` spans nest underneath.
+- `caips.tool` per tool call (also children of the run span): tool name, caller,
+  permission, owner, outcome and duration.
+
+Agent and tool spans carry names, ids, counts and outcomes only. The task text,
+model replies, tool arguments and tool output never go on spans (tested).
 
 Every log line written inside a span carries `trace_id` and `span_id`, so a
 slow trace links to its logs, and `request_id` links the logs to the response

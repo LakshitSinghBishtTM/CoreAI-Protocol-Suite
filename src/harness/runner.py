@@ -14,6 +14,7 @@ import json
 import time
 from typing import Awaitable, Callable, Optional
 
+from coreai import tracing
 from providers.base import CompletionRequest, CompletionResponse, Message
 from tools.executor import _run_one
 from tools.registry import Permission, ToolRegistry
@@ -155,6 +156,27 @@ class HarnessRunner:
 
     # -- the loop --------------------------------------------------------
     async def execute(self, rid: str, decision: Optional[bool] = None) -> dict:
+        """Run or continue a run inside one ``caips.agent.run`` span. Spans carry
+        ids, limits and outcomes, never prompts, tool arguments or results."""
+        run = self.store.get(rid)
+        attrs = {"caips.run_id": rid, "caips.agent": run["agent"] if run else None}
+        with tracing.start_span("caips.agent.run", attrs) as span:
+            out = await self._execute(rid, decision)
+            span.set_attributes(
+                {
+                    "caips.run.status": out.get("status"),
+                    "caips.run.stop_reason": out.get("stop_reason"),
+                    "caips.run.steps": out.get("step"),
+                    "caips.run.cost_usd": out.get("cost_usd"),
+                    "caips.run.input_tokens": out.get("input_tokens"),
+                    "caips.run.output_tokens": out.get("output_tokens"),
+                }
+            )
+            if out.get("stop_reason") == "error":
+                span.mark_error("error")
+            return out
+
+    async def _execute(self, rid: str, decision: Optional[bool] = None) -> dict:
         run = self.store.get(rid)
         if run is None:
             raise KeyError(rid)
@@ -242,7 +264,15 @@ class HarnessRunner:
         )
         run = self._get(rid)
         timeout = max(0.1, run["deadline"] - time.time()) if run["deadline"] else None
-        resp = await asyncio.wait_for(self.route(req), timeout)
+        with tracing.start_span("caips.agent.plan", {"caips.run_id": rid}) as span:
+            resp = await asyncio.wait_for(self.route(req), timeout)
+            span.set_attributes(
+                {
+                    "caips.cost_usd": resp.cost_usd,
+                    "caips.input_tokens": resp.input_tokens,
+                    "caips.output_tokens": resp.output_tokens,
+                }
+            )
         state["cost_usd"] += resp.cost_usd or 0.0
         state["input_tokens"] += resp.input_tokens or 0
         state["output_tokens"] += resp.output_tokens or 0
@@ -318,7 +348,23 @@ class HarnessRunner:
         run = self._get(rid)
         timeout = max(0.1, run["deadline"] - time.time()) if run["deadline"] else None
         t0 = time.time()
-        resp = await asyncio.wait_for(self.route(req), timeout)
+        with tracing.start_span(
+            "caips.agent.model_call",
+            {"caips.run_id": rid, "caips.step": state["step"] + 1},
+        ) as span:
+            resp = await asyncio.wait_for(self.route(req), timeout)
+            span.set_attributes(
+                {
+                    "caips.provider": resp.provider,
+                    "caips.model": resp.model,
+                    "caips.input_tokens": resp.input_tokens,
+                    "caips.output_tokens": resp.output_tokens,
+                    "caips.cost_usd": resp.cost_usd,
+                    "caips.tool_calls": len(
+                        (resp.metadata or {}).get("tool_calls") or []
+                    ),
+                }
+            )
         state["cost_usd"] += resp.cost_usd or 0.0
         state["input_tokens"] += resp.input_tokens or 0
         state["output_tokens"] += resp.output_tokens or 0

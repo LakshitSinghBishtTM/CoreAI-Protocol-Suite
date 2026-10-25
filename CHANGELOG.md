@@ -11,6 +11,11 @@ The previous `1.0.0` label did not match the project's state; versions now start
 - `mypy` now checks all of `src` in CI (the ratchet list is gone). Only the Anthropic and Gemini adapter modules have four error codes relaxed, because the SDK types change between releases.
 - CI runs `twine check --strict` on the built wheel and sdist.
 
+### Added (SDKs and tracing)
+- Typed clients: `caips_sdk.types` (`TypedDict` shapes) and typed return values in the Python client, exported interfaces in the TypeScript client, plus `list_agents`, `list_runs`, `run_events`, `pause_run`, `resume_run`, `kill_runs`, `run_agent` and `wait_run(stop_when_blocked=True)` in both. Tests check the Python types against the store schema. CI now builds and tests the TypeScript SDK.
+- Tracing for agent runs: `caips.agent.run`, `caips.agent.model_call` and `caips.agent.plan` spans, with the existing `caips.tool` spans nested under the run. No task text, replies or tool arguments reach spans.
+- Usage report export (JSON and CSV, by subject and model) is confirmed by the existing tests in `tests/test_usage.py`; the item is closed.
+
 ### Added (evals)
 - Agent tasks in the eval suite: `agent: <name>` runs the agent through `/v1/runs` and scores its result, recording run id, steps, cost and tokens.
 - `--grader-model` on `python -m evals` and `caips eval` grades `rubric` tasks through the gateway; without it, rubric tasks report that a grader is needed.

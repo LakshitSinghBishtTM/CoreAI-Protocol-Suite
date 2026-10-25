@@ -676,3 +676,22 @@ including streaming.
   no `message_stop`.
 - `stop_reason` is `end_turn`, `max_tokens`, `tool_use` or `refusal`.
 - Token counting (`/v1/messages/count_tokens`) and the batch API are not implemented.
+
+
+# Client SDKs
+
+Both clients cover chat, tools (MCP), agent runs and approvals, and return typed responses.
+
+**Python** (`src/caips_sdk`): `CaipsClient(base_url, api_key)`; response shapes are `TypedDict`s in `caips_sdk.types` (`Run`, `RunEvent`, `Agent`, `Tool`, `ToolResult`, `Approval`, ...).
+
+```python
+from caips_sdk import CaipsClient
+with CaipsClient("http://localhost:6969", api_key=key) as c:
+    run = c.run_agent("helper", "What is 17 + 25?")   # start and wait
+    print(run["status"], run["result"], run["cost_usd"])
+    for e in c.run_events(run["id"]): print(e["type"])
+```
+
+**TypeScript** (`sdk/typescript`, `@caips/client`): the same methods in camelCase (`runAgent`, `runEvents`, `listAgents`, ...) with exported interfaces. `npm test` compiles in strict mode and runs the tests.
+
+Run methods: `list_agents`, `list_runs`, `start_run`, `get_run`, `run_events`, `wait_run`, `run_agent`, `pause_run`, `resume_run`, `cancel_run`, `kill_runs` (admin). `wait_run` waits until the run ends; with `stop_when_blocked=True` it also returns when the run is paused or waiting for an approval (answer it with `resume_run(id, approve=...)`, admin scope). Tool methods: `list_tools`, `call_tool` (a failing tool returns `isError: true`), `pending_approvals`, `decide`. A test compares the Python `Run` and `Approval` types with the store schema and the API so they cannot drift silently.
