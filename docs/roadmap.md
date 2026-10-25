@@ -29,7 +29,7 @@ Principles still apply: layers depend downward only, every layer ships alone, cl
 ## 3. Tools layer
 
 - Container or microVM code-execution runner (the current sandbox is process level).
-- Streamed tool use and `count_tokens` for the Anthropic-compatible `/v1/messages` endpoint.
+- Streamed tool use for the Anthropic-compatible `/v1/messages` endpoint.
 - Tool calling and structured output for local models.
 - Postgres support for the database query tool (see section 2).
 

@@ -4,6 +4,9 @@
 
 The previous `1.0.0` label did not match the project's state; versions now start at 0.1.0 (alpha).
 
+### Added (Anthropic-compatible count_tokens)
+- `POST /v1/messages/count_tokens` returns `{"input_tokens": n}`, estimated with a provider's local tokenizer over the system prompt, messages, tool calls and tool schemas (images not counted). Same validation as `/v1/messages`; scope `completions:read`; header `X-CaiPS-Estimate: true`.
+
 ### Added (packaging checks)
 - `tests/test_packaging_claims.py` enforces: runtime dependencies under 20 (12 today), loguru as the only logging library with stdlib logging bridged into it, and gitleaks and pip-audit in CI.
 

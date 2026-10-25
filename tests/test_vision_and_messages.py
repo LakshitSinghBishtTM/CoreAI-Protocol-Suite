@@ -384,3 +384,60 @@ def test_official_anthropic_sdk_works_with_only_a_base_url_change(
         assert "".join(stream.text_stream) == "Hello"
         final = stream.get_final_message()
     assert final.stop_reason == "end_turn"
+
+
+# --- POST /v1/messages/count_tokens -------------------------------------------
+
+
+@pytest.fixture
+def count_client(monkeypatch):
+    from unittest.mock import MagicMock, patch
+
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    monkeypatch.setenv("SECRET_KEY", "count-tokens-test-secret")
+    import api.server as server
+    from api.anthropic_compat import router as anthropic_compat
+    from api.auth import create_access_token
+
+    seen = []
+    prov = MagicMock()
+    prov.default_model = "m"
+    prov.count_tokens = lambda text, model: seen.append((text, model)) or len(text.split())
+    router = MagicMock()
+    router.providers = {"b": MagicMock(), "a": prov}
+    app = FastAPI()
+    app.include_router(anthropic_compat)
+    with patch.object(server, "get_router", return_value=router):
+        c = TestClient(app, base_url="http://testserver")
+        c.headers["Authorization"] = "Bearer " + create_access_token("u", ["completions:read"])
+        yield c, seen
+
+
+def test_count_tokens_counts_system_messages_and_tools(count_client):
+    c, seen = count_client
+    r = c.post(
+        "/v1/messages/count_tokens",
+        json={
+            "system": "be brief",
+            "messages": [{"role": "user", "content": "hello there"}],
+            "tools": [{"name": "t", "description": "d", "input_schema": {"type": "object"}}],
+        },
+    )
+    assert r.status_code == 200
+    assert r.json()["input_tokens"] > 4  # system + message + tool schema
+    assert r.headers["X-CaiPS-Estimate"] == "true" and r.headers["X-CaiPS-Provider"] == "a"
+    text, model = seen[0]
+    assert "be brief" in text and "hello there" in text and '"t"' in text and model == "m"
+
+
+def test_count_tokens_validates_like_messages(count_client):
+    c, _ = count_client
+    bad = c.post("/v1/messages/count_tokens", json={"messages": [{"role": "system", "content": "x"}]})
+    assert bad.status_code == 400 and bad.json()["type"] == "error"
+    unk = c.post(
+        "/v1/messages/count_tokens",
+        json={"provider": "nope", "messages": [{"role": "user", "content": "x"}]},
+    )
+    assert unk.status_code == 400

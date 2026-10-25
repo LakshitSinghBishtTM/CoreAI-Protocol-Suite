@@ -9,6 +9,9 @@ blocks, ``system`` (string or text blocks), ``max_tokens``, ``temperature``,
 ``tools``, ``tool_choice``, and ``stream`` (text only). Accepted and ignored:
 ``top_p``, ``top_k``, ``metadata``. Refused with a 400: ``stop_sequences``,
 other block types (documents, thinking), tools with ``stream=true``.
+``POST /v1/messages/count_tokens`` returns ``{"input_tokens": n}`` for the same
+body (``max_tokens`` optional). It is an estimate from a provider's local
+tokenizer over the text, tool schemas and tool calls; images are not counted.
 Extension field: ``provider`` pins a provider. Errors use Anthropic's
 envelope ``{"type": "error", "error": {"type", "message"}}``.
 """
@@ -257,6 +260,53 @@ def _blocks(resp) -> list[dict]:
 
 def _event(name: str, data: dict) -> str:
     return f"event: {name}\ndata: {json.dumps(data, separators=(',', ':'))}\n\n"
+
+
+class CountTokensRequest(MessagesRequest):
+    max_tokens: int = Field(1, ge=1)
+
+
+def _count_text(preq) -> str:
+    parts = [preq.system_prompt or ""]
+    for m in preq.messages:
+        parts.append(m.content or "")
+        for c in m.tool_calls or []:
+            parts.append(f"{c['name']} {c['arguments']}")
+    if preq.tools:
+        parts.append(json.dumps(preq.tools, sort_keys=True))
+    return "\n".join(p for p in parts if p)
+
+
+@router.post("/messages/count_tokens", summary="Count tokens (Anthropic-compatible)")
+async def count_tokens(
+    body: CountTokensRequest,
+    ctx: AuthContext = Depends(require_scope("completions:read")),
+):
+    import asyncio
+
+    from api.server import get_router
+
+    try:
+        preq = _convert(body)
+    except CompatError as exc:
+        return _error(exc)
+    providers = get_router().providers
+    if body.provider is not None and body.provider not in providers:
+        return _error(_bad(f"Unknown provider '{body.provider}'.", "provider"))
+    if not providers:
+        return _error(CompatError(503, "No providers configured.", "server_error", None, None))
+    name = body.provider or sorted(providers)[0]
+    provider = providers[name]
+    model = body.model or provider.default_model or ""
+    try:
+        n = await asyncio.to_thread(provider.count_tokens, _count_text(preq), model)
+    except Exception as exc:
+        logger.error("count_tokens error for %s: %s", ctx.subject, exc)
+        return _error(CompatError(500, "Token counting failed.", "server_error", None, None))
+    return JSONResponse(
+        {"input_tokens": int(n)},
+        headers={"X-CaiPS-Provider": name, "X-CaiPS-Estimate": "true"},
+    )
 
 
 @router.post("/messages", summary="Messages (Anthropic-compatible)")
